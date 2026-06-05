@@ -46,7 +46,12 @@ require __DIR__ . '/_auth_header.php';
             <span style="color:#dc2626;">（上限に達しています）</span>
         <?php endif; ?>
     </p>
-    <p class="muted">上限を増やすには有料プランへのアップグレードが必要です（料金別に登録可能数が増えます）。</p>
+    <p><a class="btn" href="upgrade.php" style="display:inline-block; width:auto; text-decoration:none;">プランをアップグレード</a>
+       <?php if (!empty($tenant['stripe_customer_id'])): ?>
+           <a href="portal.php" class="muted" style="margin-left:8px;">支払い・解約の管理</a>
+       <?php endif; ?>
+    </p>
+    <p class="muted">料金別に登録できるイベント数が増えます。お支払いは運営へのプラン利用料です。</p>
 </div>
 
 <div class="card">

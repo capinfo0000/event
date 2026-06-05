@@ -51,14 +51,16 @@ function db_migrate(\PDO $pdo): void
             password_hash     TEXT NOT NULL,
             display_name      TEXT NOT NULL DEFAULT '',
             stripe_account_id TEXT,                       -- Connect で紐付く acct_...（未連携なら NULL）
-            is_admin          INTEGER NOT NULL DEFAULT 0, -- プラットフォーム管理者（招待を発行できる）
-            plan              TEXT NOT NULL DEFAULT 'free',-- 料金プラン（登録できるイベント数の上限）
-            created_at        INTEGER NOT NULL
+            is_admin           INTEGER NOT NULL DEFAULT 0, -- プラットフォーム管理者（招待を発行できる）
+            plan               TEXT NOT NULL DEFAULT 'free',-- 料金プラン（登録できるイベント数の上限）
+            stripe_customer_id TEXT,                        -- プラン課金用の顧客（プラットフォーム本体）
+            created_at         INTEGER NOT NULL
         );
     SQL);
 
-    // 既存DB（plan 列が無い）への後方互換マイグレーション
+    // 既存DB（列が無い）への後方互換マイグレーション
     db_add_column_if_missing($pdo, 'tenants', 'plan', "TEXT NOT NULL DEFAULT 'free'");
+    db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (

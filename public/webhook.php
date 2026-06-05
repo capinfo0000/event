@@ -37,33 +37,52 @@ try {
     exit;
 }
 
-if ($event->type === 'checkout.session.completed') {
-    $session = $event->data->object;
+/**
+ * プラン課金（サブスクリプション）のイベントを処理して tenant.plan を同期する。
+ * これらはプラットフォーム本体のアカウントのイベント（接続アカウントではない）。
+ */
+switch ($event->type) {
+    case 'checkout.session.completed':
+        $session = $event->data->object;
 
-    $name = '';
-    foreach (($session->custom_fields ?? []) as $field) {
-        if (($field->key ?? '') === 'participant_name') {
-            $name = $field->text->value ?? '';
+        if (($session->mode ?? '') === 'subscription') {
+            // プラン課金の完了：tenant にプランと課金顧客を反映
+            $tenantId = $session->client_reference_id
+                ?? ($session->metadata->tenant_id ?? '');
+            $plan = $session->metadata->plan ?? '';
+            if ($tenantId !== '' && $plan !== '' && find_tenant_by_id($tenantId) !== null) {
+                set_tenant_plan($tenantId, $plan);
+                if (!empty($session->customer)) {
+                    set_tenant_billing_customer($tenantId, (string) $session->customer);
+                }
+            }
         }
-    }
+        break;
 
-    $record = [
-        'time' => date('c'),
-        'event_id' => $session->metadata->event_id ?? '',
-        'event_name' => $session->metadata->event_name ?? '',
-        'participant_name' => $name,
-        'email' => $session->customer_details->email ?? '',
-        'amount' => $session->amount_total,
-        'currency' => $session->currency,
-        'payment_status' => $session->payment_status,
-        'checkout_session_id' => $session->id,
-    ];
+    case 'customer.subscription.updated':
+        // プラン変更（アップグレード/ダウングレード）を価格IDから反映
+        $sub = $event->data->object;
+        $tenant = !empty($sub->customer) ? find_tenant_by_billing_customer((string) $sub->customer) : null;
+        if ($tenant !== null) {
+            $priceId = $sub->items->data[0]->price->id ?? '';
+            $plan = $priceId !== '' ? plan_for_price_id($priceId) : null;
+            // 解約予定/失効ステータスは無料へ
+            if (in_array($sub->status ?? '', ['canceled', 'unpaid', 'incomplete_expired'], true)) {
+                set_tenant_plan($tenant['id'], 'free');
+            } elseif ($plan !== null) {
+                set_tenant_plan($tenant['id'], $plan);
+            }
+        }
+        break;
 
-    file_put_contents(
-        APP_ROOT . '/logs/payments.log',
-        json_encode($record, JSON_UNESCAPED_UNICODE) . "\n",
-        FILE_APPEND | LOCK_EX
-    );
+    case 'customer.subscription.deleted':
+        // 解約：無料プランに戻す
+        $sub = $event->data->object;
+        $tenant = !empty($sub->customer) ? find_tenant_by_billing_customer((string) $sub->customer) : null;
+        if ($tenant !== null) {
+            set_tenant_plan($tenant['id'], 'free');
+        }
+        break;
 }
 
 http_response_code(200);

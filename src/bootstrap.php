@@ -214,6 +214,33 @@ function plan_label(string $plan): string
     return plan_catalog()[$plan]['label'] ?? $plan;
 }
 
+/**
+ * 各有料プランに対応する Stripe Price ID（.env で設定）。
+ * 未設定のプランは課金導線に出さない。料金は Stripe 側の Price が正。
+ *
+ * @return array<string,string> plan => price_id
+ */
+function plan_price_ids(): array
+{
+    $map = [
+        'light'     => env('STRIPE_PRICE_LIGHT'),
+        'standard'  => env('STRIPE_PRICE_STANDARD'),
+        'unlimited' => env('STRIPE_PRICE_UNLIMITED'),
+    ];
+    return array_filter($map, static fn ($v) => $v !== null && $v !== '');
+}
+
+/** Stripe Price ID から内部プラン名を引く（Webhook で使用）。無ければ null。 */
+function plan_for_price_id(string $priceId): ?string
+{
+    foreach (plan_price_ids() as $plan => $pid) {
+        if ($pid === $priceId) {
+            return $plan;
+        }
+    }
+    return null;
+}
+
 /** テナントの登録済みイベント数。 */
 function tenant_event_count(string $tenantId): int
 {

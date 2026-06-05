@@ -82,6 +82,20 @@ function set_tenant_plan(string $tenantId, string $plan): void
     $stmt->execute([$plan, $tenantId]);
 }
 
+function set_tenant_billing_customer(string $tenantId, string $customerId): void
+{
+    $stmt = db()->prepare('UPDATE tenants SET stripe_customer_id = ? WHERE id = ?');
+    $stmt->execute([$customerId, $tenantId]);
+}
+
+function find_tenant_by_billing_customer(string $customerId): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM tenants WHERE stripe_customer_id = ?');
+    $stmt->execute([$customerId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
 /* ------------------------- ログイン ------------------------- */
 
 /**
