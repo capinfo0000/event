@@ -20,7 +20,10 @@ $editing = $editId !== '' ? find_event($editId) : null;
 $form = $editing ?? [
     'id' => '', 'name' => '', 'description' => '', 'date' => '',
     'place' => '', 'amount' => '', 'currency' => 'jpy', 'capacity' => '',
+    'amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false,
 ];
+// 既存イベント（古い形式）にも既定値を補完
+$form += ['amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false];
 
 $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
@@ -93,9 +96,16 @@ $token = csrf_token();
 
             <div class="row">
                 <div>
-                    <label>参加費（1名・最小通貨単位 / JPYは円） <span class="muted">必須</span></label>
+                    <label>事前決済の参加費（1名・最小通貨単位 / JPYは円） <span class="muted">必須</span></label>
                     <input type="number" name="amount" required min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
                 </div>
+                <div>
+                    <label>当日支払いの参加費（1名）<span class="muted">空欄なら事前と同額</span></label>
+                    <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
+                </div>
+            </div>
+
+            <div class="row">
                 <div>
                     <label>通貨</label>
                     <input type="text" name="currency" maxlength="10" value="<?= e((string) ($form['currency'] ?: 'jpy')) ?>" placeholder="jpy">
@@ -104,6 +114,12 @@ $token = csrf_token();
                     <label>定員目安（申込人数の上限にも使用）</label>
                     <input type="number" name="capacity" min="0" step="1" value="<?= e((string) $form['capacity']) ?>" placeholder="20">
                 </div>
+            </div>
+
+            <label>受け付ける支払い方法</label>
+            <div style="display:flex; gap:20px; margin-top:4px;">
+                <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_prepay" value="1" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?> style="width:auto;"> 事前決済（Stripeで前払い）</label>
+                <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
             </div>
 
             <p style="margin-top:16px;">

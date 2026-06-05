@@ -54,6 +54,29 @@ if ($partySize > $maxParty) {
     $partySize = $maxParty;
 }
 
+// 支払い方法（事前決済 / 当日支払い）を決定。イベントが許可している方式のみ受け付ける。
+$allowPrepay = array_key_exists('allow_prepay', $event) ? !empty($event['allow_prepay']) : true;
+$allowOnsite = !empty($event['allow_onsite']);
+$paymentType = (string)($_POST['payment_type'] ?? ($allowPrepay ? 'prepay' : 'onsite'));
+if ($paymentType !== 'prepay' && $paymentType !== 'onsite') {
+    $paymentType = $allowPrepay ? 'prepay' : 'onsite';
+}
+if ($paymentType === 'prepay' && !$allowPrepay) {
+    http_response_code(400);
+    exit('このイベントでは事前決済を受け付けていません。');
+}
+if ($paymentType === 'onsite' && !$allowOnsite) {
+    http_response_code(400);
+    exit('このイベントでは当日支払いを受け付けていません。');
+}
+
+// 単価は方式ごとにサーバー側のイベント定義から確定する（改ざん防止）
+$currency = $event['currency'] ?? 'jpy';
+$prepayUnit = (int)($event['amount'] ?? 0);
+$onsiteUnit = (isset($event['amount_onsite']) && $event['amount_onsite'] !== '')
+    ? (int)$event['amount_onsite']
+    : $prepayUnit;
+
 // 長すぎる入力は Stripe metadata 制限（値は最大500文字）に合わせて切り詰める
 $metaName = mb_substr($name, 0, 100);
 $metaPhone = mb_substr($phone, 0, 30);
@@ -61,13 +84,50 @@ $metaNote = mb_substr($note, 0, 450);
 
 init_stripe();
 
+// ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
+if ($paymentType === 'onsite') {
+    $onsiteTotal = $onsiteUnit * $partySize;
+    try {
+        \Stripe\Customer::create([
+            'name' => $metaName,
+            'email' => $email,
+            'phone' => $metaPhone,
+            'metadata' => [
+                'event_id' => $event['id'],
+                'event_name' => $event['name'] ?? '',
+                'participant_name' => $metaName,
+                'phone' => $metaPhone,
+                'party_size' => (string)$partySize,
+                'note' => $metaNote,
+                'payment_type' => 'onsite',
+                'onsite_unit' => (string)$onsiteUnit,
+                'onsite_total' => (string)$onsiteTotal,
+                'currency' => $currency,
+            ],
+        ]);
+    } catch (\Throwable $e) {
+        http_response_code(502);
+        error_log('当日申込の記録失敗: ' . $e->getMessage());
+        exit('申込の受付に失敗しました。時間をおいて再度お試しください。');
+    }
+
+    $q = http_build_query([
+        'event_id' => $event['id'],
+        'party_size' => $partySize,
+        'total' => $onsiteTotal,
+    ]);
+    header('Location: ' . base_url() . '/onsite.php?' . $q, true, 303);
+    exit;
+}
+
+// ---- 事前決済: Stripe Checkout で前払い ----
 try {
     $session = \Stripe\Checkout\Session::create([
         'mode' => 'payment',
         'line_items' => [[
             'price_data' => [
-                'currency' => $event['currency'] ?? 'jpy',
-                'unit_amount' => (int)($event['amount'] ?? 0),
+                'currency' => $currency,
+                'unit_amount' => $prepayUnit,
                 'product_data' => [
                     'name' => $event['name'] ?? 'イベント参加費',
                     'description' => trim(($event['date'] ?? '') . ' / ' . ($event['place'] ?? '')),
@@ -86,6 +146,7 @@ try {
             'phone' => $metaPhone,
             'party_size' => (string)$partySize,
             'note' => $metaNote,
+            'payment_type' => 'prepay',
         ],
         'payment_intent_data' => [
             'metadata' => [

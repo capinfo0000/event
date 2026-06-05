@@ -35,15 +35,24 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM（Excel 文字化け対策）
 
-fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払額', '返金額', '状態', '備考', 'PaymentIntent']);
+fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払方法', '支払額', '返金額', '状態', '備考', 'ID']);
 
 foreach ($participants as $p) {
-    if ($p['fully_refunded']) {
-        $status = '全額返金（キャンセル）';
-    } elseif ($p['amount_refunded'] > 0) {
-        $status = '一部返金';
+    $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
+    if ($isOnsite) {
+        $method = '当日';
+        $status = '当日支払い・未収';
+        $idRef = $p['customer_id'];
     } else {
-        $status = '支払い済み';
+        $method = '事前';
+        if ($p['fully_refunded']) {
+            $status = '全額返金（キャンセル）';
+        } elseif ($p['amount_refunded'] > 0) {
+            $status = '一部返金';
+        } else {
+            $status = '支払い済み';
+        }
+        $idRef = $p['payment_intent'];
     }
 
     fputcsv($out, [
@@ -51,10 +60,13 @@ foreach ($participants as $p) {
         $p['name'],
         $p['email'],
         $p['phone'],
+        (int) $p['party_size'] . '名',
+        $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),
         $status,
-        $p['payment_intent'],
+        $p['note'],
+        $idRef,
     ]);
 }
 

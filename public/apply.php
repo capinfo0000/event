@@ -20,8 +20,22 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-$unit = (int) ($event['amount'] ?? 0);
 $currency = $event['currency'] ?? 'jpy';
+$prepayUnit = (int) ($event['amount'] ?? 0);
+// 当日料金は未設定なら事前と同額
+$onsiteUnit = isset($event['amount_onsite']) && $event['amount_onsite'] !== ''
+    ? (int) $event['amount_onsite']
+    : $prepayUnit;
+
+// 受け付ける支払い方法（既存イベントには allow_* が無いので事前決済を既定で許可）
+$allowPrepay = array_key_exists('allow_prepay', $event) ? !empty($event['allow_prepay']) : true;
+$allowOnsite = !empty($event['allow_onsite']);
+if (!$allowPrepay && !$allowOnsite) {
+    $allowPrepay = true; // 念のため最低1つは有効に
+}
+$defaultMethod = $allowPrepay ? 'prepay' : 'onsite';
+$defaultUnit = $defaultMethod === 'prepay' ? $prepayUnit : $onsiteUnit;
+
 // 参加人数の上限: capacity があればそれ、無ければ 10 を目安に
 $maxParty = (int) ($event['capacity'] ?? 0);
 if ($maxParty < 1) {
@@ -61,7 +75,11 @@ $maxParty = min($maxParty, 20);
     <div class="card">
         <p class="meta">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
-        <p class="meta">参加費：<strong><?= e(format_amount($unit, $currency)) ?></strong> / 1名</p>
+        <p class="meta">
+            <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+            <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
+            <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+        </p>
     </div>
 
     <form action="checkout.php" method="post" class="card">
@@ -86,18 +104,35 @@ $maxParty = min($maxParty, 20);
         <label for="note">備考（アレルギー・ご要望など）</label>
         <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
 
-        <p class="total">お支払い合計：<span id="total"><?= e(format_amount($unit, $currency)) ?></span></p>
+        <label>お支払い方法 <span class="req">必須</span></label>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+            <?php if ($allowPrepay): ?>
+                <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
+                    <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    事前決済（今すぐカード等で前払い・<?= e(format_amount($prepayUnit, $currency)) ?>/名）
+                </label>
+            <?php endif; ?>
+            <?php if ($allowOnsite): ?>
+                <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
+                    <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    当日支払い（会場で集金・<?= e(format_amount($onsiteUnit, $currency)) ?>/名）
+                </label>
+            <?php endif; ?>
+        </div>
 
-        <button type="submit" class="btn">この内容で支払いへ進む →</button>
-        <p class="note">「支払いへ進む」を押すと、安全な Stripe の決済画面に移動します。
-           カード情報は主催者には渡りません。キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
+        <p class="total">お支払い合計：<span id="total"><?= e(format_amount($defaultUnit, $currency)) ?></span> <span id="total-note" class="note" style="margin:0;"></span></p>
+
+        <button type="submit" class="btn" id="submitBtn">この内容で申し込む →</button>
+        <p class="note" id="methodNote"></p>
+        <p class="note">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
     </form>
 
     <p><a href="index.php">← イベント一覧へ戻る</a></p>
 
     <script>
-        // 参加人数に応じて合計金額を画面上で更新（計算の正は決済時にサーバー側で再確定）
-        const UNIT = <?= $unit ?>;
+        // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
+        const PREPAY_UNIT = <?= $prepayUnit ?>;
+        const ONSITE_UNIT = <?= $onsiteUnit ?>;
         const CURRENCY = <?= json_encode(strtolower((string) $currency)) ?>;
         function formatAmount(total) {
             if (CURRENCY === 'jpy') {
@@ -105,9 +140,28 @@ $maxParty = min($maxParty, 20);
             }
             return (total / 100).toFixed(2) + ' ' + CURRENCY.toUpperCase();
         }
+        function selectedMethod() {
+            const el = document.querySelector('input[name="payment_type"]:checked');
+            return el ? el.value : 'prepay';
+        }
         function updateTotal() {
             const qty = parseInt(document.getElementById('party_size').value, 10) || 1;
-            document.getElementById('total').textContent = formatAmount(UNIT * qty);
+            const method = selectedMethod();
+            const unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
+            document.getElementById('total').textContent = formatAmount(unit * qty);
+
+            const btn = document.getElementById('submitBtn');
+            const note = document.getElementById('methodNote');
+            const totalNote = document.getElementById('total-note');
+            if (method === 'onsite') {
+                btn.textContent = 'この内容で申し込む（当日支払い）→';
+                totalNote.textContent = '（当日、会場でお支払い）';
+                note.textContent = '申込を受け付けます。当日、会場で上記金額をお支払いください。今はお支払いは発生しません。';
+            } else {
+                btn.textContent = 'この内容で支払いへ進む →';
+                totalNote.textContent = '';
+                note.textContent = '「支払いへ進む」を押すと、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。';
+            }
         }
         updateTotal();
     </script>

@@ -35,26 +35,39 @@ $desc     = trim((string) ($_POST['description'] ?? ''));
 $date     = trim((string) ($_POST['date'] ?? ''));
 $place    = trim((string) ($_POST['place'] ?? ''));
 $amount   = (string) ($_POST['amount'] ?? '');
+$amountOnsite = trim((string) ($_POST['amount_onsite'] ?? ''));
 $currency = strtolower(trim((string) ($_POST['currency'] ?? 'jpy'))) ?: 'jpy';
 $capacity = trim((string) ($_POST['capacity'] ?? ''));
+$allowPrepay = !empty($_POST['allow_prepay']);
+$allowOnsite = !empty($_POST['allow_onsite']);
 
 // 入力チェック
 if ($name === '' || $date === '' || $place === '') {
     back_to_events('イベント名・日時・場所は必須です。', 'ng', $id);
 }
 if ($amount === '' || !ctype_digit($amount)) {
-    back_to_events('参加費は0以上の整数（最小通貨単位）で入力してください。', 'ng', $id);
+    back_to_events('事前決済の参加費は0以上の整数（最小通貨単位）で入力してください。', 'ng', $id);
+}
+if ($amountOnsite !== '' && !ctype_digit($amountOnsite)) {
+    back_to_events('当日支払いの参加費は0以上の整数で入力してください。', 'ng', $id);
+}
+if (!$allowPrepay && !$allowOnsite) {
+    back_to_events('支払い方法を少なくとも1つ選んでください（事前決済／当日支払い）。', 'ng', $id);
 }
 
 $record = [
-    'id'          => $id !== '' ? $id : generate_event_id(),
-    'name'        => mb_substr($name, 0, 100),
-    'description' => mb_substr($desc, 0, 500),
-    'date'        => mb_substr($date, 0, 50),
-    'place'       => mb_substr($place, 0, 100),
-    'amount'      => (int) $amount,
-    'currency'    => preg_replace('/[^a-z]/', '', $currency) ?: 'jpy',
-    'capacity'    => ($capacity !== '' && ctype_digit($capacity)) ? (int) $capacity : 0,
+    'id'            => $id !== '' ? $id : generate_event_id(),
+    'name'          => mb_substr($name, 0, 100),
+    'description'   => mb_substr($desc, 0, 500),
+    'date'          => mb_substr($date, 0, 50),
+    'place'         => mb_substr($place, 0, 100),
+    'amount'        => (int) $amount,
+    // 当日料金は未指定なら事前と同額にフォールバック
+    'amount_onsite' => $amountOnsite !== '' ? (int) $amountOnsite : (int) $amount,
+    'currency'      => preg_replace('/[^a-z]/', '', $currency) ?: 'jpy',
+    'capacity'      => ($capacity !== '' && ctype_digit($capacity)) ? (int) $capacity : 0,
+    'allow_prepay'  => $allowPrepay,
+    'allow_onsite'  => $allowOnsite,
 ];
 
 $events = load_events();

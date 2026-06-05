@@ -301,8 +301,10 @@ function fetch_event_participants(string $eventId): array
         }
 
         $participants[] = [
+            'payment_type'    => 'prepay',   // 事前決済
             'session_id'      => $session->id,
             'payment_intent'  => $piId,
+            'customer_id'     => is_string($session->customer) ? $session->customer : ($session->customer->id ?? ''),
             'name'            => $name,
             'email'           => $session->customer_details->email ?? '',
             'phone'           => $phone,
@@ -313,6 +315,35 @@ function fetch_event_participants(string $eventId): array
             'amount_refunded' => $amountRefunded,
             'fully_refunded'  => $fullyRefunded,
             'created'         => (int) ($session->created ?? 0),
+        ];
+    }
+
+    // 当日支払いの申込者は「課金なしの Stripe 顧客（metadata.payment_type=onsite）」として記録される。
+    // これらを名簿に合流させる（未収として表示）。
+    foreach (\Stripe\Customer::all(['limit' => 100])->autoPagingIterator() as $customer) {
+        $meta = $customer->metadata ?? null;
+        if (($meta['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if (($meta['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+
+        $participants[] = [
+            'payment_type'    => 'onsite',   // 当日支払い（未収）
+            'session_id'      => '',
+            'payment_intent'  => '',
+            'customer_id'     => $customer->id,
+            'name'            => $meta['participant_name'] ?? ($customer->name ?? ''),
+            'email'           => $customer->email ?? '',
+            'phone'           => $meta['phone'] ?? ($customer->phone ?? ''),
+            'party_size'      => max(1, (int) ($meta['party_size'] ?? 1)),
+            'note'            => $meta['note'] ?? '',
+            'amount'          => (int) ($meta['onsite_total'] ?? 0),
+            'currency'        => (string) ($meta['currency'] ?? 'jpy'),
+            'amount_refunded' => 0,
+            'fully_refunded'  => false,
+            'created'         => (int) ($customer->created ?? 0),
         ];
     }
 

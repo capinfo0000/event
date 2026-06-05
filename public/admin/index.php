@@ -25,17 +25,26 @@ $flashType = (string) ($_GET['type'] ?? '');
 
 $participants = [];
 $fetchError = '';
-$paidCount = 0;
-$collected = 0;
-$refunded = 0;
+$totalCount = 0;
+$prepaidCount = 0;
+$onsiteCount = 0;
+$collected = 0;   // 事前決済の入金合計
+$refunded = 0;    // 返金合計
+$onsiteDue = 0;   // 当日支払い予定（未収）合計
 
 if ($selectedEvent !== null) {
     try {
         $participants = fetch_event_participants($selectedId);
-        $paidCount = count($participants);
+        $totalCount = count($participants);
         foreach ($participants as $p) {
-            $collected += $p['amount'];
-            $refunded += $p['amount_refunded'];
+            if (($p['payment_type'] ?? 'prepay') === 'onsite') {
+                $onsiteCount++;
+                $onsiteDue += $p['amount'];
+            } else {
+                $prepaidCount++;
+                $collected += $p['amount'];
+                $refunded += $p['amount_refunded'];
+            }
         }
     } catch (\Throwable $ex) {
         $fetchError = 'Stripe から名簿を取得できませんでした: ' . $ex->getMessage();
@@ -121,28 +130,33 @@ $token = csrf_token();
     <?php elseif ($selectedEvent === null): ?>
         <p class="err">イベントが選択されていません。</p>
     <?php else: ?>
+        <?php $cur0 = $selectedEvent['currency'] ?? 'jpy'; ?>
         <div class="stats">
-            <div class="stat"><div class="num"><?= $paidCount ?></div><div class="lbl">申込（支払い済み）</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($collected, $selectedEvent['currency'] ?? 'jpy')) ?></div><div class="lbl">入金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($refunded, $selectedEvent['currency'] ?? 'jpy')) ?></div><div class="lbl">返金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount(max(0, $collected - $refunded), $selectedEvent['currency'] ?? 'jpy')) ?></div><div class="lbl">差引（手取り目安）</div></div>
+            <div class="stat"><div class="num"><?= $totalCount ?></div><div class="lbl">申込合計（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount($collected, $cur0)) ?></div><div class="lbl">事前入金合計</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日予定（未収）</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount($refunded, $cur0)) ?></div><div class="lbl">返金合計</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount(max(0, $collected - $refunded), $cur0)) ?></div><div class="lbl">事前の差引（手取り目安）</div></div>
         </div>
 
-        <?php if ($paidCount === 0): ?>
-            <p class="muted">まだ支払い済みの申込はありません。</p>
+        <?php if ($totalCount === 0): ?>
+            <p class="muted">まだ申込はありません。</p>
         <?php else: ?>
             <table>
                 <thead>
                     <tr>
                         <th>申込日時</th><th>お名前</th><th>メール</th><th>電話</th>
-                        <th>人数</th><th>金額</th><th>状態</th><th>キャンセル / 返金</th>
+                        <th>人数</th><th>支払方法</th><th>金額</th><th>状態</th><th>キャンセル / 返金</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($participants as $p): ?>
                         <?php
                             $cur = $p['currency'];
-                            if ($p['fully_refunded']) {
+                            $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
+                            if ($isOnsite) {
+                                $statusHtml = '<span class="tag tag-partial">当日支払い・未収</span>';
+                            } elseif ($p['fully_refunded']) {
                                 $statusHtml = '<span class="tag tag-refunded">全額返金（キャンセル済）</span>';
                             } elseif ($p['amount_refunded'] > 0) {
                                 $statusHtml = '<span class="tag tag-partial">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
@@ -160,10 +174,19 @@ $token = csrf_token();
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>
                             <td><?= (int) $p['party_size'] ?> 名</td>
+                            <td><?= $isOnsite ? '当日' : '事前' ?></td>
                             <td><?= e(format_amount($p['amount'], $cur)) ?></td>
                             <td><?= $statusHtml ?></td>
                             <td>
-                                <?php if ($p['fully_refunded'] || $remaining <= 0): ?>
+                                <?php if ($isOnsite): ?>
+                                    <form method="post" action="onsite_cancel.php"
+                                          onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？');">
+                                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                        <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                        <button type="submit" class="btn btn-danger">申込を取消</button>
+                                    </form>
+                                <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
                                     <span class="muted">—</span>
                                 <?php else: ?>
                                     <form method="post" action="refund.php" class="refund-form"
