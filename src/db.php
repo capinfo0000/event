@@ -52,9 +52,13 @@ function db_migrate(\PDO $pdo): void
             display_name      TEXT NOT NULL DEFAULT '',
             stripe_account_id TEXT,                       -- Connect で紐付く acct_...（未連携なら NULL）
             is_admin          INTEGER NOT NULL DEFAULT 0, -- プラットフォーム管理者（招待を発行できる）
+            plan              TEXT NOT NULL DEFAULT 'free',-- 料金プラン（登録できるイベント数の上限）
             created_at        INTEGER NOT NULL
         );
     SQL);
+
+    // 既存DB（plan 列が無い）への後方互換マイグレーション
+    db_add_column_if_missing($pdo, 'tenants', 'plan', "TEXT NOT NULL DEFAULT 'free'");
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (
@@ -86,4 +90,18 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);');
+}
+
+/**
+ * 指定テーブルに列が無ければ追加する（簡易マイグレーション用）。
+ */
+function db_add_column_if_missing(\PDO $pdo, string $table, string $column, string $definition): void
+{
+    $cols = $pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll();
+    foreach ($cols as $c) {
+        if (($c['name'] ?? '') === $column) {
+            return;
+        }
+    }
+    $pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
 }

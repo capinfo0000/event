@@ -76,6 +76,12 @@ function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
     $stmt->execute([$accountId, $tenantId]);
 }
 
+function set_tenant_plan(string $tenantId, string $plan): void
+{
+    $stmt = db()->prepare('UPDATE tenants SET plan = ? WHERE id = ?');
+    $stmt->execute([$plan, $tenantId]);
+}
+
 /* ------------------------- ログイン ------------------------- */
 
 /**

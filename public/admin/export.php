@@ -35,13 +35,13 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM（Excel 文字化け対策）
 
-fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払方法', '支払額', '返金額', '状態', '備考', 'ID']);
+fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払方法', '支払額', '返金額', '状態', '出席', '備考', 'ID']);
 
 foreach ($participants as $p) {
     $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
     if ($isOnsite) {
         $method = '当日';
-        $status = !empty($p['collected']) ? '集金確認済み' : '当日支払い・未収';
+        $status = !empty($p['collected']) ? '受領済み' : '当日支払い・未収';
         $idRef = $p['customer_id'];
     } else {
         $method = '事前';
@@ -65,6 +65,7 @@ foreach ($participants as $p) {
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),
         $status,
+        !empty($p['attended']) ? '出席済み' : '',
         $p['note'],
         $idRef,
     ]);

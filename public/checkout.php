@@ -92,6 +92,23 @@ $metaNote = mb_substr($note, 0, 450);
 init_stripe();
 $opts = stripe_opts($account);
 
+// 定員チェック（capacity>0 のとき）。現在の人数＋今回の人数が定員を超えたら受付不可。
+$capacity = (int)($event['capacity'] ?? 0);
+if ($capacity > 0) {
+    try {
+        $current = event_headcount($event['id'], $account);
+    } catch (\Throwable $e) {
+        error_log('定員チェックの人数取得失敗: ' . $e->getMessage());
+        http_response_code(502);
+        exit('申込状況を確認できませんでした。時間をおいて再度お試しください。');
+    }
+    if ($current + $partySize > $capacity) {
+        http_response_code(409);
+        $remain = max(0, $capacity - $current);
+        exit('申し訳ありません、定員に達しています（残り ' . $remain . ' 名）。');
+    }
+}
+
 // ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
 if ($paymentType === 'onsite') {
     $onsiteTotal = $onsiteUnit * $partySize;

@@ -187,6 +187,58 @@ function delete_event(string $tenantId, string $id): bool
 }
 
 /**
+ * 料金プランの定義（登録できるイベント数の上限）。
+ * price は月額の目安（最小通貨単位・JPY）。実際の課金連携は別途。
+ *
+ * @return array<string, array{label:string, max_events:int, price:int}>
+ */
+function plan_catalog(): array
+{
+    return [
+        'free'      => ['label' => '無料',           'max_events' => 1,            'price' => 0],
+        'light'     => ['label' => 'ライト',         'max_events' => 5,            'price' => 500],
+        'standard'  => ['label' => 'スタンダード',   'max_events' => 20,           'price' => 1500],
+        'unlimited' => ['label' => '無制限',         'max_events' => PHP_INT_MAX,  'price' => 3000],
+    ];
+}
+
+/** プランの登録可能イベント数。未知のプランは無料相当(1)。 */
+function plan_max_events(string $plan): int
+{
+    return plan_catalog()[$plan]['max_events'] ?? 1;
+}
+
+/** プランの表示名。 */
+function plan_label(string $plan): string
+{
+    return plan_catalog()[$plan]['label'] ?? $plan;
+}
+
+/** テナントの登録済みイベント数。 */
+function tenant_event_count(string $tenantId): int
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM events WHERE tenant_id = ?');
+    $stmt->execute([$tenantId]);
+    return (int) $stmt->fetchColumn();
+}
+
+/**
+ * イベントの現在の参加人数（party_size 合計）。
+ * 事前決済（返金済みを除く）＋当日支払いを数える。定員判定に使う。
+ */
+function event_headcount(string $eventId, ?string $account): int
+{
+    $n = 0;
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (!empty($p['fully_refunded'])) {
+            continue; // 全額返金＝キャンセル扱いは定員に数えない
+        }
+        $n += max(1, (int) $p['party_size']);
+    }
+    return $n;
+}
+
+/**
  * このアプリの公開ベースURL（success/cancel/webhook の組み立てに使用）。
  * ローカル開発では APP_BASE_URL=http://localhost:8000 を想定。
  */
@@ -287,7 +339,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     $participants = [];
     $params = [
         'limit' => 100,
-        'expand' => ['data.payment_intent.latest_charge'],
+        'expand' => ['data.payment_intent.latest_charge', 'data.customer'],
     ];
 
     foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
@@ -329,11 +381,16 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             $fullyRefunded = (bool) ($charge->refunded ?? false);
         }
 
+        // 出席チェックは顧客の metadata.attended に保存する（事前・当日で共通）
+        $customerObj = is_object($session->customer) ? $session->customer : null;
+        $customerId = $customerObj ? ($customerObj->id ?? '') : (string) $session->customer;
+        $attended = $customerObj ? (($customerObj->metadata['attended'] ?? '') === '1') : false;
+
         $participants[] = [
             'payment_type'    => 'prepay',   // 事前決済
             'session_id'      => $session->id,
             'payment_intent'  => $piId,
-            'customer_id'     => is_string($session->customer) ? $session->customer : ($session->customer->id ?? ''),
+            'customer_id'     => $customerId,
             'name'            => $name,
             'email'           => $session->customer_details->email ?? '',
             'phone'           => $phone,
@@ -344,6 +401,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'amount_refunded' => $amountRefunded,
             'fully_refunded'  => $fullyRefunded,
             'collected'       => false, // 事前決済では使わない（当日支払い用）
+            'attended'        => $attended,
             'created'         => (int) ($session->created ?? 0),
         ];
     }
@@ -373,7 +431,8 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),
             'amount_refunded' => 0,
             'fully_refunded'  => false,
-            'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の集金確認済みか
+            'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の受領（集金）済みか
+            'attended'        => (($meta['attended'] ?? '') === '1'),  // 出席確認済みか
             'created'         => (int) ($customer->created ?? 0),
         ];
     }

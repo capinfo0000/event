@@ -79,6 +79,16 @@ try {
         update_event($tenant['id'], $id, $data);
         back_to_events('イベントを更新しました。', 'ok');
     } else {
+        // プランごとの登録イベント数の上限チェック（新規作成時のみ）
+        $limit = plan_max_events($tenant['plan'] ?? 'free');
+        if (tenant_event_count($tenant['id']) >= $limit) {
+            back_to_events(
+                '現在のプラン（' . plan_label($tenant['plan'] ?? 'free') . '）では登録できるイベントは ' .
+                ($limit === PHP_INT_MAX ? '無制限' : $limit . '件') .
+                'までです。プランをアップグレードしてください。',
+                'ng'
+            );
+        }
         create_event($tenant['id'], $data);
         back_to_events('イベントを登録しました。', 'ok');
     }

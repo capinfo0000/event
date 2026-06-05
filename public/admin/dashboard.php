@@ -12,6 +12,10 @@ require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
 $connected = !empty($tenant['stripe_account_id']);
+$plan = $tenant['plan'] ?? 'free';
+$maxEvents = plan_max_events($plan);
+$usedEvents = tenant_event_count($tenant['id']);
+$publicUrl = base_url() . '/o.php?t=' . urlencode($tenant['id']);
 $token = csrf_token();
 require __DIR__ . '/_auth_header.php';
 ?>
@@ -34,7 +38,21 @@ require __DIR__ . '/_auth_header.php';
 </div>
 
 <div class="card">
+    <h2 style="font-size:1.1rem;">プラン</h2>
+    <p>現在のプラン：<strong><?= e(plan_label($plan)) ?></strong></p>
+    <p>登録イベント数：<strong><?= $usedEvents ?></strong> /
+        <?= $maxEvents === PHP_INT_MAX ? '無制限' : $maxEvents . ' 件' ?>
+        <?php if ($maxEvents !== PHP_INT_MAX && $usedEvents >= $maxEvents): ?>
+            <span style="color:#dc2626;">（上限に達しています）</span>
+        <?php endif; ?>
+    </p>
+    <p class="muted">上限を増やすには有料プランへのアップグレードが必要です（料金別に登録可能数が増えます）。</p>
+</div>
+
+<div class="card">
     <h2 style="font-size:1.1rem;">イベント・参加者</h2>
-    <p class="muted">※ Stage 3 で、このアカウント専用のイベント管理・参加者名簿をここに移行します。</p>
+    <p><a href="events.php">イベント管理</a> ／ <a href="index.php">参加者管理</a></p>
+    <p class="muted">公開イベント一覧（参加者に共有するリンク）：</p>
+    <input type="text" readonly value="<?= e($publicUrl) ?>" onclick="this.select()" style="width:100%;">
 </div>
 <?php require __DIR__ . '/_auth_footer.php'; ?>

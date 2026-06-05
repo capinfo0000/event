@@ -37,6 +37,8 @@ $onsiteCollectedCount = 0;
 $collected = 0;   // 事前決済の入金合計
 $refunded = 0;    // 返金合計
 $onsiteDue = 0;   // 当日支払い予定（未収）合計
+$attendedCount = 0; // 出席確認済みの申込数（頭数ではなく行数）
+$headcount = 0;     // 参加予定の頭数（返金済みを除く party_size 合計）
 
 if ($selectedEvent !== null && empty($account)) {
     $fetchError = 'Stripe 未連携のため名簿を取得できません。ダッシュボードから連携してください。';
@@ -45,6 +47,12 @@ if ($selectedEvent !== null && empty($account)) {
         $participants = fetch_event_participants($selectedId, $account);
         $totalCount = count($participants);
         foreach ($participants as $p) {
+            if (!empty($p['attended'])) {
+                $attendedCount++;
+            }
+            if (empty($p['fully_refunded'])) {
+                $headcount += max(1, (int) $p['party_size']);
+            }
             if (($p['payment_type'] ?? 'prepay') === 'onsite') {
                 $onsiteCount++;
                 if (!empty($p['collected'])) {
@@ -151,12 +159,14 @@ $token = csrf_token();
         <p class="err">イベントが選択されていません。</p>
     <?php else: ?>
         <?php $cur0 = $selectedEvent['currency'] ?? 'jpy'; ?>
+        <?php $cap = (int) ($selectedEvent['capacity'] ?? 0); ?>
         <div class="stats">
-            <div class="stat"><div class="num"><?= $totalCount ?></div><div class="lbl">申込合計（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</div></div>
+            <div class="stat"><div class="num"><?= $headcount ?><?= $cap > 0 ? ' / ' . $cap : '' ?></div><div class="lbl">参加人数<?= $cap > 0 ? '（定員）' : '' ?></div></div>
+            <div class="stat"><div class="num"><?= $totalCount ?></div><div class="lbl">申込数（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</div></div>
+            <div class="stat"><div class="num"><?= $attendedCount ?> / <?= $totalCount ?></div><div class="lbl">出席確認済み</div></div>
             <div class="stat"><div class="num"><?= e(format_amount($collected, $cur0)) ?></div><div class="lbl">事前入金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日・未収（集金済 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日・未収（受領 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</div></div>
             <div class="stat"><div class="num"><?= e(format_amount($refunded, $cur0)) ?></div><div class="lbl">返金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount(max(0, $collected - $refunded), $cur0)) ?></div><div class="lbl">事前の差引（手取り目安）</div></div>
         </div>
 
         <?php if ($totalCount === 0): ?>
@@ -166,7 +176,7 @@ $token = csrf_token();
                 <thead>
                     <tr>
                         <th>申込日時</th><th>お名前</th><th>メール</th><th>電話</th>
-                        <th>人数</th><th>支払方法</th><th>金額</th><th>状態</th><th>キャンセル / 返金</th>
+                        <th>人数</th><th>支払方法</th><th>金額</th><th>状態</th><th>出席</th><th>キャンセル / 返金</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -176,7 +186,7 @@ $token = csrf_token();
                             $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
                             if ($isOnsite) {
                                 $statusHtml = !empty($p['collected'])
-                                    ? '<span class="tag tag-paid">集金確認済み</span>'
+                                    ? '<span class="tag tag-paid">受領済み</span>'
                                     : '<span class="tag tag-partial">当日支払い・未収</span>';
                             } elseif ($p['fully_refunded']) {
                                 $statusHtml = '<span class="tag tag-refunded">全額返金（キャンセル済）</span>';
@@ -200,6 +210,25 @@ $token = csrf_token();
                             <td><?= e(format_amount($p['amount'], $cur)) ?></td>
                             <td><?= $statusHtml ?></td>
                             <td>
+                                <?php if (!empty($p['customer_id'])): ?>
+                                    <form method="post" action="attend.php">
+                                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                        <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                        <?php if (empty($p['attended'])): ?>
+                                            <input type="hidden" name="attend" value="1">
+                                            <button type="submit" class="btn">出席にする</button>
+                                        <?php else: ?>
+                                            <input type="hidden" name="attend" value="0">
+                                            <span class="tag tag-paid">出席済み</span><br>
+                                            <button type="submit" class="btn btn-ghost" style="margin-top:4px;">取消</button>
+                                        <?php endif; ?>
+                                    </form>
+                                <?php else: ?>
+                                    <span class="muted">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
                                 <?php if ($isOnsite): ?>
                                     <div class="actions" style="display:flex; gap:6px; align-items:center;">
                                         <form method="post" action="onsite_collect.php">
@@ -208,10 +237,10 @@ $token = csrf_token();
                                             <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
                                             <?php if (empty($p['collected'])): ?>
                                                 <input type="hidden" name="collect" value="1">
-                                                <button type="submit" class="btn">集金確認済みにする</button>
+                                                <button type="submit" class="btn">受領にする</button>
                                             <?php else: ?>
                                                 <input type="hidden" name="collect" value="0">
-                                                <button type="submit" class="btn btn-ghost">未収に戻す</button>
+                                                <button type="submit" class="btn btn-ghost">受領取消</button>
                                             <?php endif; ?>
                                         </form>
                                         <form method="post" action="onsite_cancel.php"

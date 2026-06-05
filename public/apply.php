@@ -25,6 +25,19 @@ if (empty($event['stripe_account_id'])) {
     exit('このイベントは現在申込を受け付けていません（主催者の決済準備中）。');
 }
 
+// 定員と残席（capacity>0 のとき）。取得に失敗しても申込は止めない。
+$capacity = (int) ($event['capacity'] ?? 0);
+$remaining = null; // null = 定員管理なし／不明
+$isFull = false;
+if ($capacity > 0) {
+    try {
+        $remaining = max(0, $capacity - event_headcount($event['id'], $event['stripe_account_id']));
+        $isFull = ($remaining <= 0);
+    } catch (\Throwable $e) {
+        $remaining = null;
+    }
+}
+
 $currency = $event['currency'] ?? 'jpy';
 $prepayUnit = (int) ($event['amount'] ?? 0);
 // 当日料金は未設定なら事前と同額
@@ -85,8 +98,14 @@ $maxParty = min($maxParty, 20);
             <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
             <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
         </p>
+        <?php if ($capacity > 0 && $remaining !== null): ?>
+            <p class="meta">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
+        <?php endif; ?>
     </div>
 
+    <?php if ($isFull): ?>
+        <div class="card"><p style="font-weight:700; color:#dc2626;">申し訳ありません。定員に達したため、受付を終了しました。</p></div>
+    <?php else: ?>
     <form action="checkout.php" method="post" class="card">
         <input type="hidden" name="event_id" value="<?= e($event['id']) ?>">
 
@@ -131,8 +150,9 @@ $maxParty = min($maxParty, 20);
         <p class="note" id="methodNote"></p>
         <p class="note">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
     </form>
+    <?php endif; ?>
 
-    <p><a href="index.php">← イベント一覧へ戻る</a></p>
+    <p><a href="index.php">← トップへ戻る</a></p>
 
     <script>
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
@@ -150,7 +170,9 @@ $maxParty = min($maxParty, 20);
             return el ? el.value : 'prepay';
         }
         function updateTotal() {
-            const qty = parseInt(document.getElementById('party_size').value, 10) || 1;
+            const ps = document.getElementById('party_size');
+            if (!ps) return; // 満員などでフォーム非表示のとき
+            const qty = parseInt(ps.value, 10) || 1;
             const method = selectedMethod();
             const unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
             document.getElementById('total').textContent = formatAmount(unit * qty);

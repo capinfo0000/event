@@ -8,6 +8,7 @@
  *   php bin/console.php create-admin <email> <pw>  … プラットフォーム管理者を作成
  *   php bin/console.php make-invite <admin-email>  … 招待コードを発行して表示
  *   php bin/console.php list-tenants               … テナント一覧
+ *   php bin/console.php set-plan <email> <plan>    … プラン変更（free/light/standard/unlimited）
  */
 
 declare(strict_types=1);
@@ -50,6 +51,21 @@ switch ($cmd) {
         $base = rtrim(env('APP_BASE_URL', 'http://localhost:8000'), '/');
         echo "招待コード: {$code}\n";
         echo "サインアップURL: {$base}/admin/signup.php?invite={$code}\n";
+        break;
+
+    case 'set-plan':
+        $email = $argv[2] ?? '';
+        $plan = $argv[3] ?? '';
+        $t = $email !== '' ? find_tenant_by_email($email) : null;
+        if ($t === null) {
+            exit("テナントが見つかりません: {$email}\n");
+        }
+        if (!isset(plan_catalog()[$plan])) {
+            exit('プランは ' . implode(' / ', array_keys(plan_catalog())) . " のいずれかを指定してください。\n");
+        }
+        set_tenant_plan($t['id'], $plan);
+        echo "プランを {$plan}（" . plan_label($plan) . "・上限 " .
+             (plan_max_events($plan) === PHP_INT_MAX ? '無制限' : plan_max_events($plan) . '件') . "）に変更しました。\n";
         break;
 
     case 'list-tenants':
