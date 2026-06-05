@@ -41,7 +41,7 @@ foreach ($participants as $p) {
     $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
     if ($isOnsite) {
         $method = '当日';
-        $status = '当日支払い・未収';
+        $status = !empty($p['collected']) ? '集金確認済み' : '当日支払い・未収';
         $idRef = $p['customer_id'];
     } else {
         $method = '事前';

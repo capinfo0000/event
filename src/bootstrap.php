@@ -318,6 +318,7 @@ function fetch_event_participants(string $eventId): array
             'currency'        => (string) ($session->currency ?? 'jpy'),
             'amount_refunded' => $amountRefunded,
             'fully_refunded'  => $fullyRefunded,
+            'collected'       => false, // 事前決済では使わない（当日支払い用）
             'created'         => (int) ($session->created ?? 0),
         ];
     }
@@ -334,7 +335,7 @@ function fetch_event_participants(string $eventId): array
         }
 
         $participants[] = [
-            'payment_type'    => 'onsite',   // 当日支払い（未収）
+            'payment_type'    => 'onsite',   // 当日支払い
             'session_id'      => '',
             'payment_intent'  => '',
             'customer_id'     => $customer->id,
@@ -347,6 +348,7 @@ function fetch_event_participants(string $eventId): array
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),
             'amount_refunded' => 0,
             'fully_refunded'  => false,
+            'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の集金確認済みか
             'created'         => (int) ($customer->created ?? 0),
         ];
     }

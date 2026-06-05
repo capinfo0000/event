@@ -28,6 +28,7 @@ $fetchError = '';
 $totalCount = 0;
 $prepaidCount = 0;
 $onsiteCount = 0;
+$onsiteCollectedCount = 0;
 $collected = 0;   // 事前決済の入金合計
 $refunded = 0;    // 返金合計
 $onsiteDue = 0;   // 当日支払い予定（未収）合計
@@ -39,7 +40,11 @@ if ($selectedEvent !== null) {
         foreach ($participants as $p) {
             if (($p['payment_type'] ?? 'prepay') === 'onsite') {
                 $onsiteCount++;
-                $onsiteDue += $p['amount'];
+                if (!empty($p['collected'])) {
+                    $onsiteCollectedCount++;
+                } else {
+                    $onsiteDue += $p['amount'];
+                }
             } else {
                 $prepaidCount++;
                 $collected += $p['amount'];
@@ -134,7 +139,7 @@ $token = csrf_token();
         <div class="stats">
             <div class="stat"><div class="num"><?= $totalCount ?></div><div class="lbl">申込合計（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</div></div>
             <div class="stat"><div class="num"><?= e(format_amount($collected, $cur0)) ?></div><div class="lbl">事前入金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日予定（未収）</div></div>
+            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日・未収（集金済 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</div></div>
             <div class="stat"><div class="num"><?= e(format_amount($refunded, $cur0)) ?></div><div class="lbl">返金合計</div></div>
             <div class="stat"><div class="num"><?= e(format_amount(max(0, $collected - $refunded), $cur0)) ?></div><div class="lbl">事前の差引（手取り目安）</div></div>
         </div>
@@ -155,13 +160,15 @@ $token = csrf_token();
                             $cur = $p['currency'];
                             $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
                             if ($isOnsite) {
-                                $statusHtml = '<span class="tag tag-partial">当日支払い・未収</span>';
+                                $statusHtml = !empty($p['collected'])
+                                    ? '<span class="tag tag-paid">集金確認済み</span>'
+                                    : '<span class="tag tag-partial">当日支払い・未収</span>';
                             } elseif ($p['fully_refunded']) {
                                 $statusHtml = '<span class="tag tag-refunded">全額返金（キャンセル済）</span>';
                             } elseif ($p['amount_refunded'] > 0) {
                                 $statusHtml = '<span class="tag tag-partial">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
                             } else {
-                                $statusHtml = '<span class="tag tag-paid">支払い済み</span>';
+                                $statusHtml = '<span class="tag tag-paid">事前決済済み</span>';
                             }
                             $remaining = $p['amount'] - $p['amount_refunded'];
                         ?>
@@ -179,13 +186,27 @@ $token = csrf_token();
                             <td><?= $statusHtml ?></td>
                             <td>
                                 <?php if ($isOnsite): ?>
-                                    <form method="post" action="onsite_cancel.php"
-                                          onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？');">
-                                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                        <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                        <button type="submit" class="btn btn-danger">申込を取消</button>
-                                    </form>
+                                    <div class="actions" style="display:flex; gap:6px; align-items:center;">
+                                        <form method="post" action="onsite_collect.php">
+                                            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                            <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                            <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                            <?php if (empty($p['collected'])): ?>
+                                                <input type="hidden" name="collect" value="1">
+                                                <button type="submit" class="btn">集金確認済みにする</button>
+                                            <?php else: ?>
+                                                <input type="hidden" name="collect" value="0">
+                                                <button type="submit" class="btn btn-ghost">未収に戻す</button>
+                                            <?php endif; ?>
+                                        </form>
+                                        <form method="post" action="onsite_cancel.php"
+                                              onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？');">
+                                            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                            <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                            <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                            <button type="submit" class="btn btn-danger">取消</button>
+                                        </form>
+                                    </div>
                                 <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
                                     <span class="muted">—</span>
                                 <?php else: ?>
