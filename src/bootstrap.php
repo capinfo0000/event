@@ -195,10 +195,10 @@ function delete_event(string $tenantId, string $id): bool
 function plan_catalog(): array
 {
     return [
-        'free'      => ['label' => '無料',           'max_events' => 1,            'price' => 0],
-        'light'     => ['label' => 'ライト',         'max_events' => 5,            'price' => 500],
-        'standard'  => ['label' => 'スタンダード',   'max_events' => 20,           'price' => 1500],
-        'unlimited' => ['label' => '無制限',         'max_events' => PHP_INT_MAX,  'price' => 3000],
+        'free'      => ['label' => '無料',         'max_events' => 1,           'price' => 0],
+        'p5'        => ['label' => '月5イベント',   'max_events' => 5,           'price' => 500],
+        'p10'       => ['label' => '月10イベント',  'max_events' => 10,          'price' => 1000],
+        'unlimited' => ['label' => '無制限',        'max_events' => PHP_INT_MAX, 'price' => 1500],
     ];
 }
 
@@ -223,8 +223,8 @@ function plan_label(string $plan): string
 function plan_price_ids(): array
 {
     $map = [
-        'light'     => env('STRIPE_PRICE_LIGHT'),
-        'standard'  => env('STRIPE_PRICE_STANDARD'),
+        'p5'        => env('STRIPE_PRICE_P5'),
+        'p10'       => env('STRIPE_PRICE_P10'),
         'unlimited' => env('STRIPE_PRICE_UNLIMITED'),
     ];
     return array_filter($map, static fn ($v) => $v !== null && $v !== '');

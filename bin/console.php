@@ -8,7 +8,7 @@
  *   php bin/console.php create-admin <email> <pw>  … プラットフォーム管理者を作成
  *   php bin/console.php make-invite <admin-email>  … 招待コードを発行して表示
  *   php bin/console.php list-tenants               … テナント一覧
- *   php bin/console.php set-plan <email> <plan>    … プラン変更（free/light/standard/unlimited）
+ *   php bin/console.php set-plan <email> <plan>    … プラン変更（free/p5/p10/unlimited）
  */
 
 declare(strict_types=1);
