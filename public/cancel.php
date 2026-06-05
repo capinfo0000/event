@@ -18,23 +18,22 @@ $event = $eventId !== '' ? find_event($eventId) : null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>お支払いは完了していません</title>
-    <style>
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.7; color: #1f2937; max-width: 640px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-top: 24px; }
-        a { color: #2563eb; }
-    </style>
+    <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
+<div class="container">
+    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
     <div class="card">
-        <p>お支払いは完了していません。料金は請求されていません。</p>
+        <h1 style="font-size:1.2rem;">お支払いは完了していません</h1>
+        <p class="muted">料金は請求されていません。もう一度お申し込みいただけます。</p>
         <?php if ($event !== null): ?>
-            <form action="checkout.php" method="post">
+            <form action="apply.php" method="get" style="margin-top:14px;">
                 <input type="hidden" name="event_id" value="<?= e($event['id']) ?>">
-                <button type="submit">「<?= e($event['name'] ?? '') ?>」をもう一度申し込む</button>
+                <button type="submit" class="btn">「<?= e($event['name'] ?? '') ?>」をもう一度申し込む</button>
             </form>
         <?php endif; ?>
-        <p style="margin-top:24px;"><a href="index.php">← イベント一覧へ戻る</a></p>
+        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
     </div>
+</div>
 </body>
 </html>

@@ -9,6 +9,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $admin = require_admin_tenant();
+$tenant = $admin; // シェルのサイドバー表示用
 
 $newCode = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -22,14 +23,13 @@ $base = base_url();
 
 // 招待一覧
 $invites = db()->query('SELECT * FROM invites ORDER BY created_at DESC LIMIT 100')->fetchAll();
-require __DIR__ . '/_auth_header.php';
-?>
-<h1>招待コードの発行</h1>
-<p class="muted"><a href="index.php">← ダッシュボードへ</a></p>
 
+$pageTitle = '招待コードの発行';
+require __DIR__ . '/_app_header.php';
+?>
 <?php if ($newCode !== ''): ?>
     <div class="card">
-        <p>招待リンクを発行しました。これを相手に共有してください：</p>
+        <p style="margin-top:0;">招待リンクを発行しました。これを相手に共有してください：</p>
         <input type="text" readonly value="<?= e($base . '/admin/signup.php?invite=' . $newCode) ?>" onclick="this.select()">
     </div>
 <?php endif; ?>
@@ -42,13 +42,13 @@ require __DIR__ . '/_auth_header.php';
 </form>
 
 <div class="card">
-    <p class="muted">発行済み招待（最新100件）</p>
+    <div class="card__title">発行済み招待（最新100件）</div>
     <?php foreach ($invites as $iv): ?>
-        <div style="border-bottom:1px solid #eee; padding:6px 0; font-size:.85rem;">
+        <div style="border-bottom:1px solid var(--border); padding:8px 0; font-size:.86rem;">
             <code><?= e($iv['code']) ?></code>
             <?= $iv['used_by'] ? '— 使用済み' : ($iv['expires_at'] && $iv['expires_at'] < time() ? '— 期限切れ' : '— 未使用') ?>
             <?php if ($iv['email']): ?>（<?= e($iv['email']) ?>宛）<?php endif; ?>
         </div>
     <?php endforeach; ?>
 </div>
-<?php require __DIR__ . '/_auth_footer.php'; ?>
+<?php require __DIR__ . '/_app_footer.php'; ?>

@@ -40,27 +40,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $token = csrf_token();
-require __DIR__ . '/_auth_header.php';
+$pageTitle = 'アカウント設定';
+$pageSub = $tenant['email'];
+require __DIR__ . '/_app_header.php';
 ?>
-<h1>アカウント設定</h1>
-<p class="muted"><a href="dashboard.php">← ダッシュボード</a> ／ <?= e($tenant['email']) ?></p>
-
 <?php if ($msg !== ''): ?>
-    <div class="<?= $msgType === 'ok' ? '' : 'err' ?>" style="<?= $msgType === 'ok' ? 'background:#dcfce7;color:#166534;padding:10px 14px;border-radius:8px;' : '' ?>"><?= e($msg) ?></div>
+    <div class="flash <?= $msgType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <div class="card">
-    <h2 style="font-size:1.05rem;">表示名</h2>
+    <div class="card__title">表示名</div>
     <form method="post">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="action" value="name">
         <input type="text" name="display_name" maxlength="100" value="<?= e($tenant['display_name']) ?>">
-        <p style="margin-top:12px;"><button type="submit" class="btn" style="width:auto;">表示名を更新</button></p>
+        <p style="margin-top:14px;"><button type="submit" class="btn">表示名を更新</button></p>
     </form>
 </div>
 
 <div class="card">
-    <h2 style="font-size:1.05rem;">パスワード変更</h2>
+    <div class="card__title">パスワード変更</div>
     <form method="post">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="action" value="password">
@@ -68,7 +67,7 @@ require __DIR__ . '/_auth_header.php';
         <input type="password" name="current_password" required autocomplete="current-password">
         <label>新しいパスワード（8文字以上）</label>
         <input type="password" name="new_password" required minlength="8" autocomplete="new-password">
-        <p style="margin-top:12px;"><button type="submit" class="btn" style="width:auto;">パスワードを変更</button></p>
+        <p style="margin-top:14px;"><button type="submit" class="btn">パスワードを変更</button></p>
     </form>
 </div>
-<?php require __DIR__ . '/_auth_footer.php'; ?>
+<?php require __DIR__ . '/_app_footer.php'; ?>

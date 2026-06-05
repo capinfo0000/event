@@ -16,9 +16,9 @@ $eventName = '';
 $amountText = '';
 $email = '';
 
-// セッションは主催者の接続アカウント上にあるため、イベントから account を解決して照会する
+// セッションは運営者自身の Stripe アカウント上にある（Connect 不使用）
 $event = $eventId !== '' ? find_event($eventId) : null;
-$account = $event['stripe_account_id'] ?? null;
+$account = null;
 
 if ($sessionId !== '') {
     init_stripe();
@@ -41,23 +41,22 @@ if ($sessionId !== '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>申込完了</title>
+    <link rel="stylesheet" href="/assets/app.css">
     <style>
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.7; color: #1f2937; max-width: 640px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-top: 24px; }
-        .ok { color: #16a34a; font-size: 1.4rem; font-weight: 700; }
-        .ng { color: #dc2626; font-size: 1.3rem; font-weight: 700; }
-        dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
-        dt { color: #6b7280; }
-        a { color: #2563eb; }
+        .ok { color: #16a34a; font-size: 1.4rem; font-weight: 800; margin: 0 0 8px; }
+        .ng { color: var(--dng); font-size: 1.3rem; font-weight: 800; margin: 0 0 8px; }
+        dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 16px 0; }
+        dt { color: var(--muted); }
     </style>
 </head>
 <body>
+<div class="container">
+    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
     <div class="card">
         <?php if ($paid): ?>
             <p class="ok">✅ お申し込みが完了しました</p>
             <p>ご参加ありがとうございます。お支払いを確認しました。確認メールが Stripe より送信されます。</p>
-            <p style="font-size:.85rem;color:#6b7280;">※ カード情報は Stripe が直接お預かりしており、主催者（当方）は決済情報を受け取っておりません。</p>
+            <p class="muted">※ カード情報は Stripe が直接お預かりしており、主催者（当方）は決済情報を受け取っておりません。</p>
             <dl>
                 <?php if ($eventName !== ''): ?><dt>イベント</dt><dd><?= e($eventName) ?></dd><?php endif; ?>
                 <?php if ($amountText !== ''): ?><dt>お支払い額</dt><dd><?= e($amountText) ?></dd><?php endif; ?>
@@ -67,7 +66,8 @@ if ($sessionId !== '') {
             <p class="ng">お支払いを確認できませんでした</p>
             <p>恐れ入りますが、もう一度お試しいただくか、主催者までご連絡ください。</p>
         <?php endif; ?>
-        <p style="margin-top:24px;"><a href="index.php">← イベント一覧へ戻る</a></p>
+        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
     </div>
+</div>
 </body>
 </html>

@@ -20,7 +20,7 @@ if ($event === null || $event['tenant_id'] !== $tenant['id']) {
 }
 
 try {
-    $participants = fetch_event_participants($eventId, $tenant['stripe_account_id'] ?? null);
+    $participants = fetch_event_participants($eventId, null);
 } catch (\Throwable $ex) {
     http_response_code(502);
     error_log('CSV 用名簿取得失敗: ' . $ex->getMessage());

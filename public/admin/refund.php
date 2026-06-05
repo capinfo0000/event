@@ -39,9 +39,9 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
-$account = $tenant['stripe_account_id'] ?? null;
-if (empty($account)) {
-    back_to_admin($eventId, 'Stripe 未連携のため返金できません。', 'ng');
+$account = null; // 運営者自身の Stripe アカウント（Connect 不使用）
+if (env('STRIPE_SECRET_KEY') === null) {
+    back_to_admin($eventId, 'Stripe キー未設定のため返金できません。', 'ng');
 }
 
 if ($paymentIntent === '') {

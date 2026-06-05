@@ -18,9 +18,9 @@ if ($tenant === null) {
     exit('主催者が見つかりません。');
 }
 
-// 連携済みの主催者のイベントのみ公開（未連携は申込できないため出さない）
-$events = empty($tenant['stripe_account_id']) ? [] : tenant_events($tenantId);
-$account = $tenant['stripe_account_id'] ?? null;
+// 公開イベント一覧（残席計算は運営者自身の Stripe アカウントから取得）
+$events = tenant_events($tenantId);
+$account = null; // Connect 不使用 → 自アカウント
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -28,33 +28,21 @@ $account = $tenant['stripe_account_id'] ?? null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($tenant['display_name']) ?> のイベント</title>
+    <link rel="stylesheet" href="/assets/app.css">
     <style>
-        :root { --accent: #2563eb; --border: #e5e7eb; --muted: #6b7280; }
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.7; color: #1f2937; max-width: 720px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        h1 { font-size: 1.5rem; }
-        .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 16px 0; }
-        .card h2 { margin: 0 0 8px; font-size: 1.2rem; }
-        .meta { color: var(--muted); font-size: .9rem; margin: 4px 0; }
-        .price { font-size: 1.2rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
-        .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
-               padding: 10px 18px; border-radius: 8px; font-weight: 600; }
-        .btn:hover { background: #1d4ed8; }
-        .btn[aria-disabled="true"] { background: #9ca3af; pointer-events: none; }
-        .muted { color: var(--muted); }
-        .full { color: #dc2626; font-weight: 700; }
+        .ev-price { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
+        .full { color: var(--dng); font-weight: 700; }
     </style>
 </head>
 <body>
-    <h1><?= e($tenant['display_name']) ?> のイベント</h1>
+<div class="container">
+    <div class="brandbar"><span class="logo">🎟️</span> <?= e($tenant['display_name']) ?> のイベント</div>
 
     <?php if (empty($events)): ?>
-        <div class="card"><p>現在受付中のイベントはありません。</p></div>
+        <div class="card"><p style="margin:0;">現在受付中のイベントはありません。</p></div>
     <?php else: ?>
         <?php foreach ($events as $ev): ?>
             <?php
-                // 残席（capacity>0 のとき）。取得失敗時は表示なし。
                 $cap = (int) $ev['capacity'];
                 $remaining = null; $full = false;
                 if ($cap > 0) {
@@ -65,19 +53,19 @@ $account = $tenant['stripe_account_id'] ?? null;
                 }
             ?>
             <div class="card">
-                <h2><?= e($ev['name']) ?></h2>
-                <p class="meta">📅 <?= e($ev['date']) ?>　📍 <?= e($ev['place']) ?></p>
+                <div class="card__title" style="font-size:1.15rem;"><?= e($ev['name']) ?></div>
+                <p class="muted">📅 <?= e($ev['date']) ?>　📍 <?= e($ev['place']) ?></p>
                 <p><?= e($ev['description']) ?></p>
-                <p class="price">
+                <p class="ev-price">
                     <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
                     <?php if ($ev['allow_prepay'] && $ev['allow_onsite']): ?> ／ <?php endif; ?>
                     <?php if ($ev['allow_onsite']): ?><span class="muted" style="font-size:.9rem;">当日 <?= e(format_amount($ev['amount_onsite'], $ev['currency'])) ?></span><?php endif; ?>
                 </p>
                 <?php if ($cap > 0 && $remaining !== null): ?>
-                    <p class="meta">定員 <?= $cap ?> 名　<?= $full ? '<span class="full">満員</span>' : '残り ' . $remaining . ' 名' ?></p>
+                    <p class="muted">定員 <?= $cap ?> 名　<?= $full ? '<span class="full">満員</span>' : '残り ' . $remaining . ' 名' ?></p>
                 <?php endif; ?>
                 <?php if ($full): ?>
-                    <span class="btn" aria-disabled="true">満員</span>
+                    <span class="btn" aria-disabled="true" style="background:#9ca3af;border-color:#9ca3af;pointer-events:none;">満員</span>
                 <?php else: ?>
                     <a class="btn" href="apply.php?event_id=<?= e($ev['id']) ?>">申し込む</a>
                 <?php endif; ?>
@@ -85,9 +73,10 @@ $account = $tenant['stripe_account_id'] ?? null;
         <?php endforeach; ?>
     <?php endif; ?>
 
-    <p class="muted" style="margin-top:24px;font-size:.85rem;">
+    <p class="muted" style="margin-top:24px; font-size:.85rem;">
         カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。
         <a href="policy.php">キャンセル・返金ポリシー</a>
     </p>
+</div>
 </body>
 </html>

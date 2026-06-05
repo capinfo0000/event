@@ -3,7 +3,7 @@
 /**
  * 参加者管理ダッシュボード（ログイン中テナント専用）。
  *
- * 名簿は当テナントの Stripe 接続アカウントから取得する（DBには参加者を持たない）。
+ * 名簿は運営者自身の Stripe アカウントから取得する（DBには参加者を持たない）。
  * - 自分のイベントを選んで参加者一覧を表示
  * - 事前決済の返金（全額＝キャンセル／一部）、当日支払いの集金確認・取消
  * - CSV ダウンロード
@@ -14,7 +14,8 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-$account = $tenant['stripe_account_id'] ?? null;
+// 名簿は運営者自身の Stripe アカウントから取得する（Connect 不使用 → 常に自アカウント）。
+$account = null;
 
 $events = tenant_events($tenant['id']);
 $selectedId = (string) ($_GET['event_id'] ?? ($events[0]['id'] ?? ''));
@@ -40,8 +41,8 @@ $onsiteDue = 0;   // 当日支払い予定（未収）合計
 $attendedCount = 0; // 出席確認済みの申込数（頭数ではなく行数）
 $headcount = 0;     // 参加予定の頭数（返金済みを除く party_size 合計）
 
-if ($selectedEvent !== null && empty($account)) {
-    $fetchError = 'Stripe 未連携のため名簿を取得できません。ダッシュボードから連携してください。';
+if ($selectedEvent !== null && env('STRIPE_SECRET_KEY') === null) {
+    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。.env の STRIPE_SECRET_KEY を設定してください。';
 } elseif ($selectedEvent !== null) {
     try {
         $participants = fetch_event_participants($selectedId, $account);
@@ -73,105 +74,69 @@ if ($selectedEvent !== null && empty($account)) {
 }
 
 $token = csrf_token();
+
+$pageTitle = '参加者管理';
+$pageSub = '名簿はあなたの Stripe アカウントから取得しています（参加者DBは持ちません）';
+require __DIR__ . '/_app_header.php';
 ?>
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>参加者管理</title>
-    <style>
-        :root { --accent: #2563eb; --border: #e5e7eb; --muted: #6b7280; --danger: #dc2626; }
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.6; color: #1f2937; max-width: 1040px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        h1 { font-size: 1.4rem; }
-        .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
-        select, button, input[type=number] { font-size: .95rem; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
-        .btn { background: var(--accent); color: #fff; border: none; cursor: pointer; font-weight: 600; }
-        .btn:hover { background: #1d4ed8; }
-        .btn-ghost { background: #fff; color: var(--accent); border: 1px solid var(--accent); text-decoration: none; display: inline-block; }
-        .btn-danger { background: var(--danger); }
-        .btn-danger:hover { background: #b91c1c; }
-        .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
-        .stat { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; min-width: 140px; }
-        .stat .num { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
-        .stat .lbl { font-size: .8rem; color: var(--muted); }
-        table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 10px; overflow: hidden; }
-        th, td { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; font-size: .9rem; vertical-align: middle; }
-        th { background: #f3f4f6; }
-        .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
-        .tag-paid { background: #dcfce7; color: #166534; }
-        .tag-partial { background: #fef9c3; color: #854d0e; }
-        .tag-refunded { background: #fee2e2; color: #991b1b; }
-        .refund-form { display: flex; gap: 6px; align-items: center; }
-        .refund-form input { width: 90px; }
-        .muted { color: var(--muted); font-size: .85rem; }
-        .flash { padding: 10px 14px; border-radius: 8px; margin: 12px 0; }
-        .flash-ok { background: #dcfce7; color: #166534; }
-        .flash-ng { background: #fee2e2; color: #991b1b; }
-        .err { background: #fee2e2; color: #991b1b; padding: 12px 14px; border-radius: 8px; }
-    </style>
-</head>
-<body>
-    <h1>参加者管理</h1>
-    <p class="muted">
-        <?= e($tenant['display_name']) ?> さん ／ <a href="dashboard.php">ダッシュボード</a>
-        ／ <a href="events.php">イベント管理</a> ／ <a href="logout.php">ログアウト</a>
-    </p>
-    <p class="muted">名簿はあなたの Stripe 接続アカウントから取得しています（参加者DBは持ちません）。</p>
+<style>
+    .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 18px; }
+    .bar select { width: auto; }
+    .refund-form { display: flex; gap: 6px; align-items: center; }
+    .refund-form input { width: 92px; }
+</style>
 
-    <?php if ($flash !== ''): ?>
-        <div class="flash <?= $flashType === 'ok' ? 'flash-ok' : 'flash-ng' ?>"><?= e($flash) ?></div>
-    <?php endif; ?>
+<?php if ($flash !== ''): ?>
+    <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
+<?php endif; ?>
 
-    <?php if (empty($events)): ?>
-        <div class="err">まだイベントがありません。<a href="events.php">イベント管理</a>から登録してください。</div>
-    <?php else: ?>
-    <form method="get" class="bar">
-        <label>イベント：
-            <select name="event_id" onchange="this.form.submit()">
-                <?php foreach ($events as $ev): ?>
-                    <option value="<?= e($ev['id']) ?>" <?= $ev['id'] === $selectedId ? 'selected' : '' ?>>
-                        <?= e($ev['name'] ?? $ev['id']) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <noscript><button type="submit" class="btn">表示</button></noscript>
-        <?php if ($selectedEvent !== null): ?>
-            <a class="btn btn-ghost" href="export.php?event_id=<?= e($selectedId) ?>">CSV ダウンロード</a>
-            <a class="btn btn-ghost" href="../apply.php?event_id=<?= e($selectedId) ?>" target="_blank">申込ページを開く</a>
-        <?php endif; ?>
-    </form>
-    <?php endif; ?>
-
+<?php if (empty($events)): ?>
+    <div class="err">まだイベントがありません。<a href="events.php">イベント管理</a>から登録してください。</div>
+<?php else: ?>
+<form method="get" class="bar">
+    <label style="margin:0; font-weight:600;">イベント：</label>
+    <select name="event_id" onchange="this.form.submit()">
+        <?php foreach ($events as $ev): ?>
+            <option value="<?= e($ev['id']) ?>" <?= $ev['id'] === $selectedId ? 'selected' : '' ?>>
+                <?= e($ev['name'] ?? $ev['id']) ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <noscript><button type="submit" class="btn">表示</button></noscript>
     <?php if ($selectedEvent !== null): ?>
-        <p class="muted">
-            📅 <?= e($selectedEvent['date'] ?? '') ?>　📍 <?= e($selectedEvent['place'] ?? '') ?>
-            <?php if (!empty($selectedEvent['capacity'])): ?>　／ 定員目安: <?= (int) $selectedEvent['capacity'] ?> 名<?php endif; ?>
-        </p>
+        <a class="btn btn--ghost" href="export.php?event_id=<?= e($selectedId) ?>">CSV ダウンロード</a>
+        <a class="btn btn--ghost" href="../apply.php?event_id=<?= e($selectedId) ?>" target="_blank">申込ページを開く</a>
     <?php endif; ?>
+</form>
+<?php endif; ?>
 
-    <?php if ($fetchError !== ''): ?>
-        <p class="err"><?= e($fetchError) ?></p>
-    <?php elseif ($selectedEvent === null): ?>
-        <p class="err">イベントが選択されていません。</p>
+<?php if ($selectedEvent !== null): ?>
+    <p class="muted">
+        📅 <?= e($selectedEvent['date'] ?? '') ?>　📍 <?= e($selectedEvent['place'] ?? '') ?>
+        <?php if (!empty($selectedEvent['capacity'])): ?>　／ 定員目安: <?= (int) $selectedEvent['capacity'] ?> 名<?php endif; ?>
+    </p>
+<?php endif; ?>
+
+<?php if ($fetchError !== ''): ?>
+    <p class="err"><?= e($fetchError) ?></p>
+<?php elseif ($selectedEvent === null): ?>
+    <p class="err">イベントが選択されていません。</p>
+<?php else: ?>
+    <?php $cur0 = $selectedEvent['currency'] ?? 'jpy'; ?>
+    <?php $cap = (int) ($selectedEvent['capacity'] ?? 0); ?>
+    <div class="stat-grid">
+        <div class="stat"><span class="stat__num accent"><?= $headcount ?><?= $cap > 0 ? ' / ' . $cap : '' ?></span><span class="stat__label">参加人数<?= $cap > 0 ? '（定員）' : '' ?></span></div>
+        <div class="stat"><span class="stat__num"><?= $totalCount ?></span><span class="stat__label">申込数（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</span></div>
+        <div class="stat"><span class="stat__num"><?= $attendedCount ?> / <?= $totalCount ?></span><span class="stat__label">出席確認済み</span></div>
+        <div class="stat"><span class="stat__num"><?= e(format_amount($collected, $cur0)) ?></span><span class="stat__label">事前入金合計</span></div>
+        <div class="stat"><span class="stat__num"><?= e(format_amount($onsiteDue, $cur0)) ?></span><span class="stat__label">当日・未収（受領 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</span></div>
+        <div class="stat"><span class="stat__num"><?= e(format_amount($refunded, $cur0)) ?></span><span class="stat__label">返金合計</span></div>
+    </div>
+
+    <?php if ($totalCount === 0): ?>
+        <p class="muted">まだ申込はありません。</p>
     <?php else: ?>
-        <?php $cur0 = $selectedEvent['currency'] ?? 'jpy'; ?>
-        <?php $cap = (int) ($selectedEvent['capacity'] ?? 0); ?>
-        <div class="stats">
-            <div class="stat"><div class="num"><?= $headcount ?><?= $cap > 0 ? ' / ' . $cap : '' ?></div><div class="lbl">参加人数<?= $cap > 0 ? '（定員）' : '' ?></div></div>
-            <div class="stat"><div class="num"><?= $totalCount ?></div><div class="lbl">申込数（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</div></div>
-            <div class="stat"><div class="num"><?= $attendedCount ?> / <?= $totalCount ?></div><div class="lbl">出席確認済み</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($collected, $cur0)) ?></div><div class="lbl">事前入金合計</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($onsiteDue, $cur0)) ?></div><div class="lbl">当日・未収（受領 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</div></div>
-            <div class="stat"><div class="num"><?= e(format_amount($refunded, $cur0)) ?></div><div class="lbl">返金合計</div></div>
-        </div>
-
-        <?php if ($totalCount === 0): ?>
-            <p class="muted">まだ申込はありません。</p>
-        <?php else: ?>
+        <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
@@ -186,14 +151,14 @@ $token = csrf_token();
                             $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
                             if ($isOnsite) {
                                 $statusHtml = !empty($p['collected'])
-                                    ? '<span class="tag tag-paid">受領済み</span>'
-                                    : '<span class="tag tag-partial">当日支払い・未収</span>';
+                                    ? '<span class="badge badge--ok">受領済み</span>'
+                                    : '<span class="badge badge--warn">当日支払い・未収</span>';
                             } elseif ($p['fully_refunded']) {
-                                $statusHtml = '<span class="tag tag-refunded">全額返金（キャンセル済）</span>';
+                                $statusHtml = '<span class="badge badge--danger">全額返金（キャンセル済）</span>';
                             } elseif ($p['amount_refunded'] > 0) {
-                                $statusHtml = '<span class="tag tag-partial">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
+                                $statusHtml = '<span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
                             } else {
-                                $statusHtml = '<span class="tag tag-paid">事前決済済み</span>';
+                                $statusHtml = '<span class="badge badge--ok">事前決済済み</span>';
                             }
                             $remaining = $p['amount'] - $p['amount_refunded'];
                         ?>
@@ -220,8 +185,8 @@ $token = csrf_token();
                                             <button type="submit" class="btn">出席にする</button>
                                         <?php else: ?>
                                             <input type="hidden" name="attend" value="0">
-                                            <span class="tag tag-paid">出席済み</span><br>
-                                            <button type="submit" class="btn btn-ghost" style="margin-top:4px;">取消</button>
+                                            <span class="badge badge--ok">出席済み</span><br>
+                                            <button type="submit" class="btn btn--ghost" style="margin-top:4px;">取消</button>
                                         <?php endif; ?>
                                     </form>
                                 <?php else: ?>
@@ -230,7 +195,7 @@ $token = csrf_token();
                             </td>
                             <td>
                                 <?php if ($isOnsite): ?>
-                                    <div class="actions" style="display:flex; gap:6px; align-items:center;">
+                                    <div style="display:flex; gap:6px; align-items:center;">
                                         <form method="post" action="onsite_collect.php">
                                             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                             <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
@@ -240,7 +205,7 @@ $token = csrf_token();
                                                 <button type="submit" class="btn">受領にする</button>
                                             <?php else: ?>
                                                 <input type="hidden" name="collect" value="0">
-                                                <button type="submit" class="btn btn-ghost">受領取消</button>
+                                                <button type="submit" class="btn btn--ghost">受領取消</button>
                                             <?php endif; ?>
                                         </form>
                                         <form method="post" action="onsite_cancel.php"
@@ -248,7 +213,7 @@ $token = csrf_token();
                                             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                             <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                             <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                            <button type="submit" class="btn btn-danger">取消</button>
+                                            <button type="submit" class="btn btn--danger">取消</button>
                                         </form>
                                     </div>
                                 <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
@@ -266,18 +231,16 @@ $token = csrf_token();
                                             <input type="number" name="amount" step="0.01" min="0.01"
                                                    placeholder="一部" title="一部返金額。空欄なら全額返金。">
                                         <?php endif; ?>
-                                        <button type="submit" class="btn btn-danger">返金</button>
+                                        <button type="submit" class="btn btn--danger">返金</button>
                                     </form>
-                                    <span class="muted">空欄＝全額返金（＝キャンセル）</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
-        <?php endif; ?>
+        </div>
+        <p class="muted" style="margin-top:10px;">返金欄を空欄で実行すると全額返金（＝キャンセル）になります。</p>
     <?php endif; ?>
-
-    <p style="margin-top:24px;"><a href="../index.php">← 申込トップへ</a></p>
-</body>
-</html>
+<?php endif; ?>
+<?php require __DIR__ . '/_app_footer.php'; ?>

@@ -21,18 +21,16 @@ $currency = $event['currency'] ?? 'jpy';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>申込完了（当日支払い）</title>
+    <link rel="stylesheet" href="/assets/app.css">
     <style>
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.7; color: #1f2937; max-width: 640px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-top: 24px; }
-        .ok { color: #16a34a; font-size: 1.4rem; font-weight: 700; }
-        dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
-        dt { color: #6b7280; }
-        .pay { font-size: 1.3rem; font-weight: 700; color: #2563eb; }
-        a { color: #2563eb; }
+        .ok { color: #16a34a; font-size: 1.4rem; font-weight: 800; margin: 0 0 8px; }
+        dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 16px 0; }
+        dt { color: var(--muted); }
     </style>
 </head>
 <body>
+<div class="container">
+    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
     <div class="card">
         <p class="ok">✅ お申し込みを受け付けました</p>
         <p>当日、会場で参加費をお支払いください。<strong>今回はまだお支払いは発生していません。</strong></p>
@@ -40,10 +38,11 @@ $currency = $event['currency'] ?? 'jpy';
             <?php if ($event !== null): ?><dt>イベント</dt><dd><?= e($event['name'] ?? '') ?></dd><?php endif; ?>
             <?php if ($event !== null): ?><dt>日時・場所</dt><dd><?= e(($event['date'] ?? '') . '　' . ($event['place'] ?? '')) ?></dd><?php endif; ?>
             <dt>参加人数</dt><dd><?= $partySize ?> 名</dd>
-            <dt>当日お支払い額</dt><dd><span class="pay"><?= e(format_amount($total, $currency)) ?></span></dd>
+            <dt>当日お支払い額</dt><dd><span class="total" style="margin:0;"><?= e(format_amount($total, $currency)) ?></span></dd>
         </dl>
-        <p style="color:#6b7280; font-size:.9rem;">※ ご都合が悪くなった場合は、お手数ですが主催者までご連絡ください。</p>
-        <p style="margin-top:24px;"><a href="index.php">← イベント一覧へ戻る</a></p>
+        <p class="muted">※ ご都合が悪くなった場合は、お手数ですが主催者までご連絡ください。</p>
+        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
     </div>
+</div>
 </body>
 </html>

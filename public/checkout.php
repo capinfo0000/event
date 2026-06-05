@@ -25,12 +25,8 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-// このイベントの主催者の Stripe 接続アカウント。未連携なら受付不可。
-$account = $event['stripe_account_id'] ?? null;
-if (empty($account)) {
-    http_response_code(503);
-    exit('現在このイベントは申込を受け付けられません（主催者の決済準備中）。');
-}
+// 決済は運営者自身の Stripe アカウントで行う（Connect 不使用）。$account は使わず常に自アカウント。
+$account = null;
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
 $name  = trim((string)($_POST['name'] ?? ''));
@@ -77,6 +73,12 @@ if ($paymentType === 'onsite' && !$allowOnsite) {
     exit('このイベントでは当日支払いを受け付けていません。');
 }
 
+// 決済（事前・当日とも）は運営者の Stripe を使う。キー未設定なら受付不可。
+if (env('STRIPE_SECRET_KEY') === null) {
+    http_response_code(503);
+    exit('現在このイベントは決済の準備が完了していません。主催者へお問い合わせください。');
+}
+
 // 単価は方式ごとにサーバー側のイベント定義から確定する（改ざん防止）
 $currency = $event['currency'] ?? 'jpy';
 $prepayUnit = (int)($event['amount'] ?? 0);
@@ -89,11 +91,11 @@ $metaName = mb_substr($name, 0, 100);
 $metaPhone = mb_substr($phone, 0, 30);
 $metaNote = mb_substr($note, 0, 450);
 
+// 運営者自身の Stripe アカウントで初期化（Connect 不使用）。
 init_stripe();
-$opts = stripe_opts($account);
-
-// 定員チェック（capacity>0 のとき）。現在の人数＋今回の人数が定員を超えたら受付不可。
+$opts = stripe_opts($account); // $account = null → 自アカウント
 $capacity = (int)($event['capacity'] ?? 0);
+// 定員チェック（capacity>0 のとき）。現在の人数＋今回の人数が定員を超えたら受付不可。
 if ($capacity > 0) {
     try {
         $current = event_headcount($event['id'], $account);
@@ -112,6 +114,7 @@ if ($capacity > 0) {
 // ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
 if ($paymentType === 'onsite') {
     $onsiteTotal = $onsiteUnit * $partySize;
+    // 課金なしの Stripe 顧客として、運営者のアカウントに名簿を記録する。
     try {
         \Stripe\Customer::create([
             'name' => $metaName,

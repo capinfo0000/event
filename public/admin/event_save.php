@@ -32,11 +32,13 @@ function back_to_events(string $msg, string $type, string $editId = ''): never
 $id       = trim((string) ($_POST['id'] ?? ''));
 $name     = trim((string) ($_POST['name'] ?? ''));
 $desc     = trim((string) ($_POST['description'] ?? ''));
-$date     = trim((string) ($_POST['date'] ?? ''));
+// datetime-local は「2026-07-20T11:00」の形で届く。表示・既存形式に合わせて T を空白へ。
+$date     = str_replace('T', ' ', trim((string) ($_POST['date'] ?? '')));
 $place    = trim((string) ($_POST['place'] ?? ''));
 $amount   = (string) ($_POST['amount'] ?? '');
 $amountOnsite = trim((string) ($_POST['amount_onsite'] ?? ''));
-$currency = strtolower(trim((string) ($_POST['currency'] ?? 'jpy'))) ?: 'jpy';
+// 通貨は日本円のみ（フォームからは受け取らず固定）
+$currency = 'jpy';
 $capacity = trim((string) ($_POST['capacity'] ?? ''));
 $allowPrepay = !empty($_POST['allow_prepay']);
 $allowOnsite = !empty($_POST['allow_onsite']);
@@ -55,9 +57,8 @@ if (!$allowPrepay && !$allowOnsite) {
     back_to_events('支払い方法を少なくとも1つ選んでください（事前決済／当日支払い）。', 'ng', $id);
 }
 
-// プラン上限は「開催月」ごとに数えるため、日付から開催月を判定できる必要がある
-$month = event_month($date);
-if ($month === null) {
+// 日時は年月日が判定できる形式であることを確認（カレンダー入力なら常に満たす）
+if (event_month($date) === null) {
     back_to_events('日時は「2026-07-20」のように開催年月日が分かる形式で入力してください。', 'ng', $id);
 }
 
@@ -69,24 +70,11 @@ $data = [
     'amount'        => (int) $amount,
     // 当日料金は未指定なら事前と同額にフォールバック
     'amount_onsite' => $amountOnsite !== '' ? (int) $amountOnsite : (int) $amount,
-    'currency'      => preg_replace('/[^a-z]/', '', $currency) ?: 'jpy',
+    'currency'      => 'jpy',
     'capacity'      => ($capacity !== '' && ctype_digit($capacity)) ? (int) $capacity : 0,
     'allow_prepay'  => $allowPrepay,
     'allow_onsite'  => $allowOnsite,
 ];
-
-// プラン上限（同じ開催月に登録できるイベント数）のチェック。
-// 編集時は自分自身を除外して数える（開催月を変更した場合も判定される）。
-$plan = $tenant['plan'] ?? 'free';
-$limit = plan_max_events($plan);
-if ($limit !== PHP_INT_MAX) {
-    $countInMonth = tenant_month_event_count($tenant['id'], $month, $id);
-    if ($countInMonth >= $limit) {
-        // 上限到達 → 課金（アップグレード）画面へ誘導する
-        header('Location: upgrade.php?reason=month_limit&month=' . urlencode($month), true, 303);
-        exit;
-    }
-}
 
 try {
     if ($id !== '') {

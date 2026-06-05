@@ -329,6 +329,20 @@ function format_amount(int $amount, string $currency): string
 }
 
 /**
+ * 保存済みの日時文字列を <input type="datetime-local"> の value 形式
+ * （YYYY-MM-DDTHH:MM）に変換する。解釈できなければ空文字（＝空欄表示）。
+ */
+function datetime_local_value(string $date): string
+{
+    $date = trim($date);
+    if ($date === '') {
+        return '';
+    }
+    $ts = strtotime($date);
+    return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+}
+
+/**
  * 出力エスケープ。
  */
 function e(?string $value): string

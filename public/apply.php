@@ -20,18 +20,16 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-if (empty($event['stripe_account_id'])) {
-    http_response_code(503);
-    exit('このイベントは現在申込を受け付けていません（主催者の決済準備中）。');
-}
+// 運営者の Stripe キーが設定済みか。未設定でもフォームは表示し、申込ボタン押下時（checkout.php）に案内する。
+$stripeReady = env('STRIPE_SECRET_KEY') !== null;
 
 // 定員と残席（capacity>0 のとき）。取得に失敗しても申込は止めない。
 $capacity = (int) ($event['capacity'] ?? 0);
 $remaining = null; // null = 定員管理なし／不明
 $isFull = false;
-if ($capacity > 0) {
+if ($capacity > 0 && $stripeReady) {
     try {
-        $remaining = max(0, $capacity - event_headcount($event['id'], $event['stripe_account_id']));
+        $remaining = max(0, $capacity - event_headcount($event['id'], null));
         $isFull = ($remaining <= 0);
     } catch (\Throwable $e) {
         $remaining = null;
@@ -67,39 +65,27 @@ $maxParty = min($maxParty, 20);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
+    <link rel="stylesheet" href="/assets/app.css">
     <style>
-        :root { --accent: #2563eb; --border: #e5e7eb; --muted: #6b7280; }
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-               line-height: 1.7; color: #1f2937; max-width: 640px; margin: 0 auto; padding: 24px; background: #f9fafb; }
-        h1 { font-size: 1.4rem; }
-        .card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin: 16px 0; }
-        .meta { color: var(--muted); font-size: .9rem; }
-        label { display: block; font-weight: 600; margin: 16px 0 4px; }
-        .req { color: #dc2626; font-size: .8rem; }
-        input, select, textarea { width: 100%; font-size: 1rem; padding: 10px 12px; border: 1px solid var(--border);
-               border-radius: 8px; font-family: inherit; }
-        textarea { min-height: 72px; resize: vertical; }
-        .total { font-size: 1.3rem; font-weight: 700; color: var(--accent); margin: 16px 0; }
-        .btn { display: inline-block; width: 100%; background: var(--accent); color: #fff; text-align: center;
-               padding: 14px 20px; border-radius: 8px; font-weight: 700; border: none; cursor: pointer; font-size: 1.05rem; }
-        .btn:hover { background: #1d4ed8; }
-        .note { font-size: .85rem; color: var(--muted); margin-top: 12px; }
-        a { color: var(--accent); }
+        .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+        .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
+        .pay-options input[type=radio] { width: auto; }
     </style>
 </head>
 <body>
-    <h1><?= e($event['name'] ?? '') ?> 参加申込</h1>
+<div class="container">
+    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <h1><?= e($event['name'] ?? '') ?></h1>
     <div class="card">
-        <p class="meta">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
+        <p class="muted">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
-        <p class="meta">
+        <p class="muted">
             <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
             <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
             <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
         </p>
         <?php if ($capacity > 0 && $remaining !== null): ?>
-            <p class="meta">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
+            <p class="muted">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
         <?php endif; ?>
     </div>
 
@@ -129,7 +115,7 @@ $maxParty = min($maxParty, 20);
         <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
 
         <label>お支払い方法 <span class="req">必須</span></label>
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+        <div class="pay-options">
             <?php if ($allowPrepay): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                     <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
@@ -144,21 +130,27 @@ $maxParty = min($maxParty, 20);
             <?php endif; ?>
         </div>
 
-        <p class="total">お支払い合計：<span id="total"><?= e(format_amount($defaultUnit, $currency)) ?></span> <span id="total-note" class="note" style="margin:0;"></span></p>
+        <p class="total">お支払い合計：<span id="total"><?= e(format_amount($defaultUnit, $currency)) ?></span> <span id="total-note" class="hint" style="margin:0;"></span></p>
 
-        <button type="submit" class="btn" id="submitBtn">この内容で申し込む →</button>
-        <p class="note" id="methodNote"></p>
-        <p class="note">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
+        <?php $blockedInit = (!$stripeReady && $defaultMethod === 'prepay'); ?>
+        <button type="submit" class="btn btn--block btn--lg" id="submitBtn" <?= $blockedInit ? 'disabled' : '' ?>><?= $defaultMethod === 'onsite' ? 'この内容で申し込む（当日支払い）→' : '事前決済する →' ?></button>
+        <?php if (!$stripeReady): ?>
+            <p class="notice" id="prepayBlockNote" style="<?= $blockedInit ? '' : 'display:none;' ?>">⚠️ 現在この主催者は支払い口座の設定が完了していないため、<strong>事前決済（オンライン前払い）</strong>は利用できません。<?= $allowOnsite ? '「当日支払い」を選んでお申し込みください。' : '準備が整うまでお待ちください。' ?></p>
+        <?php endif; ?>
+        <p class="hint" id="methodNote"></p>
+        <p class="hint">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
     </form>
     <?php endif; ?>
 
-    <p><a href="index.php">← トップへ戻る</a></p>
+    <p class="muted"><a href="index.php">← トップへ戻る</a></p>
+</div>
 
     <script>
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
         const PREPAY_UNIT = <?= $prepayUnit ?>;
         const ONSITE_UNIT = <?= $onsiteUnit ?>;
         const CURRENCY = <?= json_encode(strtolower((string) $currency)) ?>;
+        const STRIPE_READY = <?= $stripeReady ? 'true' : 'false' ?>;
         function formatAmount(total) {
             if (CURRENCY === 'jpy') {
                 return '¥' + total.toLocaleString('ja-JP');
@@ -185,9 +177,17 @@ $maxParty = min($maxParty, 20);
                 totalNote.textContent = '（当日、会場でお支払い）';
                 note.textContent = '申込を受け付けます。当日、会場で上記金額をお支払いください。今はお支払いは発生しません。';
             } else {
-                btn.textContent = 'この内容で支払いへ進む →';
+                btn.textContent = '事前決済する →';
                 totalNote.textContent = '';
-                note.textContent = '「支払いへ進む」を押すと、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。';
+                note.textContent = '「事前決済する」を押すと、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。';
+            }
+
+            // 事前決済は主催者の支払い口座連携が必須。未連携時は事前決済のみ無効化し、当日支払いは許可。
+            const blocked = (method === 'prepay' && !STRIPE_READY);
+            btn.disabled = blocked;
+            const blockNote = document.getElementById('prepayBlockNote');
+            if (blockNote) {
+                blockNote.style.display = blocked ? '' : 'none';
             }
         }
         updateTotal();
