@@ -16,6 +16,10 @@ define('APP_ROOT', dirname(__DIR__));
 
 require APP_ROOT . '/vendor/autoload.php';
 
+// データ層・テナント（マルチテナント）ヘルパー。関数定義のみで、呼び出し時に env() を使う。
+require __DIR__ . '/db.php';
+require __DIR__ . '/tenant.php';
+
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
  * （依存を増やさないため自前実装。値はクオート除去のみの素朴なパース。）
