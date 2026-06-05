@@ -43,8 +43,11 @@ require dirname(__DIR__) . '/src/bootstrap.php';
     <div class="card">
         <h2 style="font-size:1.1rem;">主催者の方へ</h2>
         <p>イベントの作成・参加者管理・返金は主催者ページから行えます。</p>
-        <p><a class="btn" href="admin/login.php">主催者ログイン</a></p>
-        <p class="muted">アカウントは招待制です。招待リンクをお持ちの方はそちらからご登録ください。</p>
+        <p>
+            <a class="btn" href="admin/signup.php">無料で新規登録</a>
+            <a href="admin/login.php" style="margin-left:8px;">ログイン</a>
+        </p>
+        <p class="muted">メールアドレスとパスワードだけで、すぐに始められます。</p>
     </div>
 
     <p class="muted" style="margin-top:24px;border-top:1px solid #e5e7eb;padding-top:12px;">

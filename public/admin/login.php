@@ -48,5 +48,5 @@ require __DIR__ . '/_auth_header.php';
     <p style="margin-top:16px;"><button type="submit" class="btn">ログイン</button></p>
 </form>
 <p class="muted"><a href="forgot.php">パスワードを忘れた場合</a></p>
-<p class="muted">アカウントは招待制です。招待リンクをお持ちの方はそちらからご登録ください。</p>
+<p class="muted">アカウントをお持ちでない方は <a href="signup.php">新規登録</a>（無料）</p>
 <?php require __DIR__ . '/_auth_footer.php'; ?>
