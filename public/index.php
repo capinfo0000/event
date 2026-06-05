@@ -47,6 +47,11 @@ require dirname(__DIR__) . '/src/bootstrap.php';
         <p class="muted">アカウントは招待制です。招待リンクをお持ちの方はそちらからご登録ください。</p>
     </div>
 
-    <p class="muted"><a href="policy.php">キャンセル・返金ポリシー</a></p>
+    <p class="muted" style="margin-top:24px;border-top:1px solid #e5e7eb;padding-top:12px;">
+        <a href="policy.php">キャンセル・返金ポリシー</a> ／
+        <a href="tokushoho.php">特定商取引法に基づく表記</a> ／
+        <a href="terms.php">利用規約</a> ／
+        <a href="privacy.php">プライバシーポリシー</a>
+    </p>
 </body>
 </html>

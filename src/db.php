@@ -92,6 +92,26 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);');
+
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS password_resets (
+            token      TEXT PRIMARY KEY,
+            tenant_id  TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            used       INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+        );
+    SQL);
+
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            identifier TEXT NOT NULL,   -- メール（小文字）
+            ip         TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+    SQL);
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts_id ON login_attempts(identifier, created_at);');
 }
 
 /**

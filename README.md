@@ -29,7 +29,11 @@
 | `public/admin/events.php` ほか | イベントの登録・編集・削除（テナント別・DB保存） |
 | `public/admin/index.php` | 参加者名簿（事前決済の返金、当日支払いの集金確認・取消、CSV） |
 | `public/admin/invites.php` | 招待コード発行（プラットフォーム管理者のみ） |
-| `src/db.php` / `src/tenant.php` | SQLite データ層 / アカウント・招待・認証 |
+| `public/admin/account.php` | アカウント設定（表示名・パスワード変更） |
+| `public/admin/forgot.php` / `reset.php` | パスワード再設定（メールでリンク送付） |
+| `public/admin/upgrade.php` / `portal.php` | プラン購読（運営への課金）／解約・支払い管理 |
+| `public/tokushoho.php` / `terms.php` / `privacy.php` | 特商法表記・利用規約・プライバシーポリシー（要内容確定） |
+| `src/db.php` / `src/tenant.php` / `src/mail.php` | SQLite データ層 / アカウント・招待・認証 / メール送信 |
 | `bin/console.php` | 運用CLI（DB初期化・管理者作成・招待発行） |
 
 ## セットアップ（ローカル開発）
@@ -55,6 +59,8 @@ php -S localhost:8000 -t public
 - `STRIPE_CONNECT_CLIENT_ID` … Connect の `client_id`（`ca_...`）
 - `APP_BASE_URL` … 公開URL（Connect の戻り先・success/cancel に使用）
 - `DB_PATH` … SQLite の保存先（任意・既定 `data/app.sqlite`）
+- `STRIPE_PRICE_P5/P10/UNLIMITED` … 各プランの Stripe Price ID（プラン課金）
+- `MAIL_FROM` / `MAIL_FROM_NAME` … 送信メールの差出人（再設定・申込確認メール）
 
 ## Stripe Connect の準備（プラットフォーム側）
 

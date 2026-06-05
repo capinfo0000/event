@@ -14,11 +14,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $email = (string) ($_POST['email'] ?? '');
     $password = (string) ($_POST['password'] ?? '');
-    if (login_tenant($email, $password)) {
+
+    // 総当たり対策：直近15分で失敗が多すぎる場合は一時的にブロック
+    if (recent_failed_logins($email) >= 5) {
+        $error = '試行回数が多すぎます。しばらく時間をおいてからお試しください。';
+    } elseif (login_tenant($email, $password)) {
+        clear_failed_logins($email);
         header('Location: dashboard.php');
         exit;
+    } else {
+        record_failed_login($email);
+        $error = 'メールアドレスまたはパスワードが違います。';
     }
-    $error = 'メールアドレスまたはパスワードが違います。';
 }
 
 // すでにログイン済みならダッシュボードへ
@@ -40,5 +47,6 @@ require __DIR__ . '/_auth_header.php';
     <input type="password" name="password" required autocomplete="current-password">
     <p style="margin-top:16px;"><button type="submit" class="btn">ログイン</button></p>
 </form>
+<p class="muted"><a href="forgot.php">パスワードを忘れた場合</a></p>
 <p class="muted">アカウントは招待制です。招待リンクをお持ちの方はそちらからご登録ください。</p>
 <?php require __DIR__ . '/_auth_footer.php'; ?>

@@ -136,6 +136,16 @@ if ($paymentType === 'onsite') {
         exit('申込の受付に失敗しました。時間をおいて再度お試しください。');
     }
 
+    // 申込受付の確認メール（当日支払いは Stripe の領収書が出ないため、こちらで送る）
+    $mailBody = ($metaName !== '' ? $metaName . ' 様' : 'ご参加者様') . "\n\n"
+        . "下記のお申し込みを受け付けました（当日支払い）。\n\n"
+        . 'イベント：' . ($event['name'] ?? '') . "\n"
+        . '日時・場所：' . trim(($event['date'] ?? '') . '　' . ($event['place'] ?? '')) . "\n"
+        . '参加人数：' . $partySize . " 名\n"
+        . '当日お支払い額：' . format_amount($onsiteTotal, $currency) . "\n\n"
+        . "当日、会場で上記金額をお支払いください。今回はまだお支払いは発生していません。\n";
+    send_mail($email, '【申込受付】' . ($event['name'] ?? 'イベント') . '（当日支払い）', $mailBody);
+
     $q = http_build_query([
         'event_id' => $event['id'],
         'party_size' => $partySize,

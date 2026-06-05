@@ -19,6 +19,7 @@ require APP_ROOT . '/vendor/autoload.php';
 // データ層・テナント（マルチテナント）ヘルパー。関数定義のみで、呼び出し時に env() を使う。
 require __DIR__ . '/db.php';
 require __DIR__ . '/tenant.php';
+require __DIR__ . '/mail.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
@@ -347,9 +348,7 @@ function e(?string $value): string
  */
 function csrf_token(): string
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    session_boot();
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
@@ -361,9 +360,7 @@ function csrf_token(): string
  */
 function csrf_verify(?string $token): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    session_boot();
     $expected = $_SESSION['csrf_token'] ?? '';
     if ($expected === '' || !is_string($token) || !hash_equals($expected, $token)) {
         http_response_code(400);

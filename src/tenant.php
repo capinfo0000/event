@@ -7,12 +7,47 @@
 
 declare(strict_types=1);
 
-/** セッションを開始（未開始なら）。 */
+/** セッションを開始（未開始なら）。Cookie を堅牢化してから開始する。 */
 function session_boot(): void
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
     }
+    // HTTPS 配信時は Secure 属性を付ける（リバースプロキシ経由も考慮）
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'httponly' => true,
+        'secure' => $secure,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
+}
+
+/* ------------------- ログイン試行の制限（総当たり対策） ------------------- */
+
+/** 直近 $windowSec 秒の失敗回数（メール単位）。 */
+function recent_failed_logins(string $email, int $windowSec = 900): int
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND created_at >= ?');
+    $stmt->execute([strtolower(trim($email)), time() - $windowSec]);
+    return (int) $stmt->fetchColumn();
+}
+
+/** 失敗を記録する。 */
+function record_failed_login(string $email): void
+{
+    $stmt = db()->prepare('INSERT INTO login_attempts (identifier, ip, created_at) VALUES (?, ?, ?)');
+    $stmt->execute([strtolower(trim($email)), $_SERVER['REMOTE_ADDR'] ?? '', time()]);
+}
+
+/** 成功時に失敗履歴をクリアする。 */
+function clear_failed_logins(string $email): void
+{
+    $stmt = db()->prepare('DELETE FROM login_attempts WHERE identifier = ?');
+    $stmt->execute([strtolower(trim($email))]);
 }
 
 /* ------------------------- テナント ------------------------- */
@@ -198,4 +233,68 @@ function consume_invite(string $code, string $tenantId): void
 {
     $stmt = db()->prepare('UPDATE invites SET used_by = ? WHERE code = ? AND used_by IS NULL');
     $stmt->execute([$tenantId, $code]);
+}
+
+/* ------------------- アカウント設定・パスワード ------------------- */
+
+/** 表示名を更新する。 */
+function update_tenant_display_name(string $tenantId, string $name): void
+{
+    $stmt = db()->prepare('UPDATE tenants SET display_name = ? WHERE id = ?');
+    $stmt->execute([$name !== '' ? $name : '主催者', $tenantId]);
+}
+
+/** パスワードを更新する（8文字以上）。 */
+function update_tenant_password(string $tenantId, string $newPassword): void
+{
+    if (strlen($newPassword) < 8) {
+        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
+    }
+    $stmt = db()->prepare('UPDATE tenants SET password_hash = ? WHERE id = ?');
+    $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $tenantId]);
+}
+
+/* ------------------- パスワード再設定 ------------------- */
+
+/**
+ * パスワード再設定トークンを発行する。存在しないメールでも例外にせず null を返す
+ * （アカウントの有無を外部に漏らさないため）。
+ */
+function create_password_reset(string $email, int $ttlSec = 3600): ?string
+{
+    $tenant = find_tenant_by_email($email);
+    if ($tenant === null) {
+        return null;
+    }
+    $token = bin2hex(random_bytes(32));
+    $stmt = db()->prepare(
+        'INSERT INTO password_resets (token, tenant_id, expires_at, created_at) VALUES (?, ?, ?, ?)'
+    );
+    $stmt->execute([$token, $tenant['id'], time() + $ttlSec, time()]);
+    return $token;
+}
+
+/** 有効な再設定トークンに対応するレコードを返す。無効なら null。 */
+function find_valid_reset(string $token): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM password_resets WHERE token = ?');
+    $stmt->execute([$token]);
+    $row = $stmt->fetch();
+    if (!$row || (int) $row['used'] === 1 || (int) $row['expires_at'] < time()) {
+        return null;
+    }
+    return $row;
+}
+
+/** トークンを使ってパスワードを再設定する。成功で true。 */
+function consume_password_reset(string $token, string $newPassword): bool
+{
+    $reset = find_valid_reset($token);
+    if ($reset === null) {
+        return false;
+    }
+    update_tenant_password($reset['tenant_id'], $newPassword);
+    $stmt = db()->prepare('UPDATE password_resets SET used = 1 WHERE token = ?');
+    $stmt->execute([$token]);
+    return true;
 }

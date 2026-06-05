@@ -22,6 +22,7 @@ require __DIR__ . '/_auth_header.php';
 <h1>ようこそ、<?= e($tenant['display_name']) ?> さん</h1>
 <p class="muted">
     <?= e($tenant['email']) ?>
+    ／ <a href="account.php">アカウント設定</a>
     <?php if ((int) $tenant['is_admin'] === 1): ?>／ <a href="invites.php">招待を発行</a><?php endif; ?>
     ／ <a href="logout.php">ログアウト</a>
 </p>
