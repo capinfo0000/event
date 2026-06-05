@@ -82,18 +82,9 @@ $limit = plan_max_events($plan);
 if ($limit !== PHP_INT_MAX) {
     $countInMonth = tenant_month_event_count($tenant['id'], $month, $id);
     if ($countInMonth >= $limit) {
-        [$y, $mo] = explode('-', $month);
-        back_to_events(
-            sprintf(
-                '現在のプラン（%s）では同じ開催月（%d年%d月）に登録できるイベントは %d件までです。プランをアップグレードしてください。',
-                plan_label($plan),
-                (int) $y,
-                (int) $mo,
-                $limit
-            ),
-            'ng',
-            $id
-        );
+        // 上限到達 → 課金（アップグレード）画面へ誘導する
+        header('Location: upgrade.php?reason=month_limit&month=' . urlencode($month), true, 303);
+        exit;
     }
 }
 

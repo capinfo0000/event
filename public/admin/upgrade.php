@@ -53,11 +53,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
+// 開催月の上限に当たって誘導された場合の案内
+$reason = (string) ($_GET['reason'] ?? '');
+$limitMonth = (string) ($_GET['month'] ?? '');
+$limitNotice = '';
+if ($reason === 'month_limit') {
+    $cur = plan_max_events($currentPlan);
+    $mLabel = preg_match('/^(\d{4})-(\d{2})$/', $limitMonth, $mm)
+        ? sprintf('%d年%d月', (int) $mm[1], (int) $mm[2])
+        : 'その月';
+    $limitNotice = sprintf(
+        '現在のプラン（%s）では同じ開催月に登録できるイベントは %d件までです。%sはすでに上限に達しています。'
+            . 'もっと登録するには、下記のプランにアップグレードしてください。',
+        plan_label($currentPlan),
+        $cur,
+        $mLabel
+    );
+}
+
 $token = csrf_token();
 require __DIR__ . '/_auth_header.php';
 ?>
 <h1>プランのアップグレード</h1>
-<p class="muted"><a href="dashboard.php">← ダッシュボード</a></p>
+<p class="muted"><a href="dashboard.php">← ダッシュボード</a> ／ <a href="events.php">イベント管理</a></p>
+<?php if ($limitNotice !== ''): ?>
+    <div class="err" style="background:#fef9c3;color:#854d0e;"><?= e($limitNotice) ?></div>
+<?php endif; ?>
 <p>現在のプラン：<strong><?= e(plan_label($currentPlan)) ?></strong></p>
 
 <?php if (empty($priceIds)): ?>
