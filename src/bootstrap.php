@@ -96,6 +96,54 @@ function find_event(string $id): ?array
 }
 
 /**
+ * イベント定義を config/events.json に保存する（管理画面からの登録・編集・削除で使用）。
+ * 自前DBは持たない方針のため、イベントの「カタログ」だけをファイルで永続化する。
+ * 排他ロックを取り、一時ファイル経由で原子的に書き換える。
+ *
+ * @param array<int, array<string, mixed>> $events
+ */
+function save_events(array $events): void
+{
+    $path = APP_ROOT . '/config/events.json';
+    $payload = [
+        '_comment' => '提供するイベントのカタログ。管理画面（/admin/events.php）から編集できます。amount は最小通貨単位（JPYは円そのまま、例: 3000 = ¥3,000）。capacity は表示・申込人数の上限目安です。',
+        'events' => array_values($events),
+    ];
+    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        throw new \RuntimeException('イベント定義の JSON 変換に失敗しました。');
+    }
+
+    $tmp = $path . '.tmp';
+    $fp = fopen($tmp, 'w');
+    if ($fp === false) {
+        throw new \RuntimeException('イベント定義ファイルを書き込めません。');
+    }
+    flock($fp, LOCK_EX);
+    fwrite($fp, $json . "\n");
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    if (!rename($tmp, $path)) {
+        @unlink($tmp);
+        throw new \RuntimeException('イベント定義ファイルの保存に失敗しました。');
+    }
+}
+
+/**
+ * 重複しないイベントIDを生成する（管理画面での新規登録時）。
+ * 推測・衝突を避けるため短いランダム英数字を用いる。
+ */
+function generate_event_id(): string
+{
+    do {
+        $id = 'ev_' . bin2hex(random_bytes(4));
+    } while (find_event($id) !== null);
+    return $id;
+}
+
+/**
  * このアプリの公開ベースURL（success/cancel/webhook の組み立てに使用）。
  * ローカル開発では APP_BASE_URL=http://localhost:8000 を想定。
  */
@@ -221,17 +269,25 @@ function fetch_event_participants(string $eventId): array
             continue; // 未払い・中断セッションは名簿に含めない
         }
 
-        // 参加者名: カスタム項目 → 顧客情報の順で拾う
-        $name = '';
-        foreach (($session->custom_fields ?? []) as $field) {
-            if (($field->key ?? '') === 'participant_name') {
-                $name = $field->text->value ?? '';
-                break;
+        // 参加者名: 自前フォームの metadata → Stripe カスタム項目 → 顧客情報の順で拾う
+        $meta = $session->metadata ?? null;
+        $name = $meta['participant_name'] ?? '';
+        if ($name === '') {
+            foreach (($session->custom_fields ?? []) as $field) {
+                if (($field->key ?? '') === 'participant_name') {
+                    $name = $field->text->value ?? '';
+                    break;
+                }
             }
         }
         if ($name === '') {
             $name = $session->customer_details->name ?? '';
         }
+
+        // 自前フォームで集めた電話・参加人数・備考（metadata 優先）
+        $phone = $meta['phone'] ?? ($session->customer_details->phone ?? '');
+        $partySize = max(1, (int) ($meta['party_size'] ?? 1));
+        $note = $meta['note'] ?? '';
 
         $pi = $session->payment_intent;            // expand 済みのオブジェクト
         $piId = is_object($pi) ? ($pi->id ?? '') : (string) $pi;
@@ -249,7 +305,9 @@ function fetch_event_participants(string $eventId): array
             'payment_intent'  => $piId,
             'name'            => $name,
             'email'           => $session->customer_details->email ?? '',
-            'phone'           => $session->customer_details->phone ?? '',
+            'phone'           => $phone,
+            'party_size'      => $partySize,
+            'note'            => $note,
             'amount'          => (int) ($session->amount_total ?? 0),
             'currency'        => (string) ($session->currency ?? 'jpy'),
             'amount_refunded' => $amountRefunded,

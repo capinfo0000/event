@@ -35,7 +35,7 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM（Excel 文字化け対策）
 
-fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '支払額', '返金額', '状態', 'PaymentIntent']);
+fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払額', '返金額', '状態', '備考', 'PaymentIntent']);
 
 foreach ($participants as $p) {
     if ($p['fully_refunded']) {

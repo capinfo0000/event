@@ -25,6 +25,40 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
+// 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
+$name  = trim((string)($_POST['name'] ?? ''));
+$email = trim((string)($_POST['email'] ?? ''));
+$phone = trim((string)($_POST['phone'] ?? ''));
+$note  = trim((string)($_POST['note'] ?? ''));
+$partySize = (int)($_POST['party_size'] ?? 1);
+
+if ($name === '' || $email === '') {
+    http_response_code(400);
+    exit('お名前とメールアドレスは必須です。フォームに戻って入力してください。');
+}
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    http_response_code(400);
+    exit('メールアドレスの形式が正しくありません。');
+}
+
+// 参加人数の上限（capacity があればそれ、無ければ 10）に丸める
+$maxParty = (int)($event['capacity'] ?? 0);
+if ($maxParty < 1) {
+    $maxParty = 10;
+}
+$maxParty = min($maxParty, 20);
+if ($partySize < 1) {
+    $partySize = 1;
+}
+if ($partySize > $maxParty) {
+    $partySize = $maxParty;
+}
+
+// 長すぎる入力は Stripe metadata 制限（値は最大500文字）に合わせて切り詰める
+$metaName = mb_substr($name, 0, 100);
+$metaPhone = mb_substr($phone, 0, 30);
+$metaNote = mb_substr($note, 0, 450);
+
 init_stripe();
 
 try {
@@ -39,25 +73,27 @@ try {
                     'description' => trim(($event['date'] ?? '') . ' / ' . ($event['place'] ?? '')),
                 ],
             ],
-            'quantity' => 1,
+            'quantity' => $partySize, // 参加人数ぶんをまとめて決済
         ]],
-        // 参加者の氏名・メールは Stripe 側で収集・保管（当サーバーのDBは持たない）
+        // 申込フォームで集めた連絡先を Stripe に引き継ぐ（領収書送付先＝入力メール）
         'customer_creation' => 'always',
-        'phone_number_collection' => ['enabled' => true],
-        'custom_fields' => [[
-            'key' => 'participant_name',
-            'label' => ['type' => 'custom', 'custom' => '参加者のお名前'],
-            'type' => 'text',
-        ]],
-        // どのイベントの申込かを Stripe の決済データに刻む（ダッシュボードで識別用）
+        'customer_email' => $email,
+        // 集めた情報は Stripe の決済データに metadata として保管（当サーバーのDBは持たない）
         'metadata' => [
             'event_id' => $event['id'],
             'event_name' => $event['name'] ?? '',
+            'participant_name' => $metaName,
+            'phone' => $metaPhone,
+            'party_size' => (string)$partySize,
+            'note' => $metaNote,
         ],
         'payment_intent_data' => [
             'metadata' => [
                 'event_id' => $event['id'],
                 'event_name' => $event['name'] ?? '',
+                'participant_name' => $metaName,
+                'phone' => $metaPhone,
+                'party_size' => (string)$partySize,
             ],
         ],
         // キャンセルポリシーを決済画面のボタン直上に明示（前払い＝後から取り立て不要にする要）

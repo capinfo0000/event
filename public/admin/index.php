@@ -106,6 +106,7 @@ $token = csrf_token();
         <?php if ($selectedEvent !== null): ?>
             <a class="btn btn-ghost" href="export.php?event_id=<?= e($selectedId) ?>">CSV ダウンロード</a>
         <?php endif; ?>
+        <a class="btn btn-ghost" href="events.php">イベント管理</a>
     </form>
 
     <?php if ($selectedEvent !== null): ?>
@@ -134,7 +135,7 @@ $token = csrf_token();
                 <thead>
                     <tr>
                         <th>申込日時</th><th>お名前</th><th>メール</th><th>電話</th>
-                        <th>金額</th><th>状態</th><th>キャンセル / 返金</th>
+                        <th>人数</th><th>金額</th><th>状態</th><th>キャンセル / 返金</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,9 +153,13 @@ $token = csrf_token();
                         ?>
                         <tr>
                             <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
-                            <td><?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?></td>
+                            <td<?= $p['note'] !== '' ? ' title="' . e('備考: ' . $p['note']) . '"' : '' ?>>
+                                <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
+                                <?php if ($p['note'] !== ''): ?><span class="muted" title="<?= e($p['note']) ?>">📝</span><?php endif; ?>
+                            </td>
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>
+                            <td><?= (int) $p['party_size'] ?> 名</td>
                             <td><?= e(format_amount($p['amount'], $cur)) ?></td>
                             <td><?= $statusHtml ?></td>
                             <td>

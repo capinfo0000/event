@@ -49,12 +49,9 @@ $events = load_events();
                 <h2><?= e($event['name'] ?? '') ?></h2>
                 <p class="meta">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
                 <p><?= e($event['description'] ?? '') ?></p>
-                <p class="price"><?= e(format_amount((int)($event['amount'] ?? 0), $event['currency'] ?? 'jpy')) ?></p>
-                <form action="checkout.php" method="post">
-                    <input type="hidden" name="event_id" value="<?= e($event['id'] ?? '') ?>">
-                    <button type="submit" class="btn">申し込む（前払い）</button>
-                </form>
-                <p class="note">ボタンを押すと、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。<br>
+                <p class="price"><?= e(format_amount((int)($event['amount'] ?? 0), $event['currency'] ?? 'jpy')) ?> <span style="font-size:.8rem;color:var(--muted);font-weight:400;">/ 1名</span></p>
+                <a class="btn" href="apply.php?event_id=<?= e($event['id'] ?? '') ?>">申し込む（前払い）</a>
+                <p class="note">申込フォームで参加人数などを入力後、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。<br>
                    キャンセル時の返金については<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
             </div>
         <?php endforeach; ?>
