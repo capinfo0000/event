@@ -130,3 +130,136 @@ function e(?string $value): string
 {
     return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8');
 }
+
+/* =====================================================================
+ * 管理（参加者管理）画面むけの共通処理
+ *
+ * 設計はトップと同じく「自前DBを持たない」。参加者の名簿は Stripe の
+ * Checkout セッション（metadata.event_id でイベントを識別）から都度取得する。
+ * 個人情報を表示するため、管理画面は ID＋パスワードの Basic 認証で保護する。
+ * ===================================================================== */
+
+/**
+ * 管理画面の Basic 認証。.env の ADMIN_USER / ADMIN_PASS と照合する。
+ * 認証情報が未設定・不一致なら 401 を返して終了する。
+ */
+function require_admin_auth(): void
+{
+    $expectedUser = env('ADMIN_USER');
+    $expectedPass = env('ADMIN_PASS');
+
+    if ($expectedUser === null || $expectedPass === null) {
+        http_response_code(500);
+        exit('設定エラー: 管理画面の ADMIN_USER / ADMIN_PASS が未設定です。.env を確認してください。');
+    }
+
+    $user = $_SERVER['PHP_AUTH_USER'] ?? '';
+    $pass = $_SERVER['PHP_AUTH_PW'] ?? '';
+
+    // タイミング攻撃を避けるため hash_equals で定数時間比較
+    $ok = hash_equals($expectedUser, $user) && hash_equals($expectedPass, $pass);
+
+    if (!$ok) {
+        header('WWW-Authenticate: Basic realm="参加者管理", charset="UTF-8"');
+        http_response_code(401);
+        exit('認証が必要です。');
+    }
+}
+
+/**
+ * CSRF トークンを取得（なければ生成）。セッションに保存する。
+ */
+function csrf_token(): string
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * 送信された CSRF トークンを検証。不一致なら 400 で終了。
+ */
+function csrf_verify(?string $token): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    $expected = $_SESSION['csrf_token'] ?? '';
+    if ($expected === '' || !is_string($token) || !hash_equals($expected, $token)) {
+        http_response_code(400);
+        exit('不正なリクエストです（CSRF トークン不一致）。画面を開き直してください。');
+    }
+}
+
+/**
+ * 指定イベントの「支払い済み参加者」一覧を Stripe から取得する。
+ *
+ * Checkout セッション一覧を辿り、metadata.event_id が一致し、かつ支払い済み
+ * （payment_status === 'paid'）のものを参加者として返す。返金状況も付与する。
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function fetch_event_participants(string $eventId): array
+{
+    init_stripe();
+
+    $participants = [];
+    $params = [
+        'limit' => 100,
+        'expand' => ['data.payment_intent.latest_charge'],
+    ];
+
+    foreach (\Stripe\Checkout\Session::all($params)->autoPagingIterator() as $session) {
+        if (($session->metadata['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if ($session->payment_status !== 'paid') {
+            continue; // 未払い・中断セッションは名簿に含めない
+        }
+
+        // 参加者名: カスタム項目 → 顧客情報の順で拾う
+        $name = '';
+        foreach (($session->custom_fields ?? []) as $field) {
+            if (($field->key ?? '') === 'participant_name') {
+                $name = $field->text->value ?? '';
+                break;
+            }
+        }
+        if ($name === '') {
+            $name = $session->customer_details->name ?? '';
+        }
+
+        $pi = $session->payment_intent;            // expand 済みのオブジェクト
+        $piId = is_object($pi) ? ($pi->id ?? '') : (string) $pi;
+        $charge = is_object($pi) ? ($pi->latest_charge ?? null) : null;
+
+        $amountRefunded = 0;
+        $fullyRefunded = false;
+        if (is_object($charge)) {
+            $amountRefunded = (int) ($charge->amount_refunded ?? 0);
+            $fullyRefunded = (bool) ($charge->refunded ?? false);
+        }
+
+        $participants[] = [
+            'session_id'      => $session->id,
+            'payment_intent'  => $piId,
+            'name'            => $name,
+            'email'           => $session->customer_details->email ?? '',
+            'phone'           => $session->customer_details->phone ?? '',
+            'amount'          => (int) ($session->amount_total ?? 0),
+            'currency'        => (string) ($session->currency ?? 'jpy'),
+            'amount_refunded' => $amountRefunded,
+            'fully_refunded'  => $fullyRefunded,
+            'created'         => (int) ($session->created ?? 0),
+        ];
+    }
+
+    // 申込日時の新しい順
+    usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
+
+    return $participants;
+}
