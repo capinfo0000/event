@@ -9,18 +9,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
 
 $eventId = (string) ($_GET['event_id'] ?? '');
 $event = $eventId !== '' ? find_event($eventId) : null;
 
-if ($event === null) {
+if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     http_response_code(404);
     exit('イベントが見つかりません。');
 }
 
 try {
-    $participants = fetch_event_participants($eventId);
+    $participants = fetch_event_participants($eventId, $tenant['stripe_account_id'] ?? null);
 } catch (\Throwable $ex) {
     http_response_code(502);
     error_log('CSV 用名簿取得失敗: ' . $ex->getMessage());

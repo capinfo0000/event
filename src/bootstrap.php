@@ -76,75 +76,114 @@ function env_required(string $key): string
 }
 
 /**
- * イベント定義（config/events.json）を読み込む。
- * 参加者データは持たず、提供するイベントのカタログのみをここで管理する。
+ * DB の行を、画面・決済処理が期待する形に正規化する（型変換つき）。
+ * 'stripe_account_id' は所有テナントの接続アカウント（公開申込で利用）。
  */
-function load_events(): array
+function event_normalize(array $row): array
 {
-    $path = APP_ROOT . '/config/events.json';
-    if (!is_readable($path)) {
-        return [];
-    }
-    $data = json_decode((string) file_get_contents($path), true);
-    return $data['events'] ?? [];
+    return [
+        'id'                => (string) $row['id'],
+        'tenant_id'         => (string) $row['tenant_id'],
+        'name'              => (string) $row['name'],
+        'description'       => (string) ($row['description'] ?? ''),
+        'date'              => (string) ($row['date'] ?? ''),
+        'place'             => (string) ($row['place'] ?? ''),
+        'amount'            => (int) ($row['amount'] ?? 0),
+        'amount_onsite'     => (int) ($row['amount_onsite'] ?? 0),
+        'currency'          => (string) ($row['currency'] ?? 'jpy'),
+        'capacity'          => (int) ($row['capacity'] ?? 0),
+        'allow_prepay'      => (int) ($row['allow_prepay'] ?? 1) === 1,
+        'allow_onsite'      => (int) ($row['allow_onsite'] ?? 0) === 1,
+        'stripe_account_id' => $row['stripe_account_id'] ?? null,
+        'created_at'        => (int) ($row['created_at'] ?? 0),
+    ];
 }
 
+/**
+ * イベントを ID で取得（所有テナントの Stripe 接続アカウントも併せて取得）。
+ * 公開申込ページなど、ログイン不要の文脈からも使う。
+ */
 function find_event(string $id): ?array
 {
-    foreach (load_events() as $event) {
-        if (($event['id'] ?? null) === $id) {
-            return $event;
-        }
-    }
-    return null;
+    $stmt = db()->prepare(
+        'SELECT e.*, t.stripe_account_id
+           FROM events e JOIN tenants t ON t.id = e.tenant_id
+          WHERE e.id = ?'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+    return $row ? event_normalize($row) : null;
 }
 
 /**
- * イベント定義を config/events.json に保存する（管理画面からの登録・編集・削除で使用）。
- * 自前DBは持たない方針のため、イベントの「カタログ」だけをファイルで永続化する。
- * 排他ロックを取り、一時ファイル経由で原子的に書き換える。
- *
- * @param array<int, array<string, mixed>> $events
+ * 指定テナントのイベント一覧（新しい順）。
  */
-function save_events(array $events): void
+function tenant_events(string $tenantId): array
 {
-    $path = APP_ROOT . '/config/events.json';
-    $payload = [
-        '_comment' => '提供するイベントのカタログ。管理画面（/admin/events.php）から編集できます。amount は最小通貨単位（JPYは円そのまま、例: 3000 = ¥3,000）。capacity は表示・申込人数の上限目安です。',
-        'events' => array_values($events),
-    ];
-    $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($json === false) {
-        throw new \RuntimeException('イベント定義の JSON 変換に失敗しました。');
-    }
-
-    $tmp = $path . '.tmp';
-    $fp = fopen($tmp, 'w');
-    if ($fp === false) {
-        throw new \RuntimeException('イベント定義ファイルを書き込めません。');
-    }
-    flock($fp, LOCK_EX);
-    fwrite($fp, $json . "\n");
-    fflush($fp);
-    flock($fp, LOCK_UN);
-    fclose($fp);
-
-    if (!rename($tmp, $path)) {
-        @unlink($tmp);
-        throw new \RuntimeException('イベント定義ファイルの保存に失敗しました。');
-    }
+    $stmt = db()->prepare(
+        'SELECT e.*, t.stripe_account_id
+           FROM events e JOIN tenants t ON t.id = e.tenant_id
+          WHERE e.tenant_id = ? ORDER BY e.created_at DESC'
+    );
+    $stmt->execute([$tenantId]);
+    return array_map('event_normalize', $stmt->fetchAll());
 }
 
-/**
- * 重複しないイベントIDを生成する（管理画面での新規登録時）。
- * 推測・衝突を避けるため短いランダム英数字を用いる。
- */
+/** 重複しないイベントIDを生成する。 */
 function generate_event_id(): string
 {
     do {
-        $id = 'ev_' . bin2hex(random_bytes(4));
+        $id = 'ev_' . bin2hex(random_bytes(6));
     } while (find_event($id) !== null);
     return $id;
+}
+
+/**
+ * イベントを作成して ID を返す（所有テナントを指定）。
+ * @param array<string,mixed> $d 正規化済みの値（amount 等は整数、allow_* は bool）
+ */
+function create_event(string $tenantId, array $d): string
+{
+    $id = generate_event_id();
+    $stmt = db()->prepare(
+        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, created_at)
+         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:ts)'
+    );
+    $stmt->execute([
+        ':id' => $id, ':tenant' => $tenantId,
+        ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
+        ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
+        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0, ':ts' => time(),
+    ]);
+    return $id;
+}
+
+/**
+ * イベントを更新（所有テナントに限定）。更新できたら true。
+ */
+function update_event(string $tenantId, string $id, array $d): bool
+{
+    $stmt = db()->prepare(
+        'UPDATE events SET name=:name, description=:desc, date=:date, place=:place,
+                amount=:amount, amount_onsite=:onsite, currency=:cur, capacity=:cap,
+                allow_prepay=:ap, allow_onsite=:ao
+          WHERE id=:id AND tenant_id=:tenant'
+    );
+    $stmt->execute([
+        ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
+        ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
+        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
+        ':id' => $id, ':tenant' => $tenantId,
+    ]);
+    return $stmt->rowCount() > 0;
+}
+
+/** イベントを削除（所有テナントに限定）。 */
+function delete_event(string $tenantId, string $id): bool
+{
+    $stmt = db()->prepare('DELETE FROM events WHERE id = ? AND tenant_id = ?');
+    $stmt->execute([$id, $tenantId]);
+    return $stmt->rowCount() > 0;
 }
 
 /**
@@ -186,37 +225,9 @@ function e(?string $value): string
 /* =====================================================================
  * 管理（参加者管理）画面むけの共通処理
  *
- * 設計はトップと同じく「自前DBを持たない」。参加者の名簿は Stripe の
- * Checkout セッション（metadata.event_id でイベントを識別）から都度取得する。
- * 個人情報を表示するため、管理画面は ID＋パスワードの Basic 認証で保護する。
+ * 参加者の名簿は各テナントの Stripe（Checkout セッション／顧客）から都度取得する。
+ * 管理画面の認証はテナントのセッションログイン（src/tenant.php）で行う。
  * ===================================================================== */
-
-/**
- * 管理画面の Basic 認証。.env の ADMIN_USER / ADMIN_PASS と照合する。
- * 認証情報が未設定・不一致なら 401 を返して終了する。
- */
-function require_admin_auth(): void
-{
-    $expectedUser = env('ADMIN_USER');
-    $expectedPass = env('ADMIN_PASS');
-
-    if ($expectedUser === null || $expectedPass === null) {
-        http_response_code(500);
-        exit('設定エラー: 管理画面の ADMIN_USER / ADMIN_PASS が未設定です。.env を確認してください。');
-    }
-
-    $user = $_SERVER['PHP_AUTH_USER'] ?? '';
-    $pass = $_SERVER['PHP_AUTH_PW'] ?? '';
-
-    // タイミング攻撃を避けるため hash_equals で定数時間比較
-    $ok = hash_equals($expectedUser, $user) && hash_equals($expectedPass, $pass);
-
-    if (!$ok) {
-        header('WWW-Authenticate: Basic realm="参加者管理", charset="UTF-8"');
-        http_response_code(401);
-        exit('認証が必要です。');
-    }
-}
 
 /**
  * CSRF トークンを取得（なければ生成）。セッションに保存する。
@@ -248,16 +259,30 @@ function csrf_verify(?string $token): void
 }
 
 /**
- * 指定イベントの「支払い済み参加者」一覧を Stripe から取得する。
+ * Connect 接続アカウント向けのリクエストオプションを返す。
+ * $account が null の場合は空（プラットフォーム自身に対する操作）。
  *
- * Checkout セッション一覧を辿り、metadata.event_id が一致し、かつ支払い済み
- * （payment_status === 'paid'）のものを参加者として返す。返金状況も付与する。
+ * @return array<string,string>
+ */
+function stripe_opts(?string $account): array
+{
+    return $account ? ['stripe_account' => $account] : [];
+}
+
+/**
+ * 指定イベントの参加者一覧を Stripe から取得する（テナントの接続アカウント単位）。
  *
+ * - 事前決済: 支払い済み Checkout セッション
+ * - 当日支払い: metadata.payment_type=onsite の顧客（未収/集金済み）
+ *
+ * @param string      $eventId 対象イベント
+ * @param string|null $account テナントの Stripe 接続アカウント（acct_...）。null なら自アカウント
  * @return array<int, array<string, mixed>>
  */
-function fetch_event_participants(string $eventId): array
+function fetch_event_participants(string $eventId, ?string $account = null): array
 {
     init_stripe();
+    $opts = stripe_opts($account);
 
     $participants = [];
     $params = [
@@ -265,7 +290,7 @@ function fetch_event_participants(string $eventId): array
         'expand' => ['data.payment_intent.latest_charge'],
     ];
 
-    foreach (\Stripe\Checkout\Session::all($params)->autoPagingIterator() as $session) {
+    foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
         if (($session->metadata['event_id'] ?? null) !== $eventId) {
             continue;
         }
@@ -325,7 +350,7 @@ function fetch_event_participants(string $eventId): array
 
     // 当日支払いの申込者は「課金なしの Stripe 顧客（metadata.payment_type=onsite）」として記録される。
     // これらを名簿に合流させる（未収として表示）。
-    foreach (\Stripe\Customer::all(['limit' => 100])->autoPagingIterator() as $customer) {
+    foreach (\Stripe\Customer::all(['limit' => 100], $opts)->autoPagingIterator() as $customer) {
         $meta = $customer->metadata ?? null;
         if (($meta['event_id'] ?? null) !== $eventId) {
             continue;

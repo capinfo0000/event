@@ -10,15 +10,20 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/src/bootstrap.php';
 
 $sessionId = (string)($_GET['session_id'] ?? '');
+$eventId = (string)($_GET['event_id'] ?? '');
 $paid = false;
 $eventName = '';
 $amountText = '';
 $email = '';
 
+// セッションは主催者の接続アカウント上にあるため、イベントから account を解決して照会する
+$event = $eventId !== '' ? find_event($eventId) : null;
+$account = $event['stripe_account_id'] ?? null;
+
 if ($sessionId !== '') {
     init_stripe();
     try {
-        $session = \Stripe\Checkout\Session::retrieve($sessionId);
+        $session = \Stripe\Checkout\Session::retrieve($sessionId, stripe_opts($account));
         $paid = ($session->payment_status === 'paid');
         $eventName = $session->metadata['event_name'] ?? '';
         $email = $session->customer_details->email ?? '';

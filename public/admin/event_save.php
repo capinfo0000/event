@@ -1,7 +1,7 @@
 <?php
 
 /**
- * イベントの新規登録・更新を config/events.json に保存する。
+ * イベントの新規登録・更新を DB に保存する（ログイン中テナント単位）。
  * 管理画面（events.php）からの POST のみを受ける。
  */
 
@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -55,8 +55,7 @@ if (!$allowPrepay && !$allowOnsite) {
     back_to_events('支払い方法を少なくとも1つ選んでください（事前決済／当日支払い）。', 'ng', $id);
 }
 
-$record = [
-    'id'            => $id !== '' ? $id : generate_event_id(),
+$data = [
     'name'          => mb_substr($name, 0, 100),
     'description'   => mb_substr($desc, 0, 500),
     'date'          => mb_substr($date, 0, 50),
@@ -70,24 +69,20 @@ $record = [
     'allow_onsite'  => $allowOnsite,
 ];
 
-$events = load_events();
-$found = false;
-foreach ($events as $i => $ev) {
-    if (($ev['id'] ?? null) === $record['id']) {
-        $events[$i] = $record;
-        $found = true;
-        break;
-    }
-}
-if (!$found) {
-    $events[] = $record;
-}
-
 try {
-    save_events($events);
+    if ($id !== '') {
+        // 既存イベント：自分の所有か確認してから更新
+        $existing = find_event($id);
+        if ($existing === null || $existing['tenant_id'] !== $tenant['id']) {
+            back_to_events('対象イベントが見つかりません。', 'ng');
+        }
+        update_event($tenant['id'], $id, $data);
+        back_to_events('イベントを更新しました。', 'ok');
+    } else {
+        create_event($tenant['id'], $data);
+        back_to_events('イベントを登録しました。', 'ok');
+    }
 } catch (\Throwable $ex) {
     error_log('イベント保存失敗: ' . $ex->getMessage());
     back_to_events('保存に失敗しました: ' . $ex->getMessage(), 'ng', $id);
 }
-
-back_to_events($found ? 'イベントを更新しました。' : 'イベントを登録しました。', 'ok');

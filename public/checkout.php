@@ -25,6 +25,13 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
+// このイベントの主催者の Stripe 接続アカウント。未連携なら受付不可。
+$account = $event['stripe_account_id'] ?? null;
+if (empty($account)) {
+    http_response_code(503);
+    exit('現在このイベントは申込を受け付けられません（主催者の決済準備中）。');
+}
+
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
 $name  = trim((string)($_POST['name'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
@@ -83,6 +90,7 @@ $metaPhone = mb_substr($phone, 0, 30);
 $metaNote = mb_substr($note, 0, 450);
 
 init_stripe();
+$opts = stripe_opts($account);
 
 // ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
 if ($paymentType === 'onsite') {
@@ -104,7 +112,7 @@ if ($paymentType === 'onsite') {
                 'onsite_total' => (string)$onsiteTotal,
                 'currency' => $currency,
             ],
-        ]);
+        ], $opts);
     } catch (\Throwable $e) {
         http_response_code(502);
         error_log('当日申込の記録失敗: ' . $e->getMessage());
@@ -163,9 +171,9 @@ try {
                 'message' => 'お支払い後のキャンセルは、キャンセルポリシーに沿った返金規定が適用されます。',
             ],
         ],
-        'success_url' => base_url() . '/success.php?session_id={CHECKOUT_SESSION_ID}',
+        'success_url' => base_url() . '/success.php?event_id=' . urlencode($event['id']) . '&session_id={CHECKOUT_SESSION_ID}',
         'cancel_url' => base_url() . '/cancel.php?event_id=' . urlencode($event['id']),
-    ]);
+    ], $opts);
 } catch (\Throwable $e) {
     // 認証エラー・通信エラー・予期しない応答など、あらゆる決済作成失敗をここで受ける
     http_response_code(502);

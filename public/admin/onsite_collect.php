@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -30,11 +30,17 @@ function back_to_admin(string $eventId, string $msg, string $type): never
     exit;
 }
 
-if ($customerId === '') {
+$event = $eventId !== '' ? find_event($eventId) : null;
+if ($event === null || $event['tenant_id'] !== $tenant['id']) {
+    back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
+}
+$account = $tenant['stripe_account_id'] ?? null;
+if ($customerId === '' || empty($account)) {
     back_to_admin($eventId, '対象が不正です。', 'ng');
 }
 
 init_stripe();
+$opts = stripe_opts($account);
 
 try {
     \Stripe\Customer::update($customerId, [
@@ -42,7 +48,7 @@ try {
             'collected' => $collect ? '1' : '',
             'collected_at' => $collect ? (string) time() : '',
         ],
-    ]);
+    ], $opts);
     back_to_admin($eventId, $collect ? '集金確認済みにしました。' : '未収に戻しました。', 'ok');
 } catch (\Throwable $ex) {
     error_log('集金状態の更新失敗: ' . $ex->getMessage());

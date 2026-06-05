@@ -13,7 +13,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -34,11 +34,22 @@ function back_to_admin(string $eventId, string $msg, string $type): never
     exit;
 }
 
+// 対象イベントが自分のものか確認し、自分の接続アカウントに対して返金する
+$event = $eventId !== '' ? find_event($eventId) : null;
+if ($event === null || $event['tenant_id'] !== $tenant['id']) {
+    back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
+}
+$account = $tenant['stripe_account_id'] ?? null;
+if (empty($account)) {
+    back_to_admin($eventId, 'Stripe 未連携のため返金できません。', 'ng');
+}
+
 if ($paymentIntent === '') {
     back_to_admin($eventId, '返金対象が不正です。', 'ng');
 }
 
 init_stripe();
+$opts = stripe_opts($account);
 
 $refundParams = ['payment_intent' => $paymentIntent];
 
@@ -49,7 +60,7 @@ if ($amountRaw !== '') {
     }
     // 通貨に応じて最小単位へ変換（JPY はそのまま、その他は 100 倍）
     try {
-        $pi = \Stripe\PaymentIntent::retrieve($paymentIntent);
+        $pi = \Stripe\PaymentIntent::retrieve($paymentIntent, $opts);
         $currency = strtolower((string) ($pi->currency ?? 'jpy'));
     } catch (\Throwable $ex) {
         error_log('PI 取得失敗: ' . $ex->getMessage());
@@ -61,7 +72,7 @@ if ($amountRaw !== '') {
 }
 
 try {
-    $refund = \Stripe\Refund::create($refundParams);
+    $refund = \Stripe\Refund::create($refundParams, $opts);
     $isPartial = isset($refundParams['amount']);
     $msg = $isPartial
         ? '一部返金を実行しました（返金ID: ' . $refund->id . '）。'

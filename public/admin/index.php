@@ -1,11 +1,11 @@
 <?php
 
 /**
- * 参加者管理ダッシュボード（要 ID＋パスワード）。
+ * 参加者管理ダッシュボード（ログイン中テナント専用）。
  *
- * 自前DBは持たず、名簿は Stripe の Checkout セッションから取得する。
- * - イベントを選んで支払い済み参加者の一覧を表示
- * - 各参加者に対して返金（全額＝キャンセル扱い／一部）を実行
+ * 名簿は当テナントの Stripe 接続アカウントから取得する（DBには参加者を持たない）。
+ * - 自分のイベントを選んで参加者一覧を表示
+ * - 事前決済の返金（全額＝キャンセル／一部）、当日支払いの集金確認・取消
  * - CSV ダウンロード
  */
 
@@ -13,13 +13,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
+$account = $tenant['stripe_account_id'] ?? null;
 
-$events = load_events();
+$events = tenant_events($tenant['id']);
 $selectedId = (string) ($_GET['event_id'] ?? ($events[0]['id'] ?? ''));
 $selectedEvent = $selectedId !== '' ? find_event($selectedId) : null;
+// 他テナントのイベントIDを指定されても見せない
+if ($selectedEvent !== null && $selectedEvent['tenant_id'] !== $tenant['id']) {
+    $selectedEvent = null;
+}
 
-// 直前の返金操作の結果メッセージ（リダイレクトで引き継ぎ）
+// 直前の操作の結果メッセージ（リダイレクトで引き継ぎ）
 $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
 
@@ -33,9 +38,11 @@ $collected = 0;   // 事前決済の入金合計
 $refunded = 0;    // 返金合計
 $onsiteDue = 0;   // 当日支払い予定（未収）合計
 
-if ($selectedEvent !== null) {
+if ($selectedEvent !== null && empty($account)) {
+    $fetchError = 'Stripe 未連携のため名簿を取得できません。ダッシュボードから連携してください。';
+} elseif ($selectedEvent !== null) {
     try {
-        $participants = fetch_event_participants($selectedId);
+        $participants = fetch_event_participants($selectedId, $account);
         $totalCount = count($participants);
         foreach ($participants as $p) {
             if (($p['payment_type'] ?? 'prepay') === 'onsite') {
@@ -100,12 +107,19 @@ $token = csrf_token();
 </head>
 <body>
     <h1>参加者管理</h1>
-    <p class="muted">名簿は Stripe の決済データから取得しています（このアプリは参加者DBを持ちません）。</p>
+    <p class="muted">
+        <?= e($tenant['display_name']) ?> さん ／ <a href="dashboard.php">ダッシュボード</a>
+        ／ <a href="events.php">イベント管理</a> ／ <a href="logout.php">ログアウト</a>
+    </p>
+    <p class="muted">名簿はあなたの Stripe 接続アカウントから取得しています（参加者DBは持ちません）。</p>
 
     <?php if ($flash !== ''): ?>
         <div class="flash <?= $flashType === 'ok' ? 'flash-ok' : 'flash-ng' ?>"><?= e($flash) ?></div>
     <?php endif; ?>
 
+    <?php if (empty($events)): ?>
+        <div class="err">まだイベントがありません。<a href="events.php">イベント管理</a>から登録してください。</div>
+    <?php else: ?>
     <form method="get" class="bar">
         <label>イベント：
             <select name="event_id" onchange="this.form.submit()">
@@ -119,9 +133,10 @@ $token = csrf_token();
         <noscript><button type="submit" class="btn">表示</button></noscript>
         <?php if ($selectedEvent !== null): ?>
             <a class="btn btn-ghost" href="export.php?event_id=<?= e($selectedId) ?>">CSV ダウンロード</a>
+            <a class="btn btn-ghost" href="../apply.php?event_id=<?= e($selectedId) ?>" target="_blank">申込ページを開く</a>
         <?php endif; ?>
-        <a class="btn btn-ghost" href="events.php">イベント管理</a>
     </form>
+    <?php endif; ?>
 
     <?php if ($selectedEvent !== null): ?>
         <p class="muted">

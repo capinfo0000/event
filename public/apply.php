@@ -20,6 +20,11 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
+if (empty($event['stripe_account_id'])) {
+    http_response_code(503);
+    exit('このイベントは現在申込を受け付けていません（主催者の決済準備中）。');
+}
+
 $currency = $event['currency'] ?? 'jpy';
 $prepayUnit = (int) ($event['amount'] ?? 0);
 // 当日料金は未設定なら事前と同額

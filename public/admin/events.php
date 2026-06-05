@@ -1,29 +1,30 @@
 <?php
 
 /**
- * イベント管理画面（要 ID＋パスワード）。
- * 管理画面にログインした人（＝共同主催者）がイベントを登録・編集・削除できる。
- * イベント定義は config/events.json に保存する（参加者DBは持たない方針は維持）。
+ * イベント管理画面（ログイン中テナント専用）。
+ * ログインした主催者（共同主催者含む）が自分のイベントを登録・編集・削除できる。
+ * イベントは DB（events テーブル）にテナント単位で保存する。
  */
 
 declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_admin_auth();
+$tenant = require_tenant();
 
-$events = load_events();
+$events = tenant_events($tenant['id']);
 
-// 編集対象（?edit=ID）。新規のときは空のひな形。
+// 編集対象（?edit=ID）。新規のときは空のひな形。他テナントのものは編集不可。
 $editId = (string) ($_GET['edit'] ?? '');
 $editing = $editId !== '' ? find_event($editId) : null;
+if ($editing !== null && $editing['tenant_id'] !== $tenant['id']) {
+    $editing = null;
+}
 $form = $editing ?? [
     'id' => '', 'name' => '', 'description' => '', 'date' => '',
     'place' => '', 'amount' => '', 'currency' => 'jpy', 'capacity' => '',
     'amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false,
 ];
-// 既存イベント（古い形式）にも既定値を補完
-$form += ['amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false];
 
 $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
@@ -65,7 +66,13 @@ $token = csrf_token();
 </head>
 <body>
     <h1>イベント管理</h1>
-    <p class="muted">ここで登録したイベントが申込トップに表示されます。<a href="index.php">参加者管理へ</a></p>
+    <p class="muted">
+        <?= e($tenant['display_name']) ?> さん ／ <a href="dashboard.php">ダッシュボード</a>
+        ／ <a href="index.php">参加者管理</a> ／ <a href="logout.php">ログアウト</a>
+    </p>
+    <?php if (empty($tenant['stripe_account_id'])): ?>
+        <div class="flash flash-ng">⚠️ Stripe 未連携です。連携するまで参加者は申込・決済できません。<a href="dashboard.php">連携する</a></div>
+    <?php endif; ?>
 
     <?php if ($flash !== ''): ?>
         <div class="flash <?= $flashType === 'ok' ? 'flash-ok' : 'flash-ng' ?>"><?= e($flash) ?></div>
@@ -135,15 +142,19 @@ $token = csrf_token();
             <p class="muted">まだイベントがありません。上のフォームから登録してください。</p>
         <?php else: ?>
             <table>
-                <thead><tr><th>イベント名</th><th>日時</th><th>場所</th><th>参加費</th><th>定員</th><th>操作</th></tr></thead>
+                <thead><tr><th>イベント名</th><th>日時</th><th>場所</th><th>参加費</th><th>申込リンク</th><th>操作</th></tr></thead>
                 <tbody>
                     <?php foreach ($events as $ev): ?>
+                        <?php $applyUrl = base_url() . '/apply.php?event_id=' . urlencode($ev['id']); ?>
                         <tr>
                             <td><?= e($ev['name'] ?? '') ?></td>
                             <td class="muted"><?= e($ev['date'] ?? '') ?></td>
                             <td class="muted"><?= e($ev['place'] ?? '') ?></td>
-                            <td><?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?></td>
-                            <td><?= !empty($ev['capacity']) ? (int) $ev['capacity'] . ' 名' : '—' ?></td>
+                            <td>
+                                事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
+                                <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
+                            </td>
+                            <td><input type="text" readonly value="<?= e($applyUrl) ?>" onclick="this.select()" style="width:200px; font-size:.8rem; padding:4px 6px;"></td>
                             <td>
                                 <div class="actions">
                                     <a class="btn btn-ghost" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
