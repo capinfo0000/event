@@ -52,6 +52,7 @@ if ($sessionId !== '') {
         <?php if ($paid): ?>
             <p class="ok">✅ お申し込みが完了しました</p>
             <p>ご参加ありがとうございます。お支払いを確認しました。確認メールが Stripe より送信されます。</p>
+            <p style="font-size:.85rem;color:#6b7280;">※ カード情報は Stripe が直接お預かりしており、主催者（当方）は決済情報を受け取っておりません。</p>
             <dl>
                 <?php if ($eventName !== ''): ?><dt>イベント</dt><dd><?= e($eventName) ?></dd><?php endif; ?>
                 <?php if ($amountText !== ''): ?><dt>お支払い額</dt><dd><?= e($amountText) ?></dd><?php endif; ?>

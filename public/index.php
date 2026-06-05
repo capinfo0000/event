@@ -38,7 +38,8 @@ $events = load_events();
 </head>
 <body>
     <h1>イベント申込（事前決済）</h1>
-    <p class="lead">参加には事前のお支払い（前払い）が必要です。お支払い後にお申し込み完了となります。</p>
+    <p class="lead">参加には事前のお支払い（前払い）が必要です。お支払い後にお申し込み完了となります。<br>
+       なお、<strong>カード番号などの決済情報は決済代行の Stripe が直接お預かりし、主催者（当方）は一切受け取りも保管もいたしません。</strong></p>
 
     <?php if (empty($events)): ?>
         <div class="card"><p>現在受付中のイベントはありません。</p></div>
@@ -53,14 +54,14 @@ $events = load_events();
                     <input type="hidden" name="event_id" value="<?= e($event['id'] ?? '') ?>">
                     <button type="submit" class="btn">申し込む（前払い）</button>
                 </form>
-                <p class="note">ボタンを押すと、安全な Stripe の決済画面に移動します。<br>
+                <p class="note">ボタンを押すと、安全な Stripe の決済画面に移動します。カード情報は主催者には渡りません。<br>
                    キャンセル時の返金については<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
             </div>
         <?php endforeach; ?>
     <?php endif; ?>
 
     <footer>
-        <p>クレジットカード情報の入力・処理は決済代行サービス Stripe 上で行われ、当方のサーバーには保存されません。</p>
+        <p>クレジットカード情報の入力・処理は決済代行サービス Stripe 上で行われます。主催者（当方）はカード番号・有効期限・セキュリティコードなどの決済情報を受け取らず、当方のサーバーにも一切保存しません。</p>
         <p><a href="policy.php">キャンセル・返金ポリシー</a></p>
     </footer>
 </body>
