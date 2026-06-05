@@ -187,8 +187,8 @@ function delete_event(string $tenantId, string $id): bool
 }
 
 /**
- * 料金プランの定義（登録できるイベント数の上限）。
- * price は月額の目安（最小通貨単位・JPY）。実際の課金連携は別途。
+ * 料金プランの定義。max_events は「同じ開催月に登録できるイベント数」の上限。
+ * price は月額（最小通貨単位・JPY）。実際の課金連携は別途。
  *
  * @return array<string, array{label:string, max_events:int, price:int}>
  */
@@ -202,7 +202,7 @@ function plan_catalog(): array
     ];
 }
 
-/** プランの登録可能イベント数。未知のプランは無料相当(1)。 */
+/** プランが同じ開催月に登録できるイベント数。未知のプランは無料相当(1)。 */
 function plan_max_events(string $plan): int
 {
     return plan_catalog()[$plan]['max_events'] ?? 1;
@@ -241,12 +241,46 @@ function plan_for_price_id(string $priceId): ?string
     return null;
 }
 
-/** テナントの登録済みイベント数。 */
+/** テナントの登録済みイベント総数（表示用）。 */
 function tenant_event_count(string $tenantId): int
 {
     $stmt = db()->prepare('SELECT COUNT(*) FROM events WHERE tenant_id = ?');
     $stmt->execute([$tenantId]);
     return (int) $stmt->fetchColumn();
+}
+
+/**
+ * イベントの「開催月」を 'YYYY-MM' 形式で返す。日付文字列から年月を抽出。
+ * 判定できなければ null（プランの月内上限はイベント開催月で数えるため必要）。
+ */
+function event_month(string $dateStr): ?string
+{
+    if (preg_match('/(\d{4})\D{1,3}(\d{1,2})/', $dateStr, $m)) {
+        $year = (int) $m[1];
+        $month = (int) $m[2];
+        if ($month >= 1 && $month <= 12) {
+            return sprintf('%04d-%02d', $year, $month);
+        }
+    }
+    return null;
+}
+
+/**
+ * 指定テナントが、ある開催月に登録済みのイベント数を数える（プラン上限の判定用）。
+ * $excludeId を渡すと、そのイベント自身は除外する（編集時の自己重複回避）。
+ */
+function tenant_month_event_count(string $tenantId, string $month, string $excludeId = ''): int
+{
+    $n = 0;
+    foreach (tenant_events($tenantId) as $e) {
+        if ($e['id'] === $excludeId) {
+            continue;
+        }
+        if (event_month($e['date']) === $month) {
+            $n++;
+        }
+    }
+    return $n;
 }
 
 /**

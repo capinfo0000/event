@@ -55,6 +55,12 @@ if (!$allowPrepay && !$allowOnsite) {
     back_to_events('支払い方法を少なくとも1つ選んでください（事前決済／当日支払い）。', 'ng', $id);
 }
 
+// プラン上限は「開催月」ごとに数えるため、日付から開催月を判定できる必要がある
+$month = event_month($date);
+if ($month === null) {
+    back_to_events('日時は「2026-07-20」のように開催年月日が分かる形式で入力してください。', 'ng', $id);
+}
+
 $data = [
     'name'          => mb_substr($name, 0, 100),
     'description'   => mb_substr($desc, 0, 500),
@@ -69,6 +75,28 @@ $data = [
     'allow_onsite'  => $allowOnsite,
 ];
 
+// プラン上限（同じ開催月に登録できるイベント数）のチェック。
+// 編集時は自分自身を除外して数える（開催月を変更した場合も判定される）。
+$plan = $tenant['plan'] ?? 'free';
+$limit = plan_max_events($plan);
+if ($limit !== PHP_INT_MAX) {
+    $countInMonth = tenant_month_event_count($tenant['id'], $month, $id);
+    if ($countInMonth >= $limit) {
+        [$y, $mo] = explode('-', $month);
+        back_to_events(
+            sprintf(
+                '現在のプラン（%s）では同じ開催月（%d年%d月）に登録できるイベントは %d件までです。プランをアップグレードしてください。',
+                plan_label($plan),
+                (int) $y,
+                (int) $mo,
+                $limit
+            ),
+            'ng',
+            $id
+        );
+    }
+}
+
 try {
     if ($id !== '') {
         // 既存イベント：自分の所有か確認してから更新
@@ -79,16 +107,6 @@ try {
         update_event($tenant['id'], $id, $data);
         back_to_events('イベントを更新しました。', 'ok');
     } else {
-        // プランごとの登録イベント数の上限チェック（新規作成時のみ）
-        $limit = plan_max_events($tenant['plan'] ?? 'free');
-        if (tenant_event_count($tenant['id']) >= $limit) {
-            back_to_events(
-                '現在のプラン（' . plan_label($tenant['plan'] ?? 'free') . '）では登録できるイベントは ' .
-                ($limit === PHP_INT_MAX ? '無制限' : $limit . '件') .
-                'までです。プランをアップグレードしてください。',
-                'ng'
-            );
-        }
         create_event($tenant['id'], $data);
         back_to_events('イベントを登録しました。', 'ok');
     }

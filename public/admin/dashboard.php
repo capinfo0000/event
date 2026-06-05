@@ -40,18 +40,14 @@ require __DIR__ . '/_auth_header.php';
 <div class="card">
     <h2 style="font-size:1.1rem;">プラン</h2>
     <p>現在のプラン：<strong><?= e(plan_label($plan)) ?></strong></p>
-    <p>登録イベント数：<strong><?= $usedEvents ?></strong> /
-        <?= $maxEvents === PHP_INT_MAX ? '無制限' : $maxEvents . ' 件' ?>
-        <?php if ($maxEvents !== PHP_INT_MAX && $usedEvents >= $maxEvents): ?>
-            <span style="color:#dc2626;">（上限に達しています）</span>
-        <?php endif; ?>
-    </p>
+    <p>同じ開催月に登録できるイベント数：<strong><?= $maxEvents === PHP_INT_MAX ? '無制限' : $maxEvents . ' 件' ?></strong></p>
+    <p class="muted">登録済みイベント数（全期間）：<?= $usedEvents ?> 件</p>
     <p><a class="btn" href="upgrade.php" style="display:inline-block; width:auto; text-decoration:none;">プランをアップグレード</a>
        <?php if (!empty($tenant['stripe_customer_id'])): ?>
            <a href="portal.php" class="muted" style="margin-left:8px;">支払い・解約の管理</a>
        <?php endif; ?>
     </p>
-    <p class="muted">料金別に登録できるイベント数が増えます。お支払いは運営へのプラン利用料です。</p>
+    <p class="muted">上限は「イベントの開催月」ごとに数えます。料金別に上限が増えます（お支払いは運営へのプラン利用料）。</p>
 </div>
 
 <div class="card">

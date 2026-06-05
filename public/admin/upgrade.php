@@ -67,8 +67,8 @@ require __DIR__ . '/_auth_header.php';
         <?php if ($key === 'free' || !isset($priceIds[$key])) { continue; } ?>
         <div class="card">
             <h2 style="font-size:1.1rem; margin:0 0 4px;"><?= e($info['label']) ?></h2>
-            <p>イベント登録上限：<?= $info['max_events'] === PHP_INT_MAX ? '無制限' : $info['max_events'] . ' 件' ?>
-               ／ 月額 <?= e(format_amount($info['price'], 'jpy')) ?>（目安）</p>
+            <p>同じ開催月に登録できるイベント数：<?= $info['max_events'] === PHP_INT_MAX ? '無制限' : $info['max_events'] . ' 件' ?>
+               ／ 月額 <?= e(format_amount($info['price'], 'jpy')) ?></p>
             <?php if ($currentPlan === $key): ?>
                 <span class="muted">利用中のプランです</span>
             <?php else: ?>
