@@ -36,12 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'test') {
         try {
             init_stripe(); // 保存済みの鍵を使用
-            $acct = \Stripe\Account::retrieve();
+            // 権限確認を兼ねた軽い呼び出し（Checkout Sessions の読み取りで疎通確認）
+            \Stripe\Checkout\Session::all(['limit' => 1]);
+            $k = (string) stored_stripe_key();
             $testResult = [
                 'ok' => true,
-                'mode' => (\Stripe\Stripe::getApiKey() && str_contains((string) \Stripe\Stripe::getApiKey(), '_live_')) ? '本番（live）' : 'テスト（test）',
-                'name' => $acct->business_profile->name ?? ($acct->email ?? $acct->id),
-                'country' => $acct->country ?? '',
+                'mode' => str_contains($k, '_live_') ? '本番（live）' : 'テスト（test）',
             ];
         } catch (\Throwable $e) {
             $testResult = ['ok' => false, 'error' => $e->getMessage()];
