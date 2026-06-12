@@ -21,7 +21,7 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 $account = null;
 
 if ($sessionId !== '') {
-    init_stripe();
+    init_stripe(tenant_stripe_key_by_id($event['tenant_id'] ?? null));
     try {
         $session = \Stripe\Checkout\Session::retrieve($sessionId, stripe_opts($account));
         $paid = ($session->payment_status === 'paid');

@@ -11,7 +11,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-$stripeReady = env('STRIPE_SECRET_KEY') !== null;
+$stripeReady = stored_stripe_key() !== null;
 $events = tenant_events($tenant['id']);
 $usedEvents = count($events);
 $publicUrl = base_url() . '/o.php?t=' . urlencode($tenant['id']);
@@ -94,9 +94,14 @@ require __DIR__ . '/_app_header.php';
     <?php if ($stripeReady): ?>
         <p>✅ Stripe キー設定済み。参加費はあなたの Stripe アカウントへ直接入金されます。</p>
         <p class="muted">クレジットカード（事前決済）と現金（当日支払い）の両方に対応します。</p>
+        <p style="margin:14px 0 0;"><a class="btn btn--ghost" href="stripe.php">Stripe 設定・接続テスト</a></p>
     <?php else: ?>
-        <p>⚠️ Stripe キーが未設定です。<code>.env</code> の <code>STRIPE_SECRET_KEY</code> にご自身の Stripe シークレットキー（<code>sk_...</code>）を設定すると、クレジットカード決済を受け付けられます。</p>
+        <p>⚠️ まだクレジットカード決済の準備ができていません。<strong>初期設定</strong>から Stripe の API キーを登録してください。</p>
         <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
+        <p style="margin:14px 0 0;">
+            <a class="btn" href="setup.php">初期設定をはじめる</a>
+            <a class="btn btn--ghost" href="stripe.php" style="margin-left:8px;">Stripe 設定</a>
+        </p>
     <?php endif; ?>
 </div>
 

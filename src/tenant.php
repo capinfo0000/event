@@ -111,6 +111,18 @@ function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
     $stmt->execute([$accountId, $tenantId]);
 }
 
+// 鍵は DB に保存せず、公開フォルダ外のファイルに置く（stored_stripe_key/save_stripe_key は bootstrap）。
+// 既存の呼び出し互換のため、解決ヘルパーはその保存済みキーを返す。
+function tenant_stripe_key(array $tenant): ?string
+{
+    return stored_stripe_key();
+}
+
+function tenant_stripe_key_by_id(?string $tenantId): ?string
+{
+    return stored_stripe_key();
+}
+
 function set_tenant_plan(string $tenantId, string $plan): void
 {
     $stmt = db()->prepare('UPDATE tenants SET plan = ? WHERE id = ?');

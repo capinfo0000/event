@@ -74,7 +74,8 @@ if ($paymentType === 'onsite' && !$allowOnsite) {
 }
 
 // 決済（事前・当日とも）は運営者の Stripe を使う。キー未設定なら受付不可。
-if (env('STRIPE_SECRET_KEY') === null) {
+$secretKey = tenant_stripe_key_by_id($event['tenant_id'] ?? null);
+if ($secretKey === null) {
     http_response_code(503);
     exit('現在このイベントは決済の準備が完了していません。主催者へお問い合わせください。');
 }
@@ -92,7 +93,7 @@ $metaPhone = mb_substr($phone, 0, 30);
 $metaNote = mb_substr($note, 0, 450);
 
 // 運営者自身の Stripe アカウントで初期化（Connect 不使用）。
-init_stripe();
+init_stripe($secretKey);
 $opts = stripe_opts($account); // $account = null → 自アカウント
 $capacity = (int)($event['capacity'] ?? 0);
 // 定員チェック（capacity>0 のとき）。現在の人数＋今回の人数が定員を超えたら受付不可。

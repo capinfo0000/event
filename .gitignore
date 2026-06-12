@@ -1,5 +1,8 @@
 # 秘密情報（APIキー等）は絶対にコミットしない
 .env
+# 画面から設定する Stripe 秘密鍵の保存ファイル（コミット厳禁）
+stripe_secret.key
+/app/stripe_secret.key
 
 # 依存ライブラリ
 /vendor/

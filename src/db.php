@@ -61,6 +61,7 @@ function db_migrate(\PDO $pdo): void
     // 既存DB（列が無い）への後方互換マイグレーション
     db_add_column_if_missing($pdo, 'tenants', 'plan', "TEXT NOT NULL DEFAULT 'free'");
     db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
+    db_add_column_if_missing($pdo, 'tenants', 'stripe_secret_key', 'TEXT');  // 運営者自身のStripe秘密鍵（画面から設定）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (

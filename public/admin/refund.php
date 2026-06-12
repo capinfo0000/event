@@ -40,7 +40,8 @@ if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
 $account = null; // 運営者自身の Stripe アカウント（Connect 不使用）
-if (env('STRIPE_SECRET_KEY') === null) {
+$secretKey = tenant_stripe_key($tenant);
+if ($secretKey === null) {
     back_to_admin($eventId, 'Stripe キー未設定のため返金できません。', 'ng');
 }
 
@@ -48,7 +49,7 @@ if ($paymentIntent === '') {
     back_to_admin($eventId, '返金対象が不正です。', 'ng');
 }
 
-init_stripe();
+init_stripe($secretKey);
 $opts = stripe_opts($account);
 
 $refundParams = ['payment_intent' => $paymentIntent];

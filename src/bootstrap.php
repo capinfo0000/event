@@ -310,11 +310,62 @@ function base_url(): string
 }
 
 /**
- * Stripe SDK を初期化（秘密鍵をセット）。
+ * Stripe 秘密鍵の保存先ファイル（公開フォルダ外の app/ 直下）。
+ * 鍵は DB には保存せず、このファイルにのみ置く。
  */
-function init_stripe(): void
+function stripe_key_file(): string
 {
-    \Stripe\Stripe::setApiKey(env_required('STRIPE_SECRET_KEY'));
+    return APP_ROOT . '/stripe_secret.key';
+}
+
+/**
+ * 現在有効な Stripe 秘密鍵を返す。
+ * 優先順位：鍵ファイル → .env の STRIPE_SECRET_KEY → null。
+ */
+function stored_stripe_key(): ?string
+{
+    $f = stripe_key_file();
+    if (is_readable($f)) {
+        $k = trim((string) file_get_contents($f));
+        if ($k !== '') {
+            return $k;
+        }
+    }
+    $env = env('STRIPE_SECRET_KEY');
+    return ($env !== null && $env !== '') ? $env : null;
+}
+
+/**
+ * Stripe 秘密鍵を保存（空文字なら削除）。ファイル権限は所有者のみに絞る。
+ */
+function save_stripe_key(string $key): void
+{
+    $f = stripe_key_file();
+    $key = trim($key);
+    if ($key === '') {
+        if (is_file($f)) {
+            @unlink($f);
+        }
+        return;
+    }
+    file_put_contents($f, $key . "\n", LOCK_EX);
+    @chmod($f, 0600);
+}
+
+/**
+ * Stripe SDK を初期化（秘密鍵をセット）。
+ * $key を渡せばそれを使い、無指定なら保存済みの鍵（ファイル→.env）を使う。
+ * どちらも無ければ例外。
+ */
+function init_stripe(?string $key = null): void
+{
+    if ($key === null || $key === '') {
+        $key = stored_stripe_key();
+    }
+    if ($key === null || $key === '') {
+        throw new \RuntimeException('Stripe の秘密鍵が未設定です。設定画面から登録してください。');
+    }
+    \Stripe\Stripe::setApiKey($key);
 }
 
 /**
@@ -405,7 +456,8 @@ function stripe_opts(?string $account): array
  */
 function fetch_event_participants(string $eventId, ?string $account = null): array
 {
-    init_stripe();
+    $ev = find_event($eventId);
+    init_stripe(tenant_stripe_key_by_id($ev['tenant_id'] ?? null));
     $opts = stripe_opts($account);
 
     $participants = [];
