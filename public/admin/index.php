@@ -41,8 +41,8 @@ $onsiteDue = 0;   // 当日支払い予定（未収）合計
 $attendedCount = 0; // 出席確認済みの申込数（頭数ではなく行数）
 $headcount = 0;     // 参加予定の頭数（返金済みを除く party_size 合計）
 
-if ($selectedEvent !== null && env('STRIPE_SECRET_KEY') === null) {
-    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。.env の STRIPE_SECRET_KEY を設定してください。';
+if ($selectedEvent !== null && stored_stripe_key() === null) {
+    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。「Stripe設定」から API キーを登録してください。';
 } elseif ($selectedEvent !== null) {
     try {
         $participants = fetch_event_participants($selectedId, $account);

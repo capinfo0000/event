@@ -21,7 +21,7 @@ if ($event === null) {
 }
 
 // 運営者の Stripe キーが設定済みか。未設定でもフォームは表示し、申込ボタン押下時（checkout.php）に案内する。
-$stripeReady = env('STRIPE_SECRET_KEY') !== null;
+$stripeReady = stored_stripe_key() !== null;
 
 // 定員と残席（capacity>0 のとき）。取得に失敗しても申込は止めない。
 $capacity = (int) ($event['capacity'] ?? 0);
