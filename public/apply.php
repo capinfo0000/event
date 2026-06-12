@@ -88,7 +88,11 @@ $maxParty = min($maxParty, 20);
             <p class="muted">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
         <?php endif; ?>
         <?php if ($allowPrepay): ?>
-            <div style="margin-top:12px;"><?php include __DIR__ . '/_stripe_safety.php'; ?></div>
+            <p class="muted" style="font-size:.85rem; margin-top:12px;">
+                対応お支払い方法：クレジットカード／Apple Pay／Google Pay／PayPay／コンビニ払い など<br>
+                ※ 実際に選べる方法は、主催者の設定やご利用の端末・ブラウザによって決済画面に表示されます。
+            </p>
+            <div style="margin-top:10px;"><?php include __DIR__ . '/_stripe_safety.php'; ?></div>
         <?php endif; ?>
     </div>
 

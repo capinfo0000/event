@@ -103,6 +103,28 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
+    <div class="card__title">対応するお支払い方法（PayPay・コンビニ 等）</div>
+    <p style="margin-top:0;">決済画面（Stripe Checkout）には、<strong>Stripe 側で有効にしたお支払い方法が自動で表示</strong>されます（このアプリ側の追加設定・コード変更は不要です）。</p>
+    <ul class="muted" style="margin:6px 0 0;">
+        <li><strong>クレジットカード／Apple Pay／Google Pay</strong>：対応端末・ブラウザなら決済画面に自動表示（基本的に追加設定は不要）。</li>
+        <li><strong>PayPay／コンビニ払い／銀行振込</strong>など：使うには Stripe ダッシュボードでの<strong>有効化が必要</strong>です（未有効だと決済画面に出ません）。</li>
+    </ul>
+
+    <p style="margin:14px 0 4px;"><strong>PayPay を有効にする手順</strong></p>
+    <ol class="muted" style="margin-top:0;">
+        <li>下のボタンから Stripe の「設定 → 支払い方法」を開く。</li>
+        <li>一覧から <strong>PayPay</strong> を探して「有効にする」を押す（通貨が日本円・日本のアカウントであることが条件）。</li>
+        <li>必要に応じて「コンビニ決済（Konbini）」なども同様に有効化。</li>
+        <li>有効化すると、このアプリの決済画面に自動で表示されます（再設定不要）。</li>
+    </ol>
+    <p>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">支払い方法（テスト）を開く</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener" style="margin-left:8px;">支払い方法（本番）を開く</a>
+    </p>
+    <p class="muted" style="font-size:.82rem;">※ PayPay はテストモードでも有効化でき、テスト決済を試せます。利用可否は Stripe 側の対応条件（国・通貨・審査状況）により異なります。</p>
+</div>
+
+<div class="card">
     <div class="card__title">現在の状態</div>
     <p style="margin-top:0;"><?php include dirname(__DIR__) . '/_stripe_safety.php'; ?></p>
     <?php if ($configured): ?>
