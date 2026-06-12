@@ -137,10 +137,11 @@ require __DIR__ . '/_app_header.php';
                                 事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
                                 <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
                             </td>
-                            <td><input type="text" readonly value="<?= e($applyUrl) ?>" onclick="this.select()" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
+                            <td><button type="button" class="btn btn--ghost" style="padding:6px 10px; font-size:.8rem;"
+                                    onclick="copyLink(this, <?= htmlspecialchars(json_encode($applyUrl), ENT_QUOTES) ?>)">リンクをコピー</button></td>
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center;">
-                                    <a class="btn btn--ghost" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
+                                    <a class="btn" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
                                     <form method="post" action="event_delete.php"
                                           onsubmit="return confirm('「<?= e(addslashes($ev['name'] ?? '')) ?>」を削除します。よろしいですか？（過去の申込・決済データは Stripe に残ります）');">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
@@ -157,6 +158,12 @@ require __DIR__ . '/_app_header.php';
     <?php endif; ?>
 </div>
 <script>
+    function copyLink(btn, url) {
+        navigator.clipboard.writeText(url).then(function () {
+            var t = btn.textContent; btn.textContent = 'コピーしました';
+            setTimeout(function () { btn.textContent = t; }, 1500);
+        }).catch(function () { window.prompt('このリンクをコピーしてください', url); });
+    }
     function closeEventModal() {
         var m = document.getElementById('eventModal');
         if (m) m.classList.remove('is-open');
