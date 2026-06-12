@@ -16,9 +16,9 @@ $eventName = '';
 $amountText = '';
 $email = '';
 
-// セッションは運営者自身の Stripe アカウント上にある（Connect 不使用）
+// セッションはイベント所有者の Stripe 上にある。Connect 接続済みなら主催者の接続アカウント。
 $event = $eventId !== '' ? find_event($eventId) : null;
-$account = null;
+$account = effective_stripe_account($event['stripe_account_id'] ?? null);
 
 if ($sessionId !== '') {
     init_stripe();

@@ -11,10 +11,16 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-$stripeReady = env('STRIPE_SECRET_KEY') !== null;
+// Connect: 接続済みなら自分の Stripe アカウントで集計、未接続はプラットフォーム（後方互換）。
+$account = effective_stripe_account($tenant['stripe_account_id'] ?? null);
+$connected = $account !== null;          // 自分の Stripe を接続済みか
+$stripeReady = env('STRIPE_SECRET_KEY') !== null; // Stripe API を呼べる構成か（プラットフォーム鍵）
 $events = tenant_events($tenant['id']);
 $usedEvents = count($events);
 $publicUrl = base_url() . '/o.php?t=' . urlencode($tenant['id']);
+$flash = (string) ($_GET['msg'] ?? '');
+$flashType = (string) ($_GET['type'] ?? '');
+$connectToken = csrf_token();
 
 // ---- 申込状況の集計（自分の Stripe から。失敗・未設定でも画面は出す） ----
 $byDate = [];          // 'Y-m-d' => 申込件数
@@ -26,7 +32,7 @@ $statsError = false;
 if ($stripeReady) {
     try {
         foreach ($events as $ev) {
-            foreach (fetch_event_participants($ev['id'], null) as $p) {
+            foreach (fetch_event_participants($ev['id'], $account) as $p) {
                 $day = date('Y-m-d', (int) ($p['created'] ?? 0));
                 $byDate[$day] = ($byDate[$day] ?? 0) + 1;
                 if (($p['payment_type'] ?? 'prepay') === 'onsite') {
@@ -63,6 +69,9 @@ $pageSub = 'ようこそ、' . $tenant['display_name'] . ' さん';
 $topActions = '<a class="btn" href="events.php">＋ イベントを作成</a>';
 require __DIR__ . '/_app_header.php';
 ?>
+<?php if ($flash !== ''): ?>
+    <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
+<?php endif; ?>
 <div class="stat-grid">
     <div class="stat"><span class="stat__num accent"><?= $totalApplied ?></span><span class="stat__label">総申込数（事前<?= $prepayCount ?>・当日<?= $onsiteCount ?>）</span></div>
     <div class="stat"><span class="stat__num"><?= e(format_amount($collected, 'jpy')) ?></span><span class="stat__label">事前入金合計</span></div>
@@ -91,7 +100,19 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title"><span class="ic">💳</span> Stripe（決済）</div>
-    <?php if ($stripeReady): ?>
+    <?php if (connect_enabled()): ?>
+        <?php if ($connected): ?>
+            <p>✅ あなたの Stripe アカウントを接続済みです（<code><?= e((string) $tenant['stripe_account_id']) ?></code>）。参加費はあなたの口座へ直接入金され、名簿・決済データもあなたのアカウントで分離管理されます。</p>
+            <form method="post" action="connect.php?action=disconnect" onsubmit="return confirm('Stripe 接続を解除します。よろしいですか？（解除後は新規決済を受け付けられません）');">
+                <input type="hidden" name="csrf_token" value="<?= e($connectToken) ?>">
+                <button type="submit" class="btn btn--ghost">接続を解除</button>
+            </form>
+        <?php else: ?>
+            <p>⚠️ まだ Stripe アカウントを接続していません。接続すると、参加費が<strong>あなた自身の Stripe アカウント</strong>へ入金され、名簿・決済データも他主催者と分離されます。</p>
+            <p><a class="btn" href="connect.php?action=start">Stripe アカウントを接続する</a></p>
+            <p class="muted">未接続でも「当日支払い（現金）」のみのイベントは利用できます。</p>
+        <?php endif; ?>
+    <?php elseif ($stripeReady): ?>
         <p>✅ Stripe キー設定済み。参加費はあなたの Stripe アカウントへ直接入金されます。</p>
         <p class="muted">クレジットカード（事前決済）と現金（当日支払い）の両方に対応します。</p>
     <?php else: ?>

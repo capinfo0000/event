@@ -36,8 +36,8 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-// 決済は運営者自身の Stripe アカウントで行う（Connect 不使用）。$account は使わず常に自アカウント。
-$account = null;
+// 決済はイベント所有者の Stripe で行う。Connect 接続済みなら主催者の接続アカウント、未接続はプラットフォーム（後方互換）。
+$account = effective_stripe_account($event['stripe_account_id'] ?? null);
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
 $name  = trim((string)($_POST['name'] ?? ''));

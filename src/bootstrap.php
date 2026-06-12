@@ -356,11 +356,34 @@ function base_url(): string
 }
 
 /**
- * Stripe SDK を初期化（秘密鍵をセット）。
+ * Stripe SDK を初期化（プラットフォームの秘密鍵をセット）。
+ * Connect 利用時は、各 API 呼び出しで stripe_opts($accountId) により接続アカウントを指定する。
  */
 function init_stripe(): void
 {
     \Stripe\Stripe::setApiKey(env_required('STRIPE_SECRET_KEY'));
+    $clientId = env('STRIPE_CONNECT_CLIENT_ID');
+    if ($clientId !== null) {
+        \Stripe\Stripe::setClientId($clientId);
+    }
+}
+
+/**
+ * Stripe Connect（主催者ごとに自分の Stripe を接続して物理分離）が利用可能な構成か。
+ * プラットフォームの秘密鍵と Connect の client_id（ca_...）の両方が設定済みなら true。
+ */
+function connect_enabled(): bool
+{
+    return env('STRIPE_SECRET_KEY') !== null && env('STRIPE_CONNECT_CLIENT_ID') !== null;
+}
+
+/**
+ * 操作に使う接続アカウントID を決める。
+ * 接続済みなら接続アカウント（acct_...）、未接続なら null（＝プラットフォーム自アカウント＝後方互換）。
+ */
+function effective_stripe_account(?string $connectedAccountId): ?string
+{
+    return ($connectedAccountId !== null && $connectedAccountId !== '') ? $connectedAccountId : null;
 }
 
 /**

@@ -29,7 +29,7 @@ $remaining = null; // null = 定員管理なし／不明
 $isFull = false;
 if ($capacity > 0 && $stripeReady) {
     try {
-        $remaining = max(0, $capacity - event_headcount($event['id'], null));
+        $remaining = max(0, $capacity - event_headcount($event['id'], effective_stripe_account($event['stripe_account_id'] ?? null)));
         $isFull = ($remaining <= 0);
     } catch (\Throwable $e) {
         $remaining = null;

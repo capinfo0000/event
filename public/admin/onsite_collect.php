@@ -34,7 +34,7 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
-$account = null; // 運営者自身の Stripe アカウント（Connect 不使用）
+$account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Connect: 接続済みは自分のStripe／未接続はプラットフォーム
 if ($customerId === '' || env('STRIPE_SECRET_KEY') === null) {
     back_to_admin($eventId, '対象が不正です。', 'ng');
 }

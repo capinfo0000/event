@@ -14,8 +14,8 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-// 名簿は運営者自身の Stripe アカウントから取得する（Connect 不使用 → 常に自アカウント）。
-$account = null;
+// 名簿は運営者の Stripe から取得する。Connect 接続済みなら自分のアカウント、未接続はプラットフォーム（後方互換）。
+$account = effective_stripe_account($tenant['stripe_account_id'] ?? null);
 
 $events = tenant_events($tenant['id']);
 $selectedId = (string) ($_GET['event_id'] ?? ($events[0]['id'] ?? ''));

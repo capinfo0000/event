@@ -20,7 +20,7 @@ if ($tenant === null) {
 
 // 公開イベント一覧（残席計算は運営者自身の Stripe アカウントから取得）
 $events = tenant_events($tenantId);
-$account = null; // Connect 不使用 → 自アカウント
+$account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Connect: 接続済みは主催者のStripe
 ?>
 <!DOCTYPE html>
 <html lang="ja">
