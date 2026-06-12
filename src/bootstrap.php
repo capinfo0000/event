@@ -104,6 +104,7 @@ function send_baseline_security_headers(): void
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
         . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
         . "script-src 'self' $nonce" . $captchaHost . "; "
+        . "connect-src 'self'" . $captchaHost . "; "
         . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
         . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     header('X-Frame-Options: DENY');
