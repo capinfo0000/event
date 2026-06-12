@@ -99,8 +99,7 @@ require __DIR__ . '/_app_header.php';
         <p>⚠️ まだ Stripe の API キーが未設定です。<strong>初期設定</strong>から登録してください。</p>
         <p class="muted">※ 当日支払い（現金）の申込受付や参加者管理（名簿）も Stripe を使って記録・取得するため、現金のみの運用でも API キーの設定が必要です。</p>
         <p style="margin:14px 0 0;">
-            <a class="btn" href="setup.php">初期設定をはじめる</a>
-            <a class="btn btn--ghost" href="stripe.php" style="margin-left:8px;">Stripe 設定</a>
+            <a class="btn" href="stripe.php">Stripe 設定へ進む</a>
         </p>
     <?php endif; ?>
 </div>
@@ -160,6 +159,42 @@ require __DIR__ . '/_app_header.php';
             },
         });
     }
+</script>
+<?php endif; ?>
+
+<?php if (!$stripeReady): ?>
+<!-- Stripe未設定のあいだは毎回この初期設定ポップアップを表示 -->
+<div class="setup-modal is-open" id="setupModal" onclick="if(event.target===this)this.classList.remove('is-open')">
+    <div class="setup-box">
+        <button type="button" class="setup-close" aria-label="閉じる" onclick="document.getElementById('setupModal').classList.remove('is-open')">×</button>
+        <h2>はじめの設定をしましょう</h2>
+        <p class="muted" style="margin-top:0;">クレジットカード決済・参加者管理を使うには、最初に Stripe の API キーを登録します（当日支払い＝現金のみの運用でも必要です）。</p>
+        <ol style="padding-left:1.2em; line-height:1.9;">
+            <li><strong>Stripe 設定</strong>で API キーを登録（保存 → 接続確認）</li>
+            <li><strong>イベント管理</strong>でイベントを作成</li>
+            <li>発行された<strong>申込リンク</strong>を参加者に共有</li>
+        </ol>
+        <p style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="btn" href="stripe.php">Stripe 設定へ進む</a>
+            <button type="button" class="btn btn--ghost" onclick="document.getElementById('setupModal').classList.remove('is-open')">あとで</button>
+        </p>
+    </div>
+</div>
+<style>
+    .setup-modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:1000;
+        align-items:flex-start; justify-content:center; padding:24px; overflow-y:auto; }
+    .setup-modal.is-open { display:flex; }
+    .setup-box { background:#fff; border-radius:14px; max-width:520px; width:100%; padding:26px 26px 22px;
+        position:relative; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .setup-box h2 { font-size:1.2rem; margin:0 0 8px; }
+    .setup-close { position:absolute; top:8px; right:14px; background:none; border:none; font-size:1.7rem;
+        line-height:1; cursor:pointer; color:#6b7280; }
+    @media (max-width:480px){ .setup-modal{ padding:10px; } .setup-box{ padding:20px 16px; } }
+</style>
+<script>
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { var m=document.getElementById('setupModal'); if(m) m.classList.remove('is-open'); }
+    });
 </script>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>

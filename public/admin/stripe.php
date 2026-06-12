@@ -155,6 +155,19 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
+    <div class="card__title">テスト用カード番号（テストモード時）</div>
+    <p style="margin-top:0;">テストキー（<code>sk_test_…</code>／<code>rk_test_…</code>）のときは、次の番号で動作確認できます。実際の請求は発生しません。</p>
+    <ul style="margin:6px 0 0; line-height:1.9;">
+        <li>成功（Visa）：<strong>4242 4242 4242 4242</strong></li>
+        <li>成功（Mastercard）：5555 5555 5555 4444 ／（JCB）3530 1113 3330 0000 ／（Amex）3782 822463 10005</li>
+        <li>有効期限：<strong>未来の日付なら何でも</strong>（例 12/34）／ CVC：<strong>任意の3桁</strong>（Amexは4桁）／ 郵便番号：任意</li>
+        <li>失敗をテスト：4000 0000 0000 0002（拒否）／ 4000 0000 0000 9995（残高不足）</li>
+    </ul>
+    <p class="muted" style="font-size:.82rem; margin-top:8px;">※ 本番（live）モードではテストカードは使えません。詳細：
+        <a href="https://stripe.com/docs/testing" target="_blank" rel="noopener">Stripe のテスト情報</a></p>
+</div>
+
+<div class="card">
     <div class="card__title">現在の状態</div>
     <?php if ($configured): ?>
         <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
