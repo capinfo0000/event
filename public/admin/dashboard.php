@@ -109,9 +109,10 @@ require __DIR__ . '/_app_header.php';
     <div class="card__title">公開イベントページ</div>
     <p class="muted" style="margin-top:0;">この1つのリンクを参加者に共有すれば、開催中のイベントを一覧から選んで申し込めます。</p>
     <input type="text" readonly value="<?= e($publicUrl) ?>" onclick="this.select()">
-    <p style="margin: 16px 0 0;">
+    <p style="margin: 16px 0 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <a class="btn" href="events.php">イベント管理</a>
         <a class="btn btn--ghost" href="index.php">参加者管理</a>
+        <?php include dirname(__DIR__) . '/_stripe_safety.php'; ?>
     </p>
 </div>
 

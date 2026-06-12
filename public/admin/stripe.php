@@ -73,6 +73,7 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title">現在の状態</div>
+    <p style="margin-top:0;"><?php include dirname(__DIR__) . '/_stripe_safety.php'; ?></p>
     <?php if ($configured): ?>
         <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
         <form method="post" style="margin-top:10px;">
