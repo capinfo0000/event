@@ -72,21 +72,6 @@ require __DIR__ . '/_app_header.php';
 <?php endif; ?>
 
 <div class="card">
-    <div class="card__title">現在の状態</div>
-    <p style="margin-top:0;"><?php include dirname(__DIR__) . '/_stripe_safety.php'; ?></p>
-    <?php if ($configured): ?>
-        <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
-        <form method="post" style="margin-top:10px;">
-            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-            <input type="hidden" name="action" value="test">
-            <button type="submit" class="btn">接続テスト</button>
-        </form>
-    <?php else: ?>
-        <p>⚠️ 未設定です。下のフォームに Stripe の秘密鍵を貼り付けて保存してください。未設定の間は、カード決済はもちろん、<strong>当日支払いの申込受付・参加者管理（名簿）も利用できません</strong>（いずれも Stripe に記録・取得するため）。</p>
-    <?php endif; ?>
-</div>
-
-<div class="card">
     <div class="card__title">APIキーの取得・登録</div>
     <ol class="muted" style="margin-top:0;">
         <li>Stripeにログイン →「開発者」→「APIキー」を開く（下のボタン）。</li>
@@ -115,6 +100,21 @@ require __DIR__ . '/_app_header.php';
         <p class="muted" style="margin:6px 0 0;">※ 鍵は DB には保存せず、公開フォルダ外のファイルにのみ保存します。空で保存すると削除します。</p>
         <p style="margin-top:14px;"><button type="submit" class="btn">保存する</button></p>
     </form>
+</div>
+
+<div class="card">
+    <div class="card__title">現在の状態</div>
+    <p style="margin-top:0;"><?php include dirname(__DIR__) . '/_stripe_safety.php'; ?></p>
+    <?php if ($configured): ?>
+        <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
+        <form method="post" style="margin-top:10px;">
+            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+            <input type="hidden" name="action" value="test">
+            <button type="submit" class="btn">接続テスト</button>
+        </form>
+    <?php else: ?>
+        <p>⚠️ 未設定です。下のフォームに Stripe の秘密鍵を貼り付けて保存してください。未設定の間は、カード決済はもちろん、<strong>当日支払いの申込受付・参加者管理（名簿）も利用できません</strong>（いずれも Stripe に記録・取得するため）。</p>
+    <?php endif; ?>
 </div>
 
 <?php if ($configured): ?>
