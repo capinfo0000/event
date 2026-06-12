@@ -176,7 +176,7 @@ require __DIR__ . '/_app_header.php';
                             <td><?= $statusHtml ?></td>
                             <td>
                                 <?php if (!empty($p['customer_id'])): ?>
-                                    <form method="post" action="attend.php">
+                                    <form method="post" action="attend.php" style="display:flex; gap:6px; align-items:center; white-space:nowrap;">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
@@ -185,8 +185,8 @@ require __DIR__ . '/_app_header.php';
                                             <button type="submit" class="btn">出席にする</button>
                                         <?php else: ?>
                                             <input type="hidden" name="attend" value="0">
-                                            <span class="badge badge--ok">出席済み</span><br>
-                                            <button type="submit" class="btn btn--ghost" style="margin-top:4px;">取消</button>
+                                            <span class="badge badge--ok">出席済み</span>
+                                            <button type="submit" class="btn btn--ghost">取消</button>
                                         <?php endif; ?>
                                     </form>
                                 <?php else: ?>
