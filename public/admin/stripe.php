@@ -93,10 +93,10 @@ require __DIR__ . '/_app_header.php';
         <li><strong>制限付きキー（Restricted key）</strong>を使う場合は、次の権限だけを設定してください：
             <ul style="margin:6px 0 0;">
                 <li><strong>Charges and Refunds</strong> … 書き込み</li>
-                <li><strong>Checkout Sessions</strong> … 書き込み</li>
                 <li><strong>Customers</strong> … 書き込み</li>
                 <li><strong>Payment Intents</strong> … 読み取り</li>
                 <li><strong>Accounts</strong>（Basic Business Contact Information）… 読み取り</li>
+                <li><strong>Checkout Sessions</strong> … 書き込み</li>
             </ul>
             <span style="display:inline-block;margin-top:4px;">上記以外はすべて「なし」でOK。</span>
         </li>
