@@ -28,6 +28,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
         <div class="card__title">参加者の方へ</div>
         <p>主催者から受け取った<strong>申込リンク</strong>から、各イベントにお申し込みください。</p>
         <p class="muted">カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。</p>
+        <div style="margin-top:10px;"><?php include __DIR__ . '/_stripe_safety.php'; ?></div>
     </div>
 
     <div class="card">

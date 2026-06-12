@@ -77,6 +77,7 @@ $account = null; // Connect 不使用 → 自アカウント
         カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。
         <a href="policy.php">キャンセル・返金ポリシー</a>
     </p>
+    <div style="margin-top:8px;"><?php include __DIR__ . '/_stripe_safety.php'; ?></div>
 </div>
 </body>
 </html>

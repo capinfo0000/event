@@ -87,6 +87,9 @@ $maxParty = min($maxParty, 20);
         <?php if ($capacity > 0 && $remaining !== null): ?>
             <p class="muted">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
         <?php endif; ?>
+        <?php if ($allowPrepay): ?>
+            <div style="margin-top:12px;"><?php include __DIR__ . '/_stripe_safety.php'; ?></div>
+        <?php endif; ?>
     </div>
 
     <?php if ($isFull): ?>
