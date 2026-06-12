@@ -105,10 +105,13 @@ function send_baseline_security_headers(): void
         . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
         . "script-src 'self' $nonce" . $captchaHost . "; "
         . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
-        . "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: same-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cross-Origin-Resource-Policy: same-origin');
     if (request_is_https()) {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
     }
@@ -246,7 +249,13 @@ function delete_event(string $tenantId, string $id): bool
 {
     $stmt = db()->prepare('DELETE FROM events WHERE id = ? AND tenant_id = ?');
     $stmt->execute([$id, $tenantId]);
-    return $stmt->rowCount() > 0;
+    $ok = $stmt->rowCount() > 0;
+    if ($ok) {
+        // 残席キャッシュの残骸を掃除
+        $del = db()->prepare('DELETE FROM headcount_cache WHERE event_id = ?');
+        $del->execute([$id]);
+    }
+    return $ok;
 }
 
 /**

@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 総当たり対策：メール単位（標的型）と IP 単位（メール横断スプレー）の両方で失敗回数を制限。
     if (recent_failed_logins($email) >= 5 || recent_failed_logins_by_ip(client_ip()) >= 20) {
         $error = '試行回数が多すぎます。しばらく時間をおいてからお試しください。';
-    } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null)) {
+    } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null, true)) {
         $error = '認証（CAPTCHA）に失敗しました。もう一度お試しください。';
     } elseif (login_tenant($email, $password)) {
         clear_failed_logins($email);

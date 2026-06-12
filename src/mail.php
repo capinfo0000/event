@@ -38,13 +38,22 @@ function send_mail(string $to, string $subject, string $body): bool
             "[%s] to=%s subject=%s sent=%d\n",
             date('c'),
             mask_email_for_log($to),
-            $subject,
+            mask_subject_for_log($subject),
             $sent ? 1 : 0
         );
         @file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
     }
 
     return $sent;
+}
+
+/**
+ * ログ用に件名から具体名（イベント名など）を伏せる。
+ * 「【…】<イベント名>（…）」の <イベント名> 部分を … に置換。該当が無ければそのまま。
+ */
+function mask_subject_for_log(string $subject): string
+{
+    return (string) preg_replace('/】.*?(（|$)/u', '】…$1', $subject);
 }
 
 /**

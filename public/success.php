@@ -60,8 +60,8 @@ if ($sessionId !== '') {
             <dl>
                 <?php if ($eventName !== ''): ?><dt>イベント</dt><dd><?= e($eventName) ?></dd><?php endif; ?>
                 <?php if ($amountText !== ''): ?><dt>お支払い額</dt><dd><?= e($amountText) ?></dd><?php endif; ?>
-                <?php if ($email !== ''): ?><dt>メール</dt><dd><?= e($email) ?></dd><?php endif; ?>
             </dl>
+            <?php if ($email !== ''): ?><p class="muted">確認メールを <?= e(mask_email_for_log($email)) ?> 宛にお送りします。</p><?php endif; ?>
         <?php else: ?>
             <p class="ng">お支払いを確認できませんでした</p>
             <p>恐れ入りますが、もう一度お試しいただくか、主催者までご連絡ください。</p>

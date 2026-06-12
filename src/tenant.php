@@ -73,10 +73,27 @@ function clear_failed_logins(string $email): void
 
 /* ------------------- 汎用レート制限（未認証エンドポイントの濫用対策） ------------------- */
 
-/** 現在の送信元IPを返す（取得できなければ 'unknown'）。 */
+/**
+ * 現在の送信元IPを返す（取得できなければ 'unknown'）。
+ *
+ * 既定では REMOTE_ADDR を使う（XFF はクライアントが偽装できるため信用しない）。
+ * 信頼できるリバースプロキシ/CDN の背後では .env に TRUSTED_PROXY=1 を設定すると、
+ * X-Forwarded-For の先頭（最も外側のクライアント）を採用する。これにより
+ * 「全員が上流IPで1バケットに集約されて誤ロック/制限無効化される」問題を避ける。
+ */
 function client_ip(): string
 {
-    return (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    if (env('TRUSTED_PROXY') !== null && env('TRUSTED_PROXY') !== '0') {
+        $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+        if ($xff !== '') {
+            $first = trim(explode(',', $xff)[0]);
+            if (filter_var($first, FILTER_VALIDATE_IP) !== false) {
+                return $first;
+            }
+        }
+    }
+    return $remote;
 }
 
 /**
@@ -101,6 +118,9 @@ function rate_limit_check(string $action, int $max, int $windowSec, ?string $ide
     if (random_int(1, 50) === 1) {
         $del = db()->prepare('DELETE FROM rate_events WHERE created_at < ?');
         $del->execute([time() - 86400]);
+        // 残席キャッシュの古い/不要なエントリも併せて掃除（1日以上更新なし）。
+        $delCache = db()->prepare('DELETE FROM headcount_cache WHERE updated_at < ?');
+        $delCache->execute([time() - 86400]);
     }
     return true;
 }
@@ -216,8 +236,14 @@ function find_tenant_by_billing_customer(string $customerId): ?array
  */
 function login_tenant(string $email, string $password): bool
 {
+    // タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化する。
+    $dummyHash = '$2y$12$iOI7xMnDX6U9v5ZKJ/SC1O4K8KEa/DBdKX6/VaaIg3PcM5nyTymFq';
     $tenant = find_tenant_by_email($email);
-    if ($tenant === null || !password_verify($password, $tenant['password_hash'])) {
+    if ($tenant === null) {
+        password_verify($password, $dummyHash);
+        return false;
+    }
+    if (!password_verify($password, $tenant['password_hash'])) {
         return false;
     }
     session_boot();

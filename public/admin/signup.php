@@ -23,7 +23,7 @@ if ($signupOpen && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // 濫用対策: 同一IPからの登録は一定時間内の回数を制限する。
     if (!rate_limit_check('signup', 5, 3600)) {
         $error = '登録の試行が多すぎます。しばらく時間をおいて再度お試しください。';
-    } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null)) {
+    } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null, true)) {
         $error = '認証（CAPTCHA）に失敗しました。もう一度お試しください。';
     } else {
         try {

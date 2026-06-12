@@ -27,10 +27,13 @@ function captcha_widget_html(): string
 }
 
 /**
- * 送信された CAPTCHA トークンを検証する。無効化時は常に true。
- * Turnstile の siteverify へ送信元IPとともに問い合わせる。
+ * 送信された CAPTCHA トークンを検証する。無効化時（キー未設定）は常に true。
+ *
+ * @param bool $failClosed 検証サービスに到達できないときの挙動。
+ *   true  = 失敗扱いで拒否（signup/login 等、悪用時の被害が大きい入口向け）。
+ *   false = 通過（apply/forgot 等、可用性を優先する入口向け）。
  */
-function captcha_verify(?string $token): bool
+function captcha_verify(?string $token, bool $failClosed = false): bool
 {
     if (!captcha_enabled()) {
         return true;
@@ -58,9 +61,9 @@ function captcha_verify(?string $token): bool
     curl_close($ch);
 
     if ($err !== 0 || !is_string($resp)) {
-        // 検証サービスに到達できない場合は、可用性のため通す（レート制限が最低限の防御として残る）。
+        // 検証サービスに到達できないとき: failClosed なら拒否、そうでなければ可用性優先で通す。
         error_log('CAPTCHA 検証の通信失敗: curl errno ' . $err);
-        return true;
+        return !$failClosed;
     }
     $data = json_decode($resp, true);
     return is_array($data) && !empty($data['success']);
