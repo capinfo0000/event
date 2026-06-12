@@ -15,9 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $email = trim((string) ($_POST['email'] ?? ''));
 
-    // 濫用対策（メール爆撃防止）: 同一IPからの再設定申請は一定時間内の回数を制限する。
+    // 濫用対策（メール爆撃防止）: 同一IPからの再設定申請は回数制限＋CAPTCHA で抑止する。
     // ブロック時もアカウント有無を漏らさないよう、表示は常に同じにする。
-    if (rate_limit_check('forgot', 5, 3600)) {
+    if (rate_limit_check('forgot', 5, 3600) && captcha_verify($_POST['cf-turnstile-response'] ?? null)) {
         $token = create_password_reset($email);
         if ($token !== null) {
             $link = base_url() . '/admin/reset.php?token=' . $token;
@@ -47,6 +47,7 @@ require __DIR__ . '/_auth_header.php';
         <input type="hidden" name="csrf_token" value="<?= e($tk) ?>">
         <label>メールアドレス</label>
         <input type="email" name="email" required autocomplete="email">
+        <?= captcha_widget_html() ?>
         <p style="margin-top:14px;"><button type="submit" class="btn">再設定リンクを送る</button></p>
     </form>
     <p class="muted"><a href="login.php">ログインに戻る</a></p>

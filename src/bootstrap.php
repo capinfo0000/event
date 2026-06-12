@@ -20,6 +20,7 @@ require APP_ROOT . '/vendor/autoload.php';
 require __DIR__ . '/db.php';
 require __DIR__ . '/tenant.php';
 require __DIR__ . '/mail.php';
+require __DIR__ . '/captcha.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
@@ -82,8 +83,12 @@ function send_baseline_security_headers(): void
     if (PHP_SAPI === 'cli' || headers_sent()) {
         return;
     }
+    // CAPTCHA(Turnstile)有効時は、そのウィジェット配信元を許可リストに加える。
+    $captchaHost = captcha_enabled() ? ' https://challenges.cloudflare.com' : '';
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
-        . "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+        . "style-src 'self' 'unsafe-inline'; "
+        . "script-src 'self' 'unsafe-inline'" . $captchaHost . "; "
+        . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
         . "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');

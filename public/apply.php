@@ -132,6 +132,7 @@ $maxParty = min($maxParty, 20);
 
         <p class="total">お支払い合計：<span id="total"><?= e(format_amount($defaultUnit, $currency)) ?></span> <span id="total-note" class="hint" style="margin:0;"></span></p>
 
+        <?= captcha_widget_html() ?>
         <?php $blockedInit = (!$stripeReady && $defaultMethod === 'prepay'); ?>
         <button type="submit" class="btn btn--block btn--lg" id="submitBtn" <?= $blockedInit ? 'disabled' : '' ?>><?= $defaultMethod === 'onsite' ? 'この内容で申し込む（当日支払い）→' : '事前決済する →' ?></button>
         <?php if (!$stripeReady): ?>

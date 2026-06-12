@@ -23,6 +23,8 @@ if ($signupOpen && $_SERVER['REQUEST_METHOD'] === 'POST') {
     // 濫用対策: 同一IPからの登録は一定時間内の回数を制限する。
     if (!rate_limit_check('signup', 5, 3600)) {
         $error = '登録の試行が多すぎます。しばらく時間をおいて再度お試しください。';
+    } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null)) {
+        $error = '認証（CAPTCHA）に失敗しました。もう一度お試しください。';
     } else {
         try {
             create_tenant($email, $password, $name);
@@ -59,6 +61,7 @@ require __DIR__ . '/_auth_header.php';
     <input type="email" name="email" required autocomplete="email">
     <label>パスワード（8文字以上）</label>
     <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    <?= captcha_widget_html() ?>
     <p style="margin-top:16px;"><button type="submit" class="btn">登録してはじめる</button></p>
 </form>
 <p class="muted">すでにアカウントをお持ちですか？ <a href="login.php">ログイン</a></p>
