@@ -71,6 +71,11 @@
     .safety-modal__close { position:absolute; top:10px; right:14px; background:none; border:none;
         font-size:1.6rem; line-height:1; cursor:pointer; color:#6b7280; }
     .safety-modal__close:hover { color:#111; }
+    @media (max-width: 480px) {
+        .safety-modal { padding: 10px; align-items: flex-start; }
+        .safety-modal__box { padding: 20px 18px 18px; border-radius: 12px; }
+        .safety-modal__box h2 { font-size: 1.1rem; padding-right: 28px; }
+    }
 </style>
 <script>
     document.addEventListener('keydown', function (e) {

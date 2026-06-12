@@ -182,15 +182,36 @@ td form { margin: 0; }
 .muted { color: var(--muted); font-size: .85rem; }
 .total { font-size: 1.35rem; font-weight: 800; color: var(--accent); margin: 16px 0; }
 
-/* ---------- レスポンシブ ---------- */
-@media (max-width: 720px) {
-  .app { flex-direction: column; }
-  .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: row;
-             align-items: center; overflow-x: auto; }
-  .sidebar__brand { padding: 14px 16px; white-space: nowrap; }
-  .nav { flex-direction: row; flex: 1; overflow-x: auto; padding: 8px; }
-  .nav a { white-space: nowrap; }
-  .nav .nav__sep, .sidebar__foot { display: none; }
-  .topbar { padding: 14px 18px; }
+/* ---------- レスポンシブ（モバイルファースト前提の調整） ---------- */
+@media (max-width: 860px) {
+  .topbar { padding: 14px 18px; flex-wrap: wrap; }
   .page { padding: 18px; }
+}
+@media (max-width: 720px) {
+  /* 管理画面：サイドバーを上部の横スクロールナビへ */
+  .app { flex-direction: column; }
+  .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: column; }
+  .sidebar__brand { padding: 12px 14px; white-space: nowrap; font-size: 1rem; }
+  .nav { flex-direction: row; flex: none; overflow-x: auto; padding: 0 8px 8px; gap: 4px;
+         -webkit-overflow-scrolling: touch; }
+  .nav a { white-space: nowrap; padding: 8px 12px; font-size: .86rem; }
+  .nav .nav__sep, .sidebar__foot { display: none; }
+  .topbar { position: static; padding: 14px 16px; }
+  .topbar__title { font-size: 1.1rem; }
+  .topbar__actions { width: 100%; }
+  .page { padding: 14px; }
+  .card { padding: 16px; }
+  h1 { font-size: 1.25rem; }
+  /* 集計カードは2列に */
+  .stat-grid { grid-auto-flow: row; grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .container { padding: 18px 14px; }
+  .stat__num { font-size: 1.2rem; }
+  .stat { padding: 12px; }
+  .row { gap: 0; }
+  .row > div { min-width: 100%; }
+  .btn { padding: 11px 16px; }                 /* タップしやすく */
+  .topbar__actions .btn { padding: 9px 12px; font-size: .85rem; }
+  .total { font-size: 1.2rem; }
 }
