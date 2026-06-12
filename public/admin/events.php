@@ -30,9 +30,23 @@ $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
 $token = csrf_token();
 
+// 編集（?edit=ID）または新規（?new）のときだけポップアップを開いた状態で表示
+$openModal = ($editing !== null) || isset($_GET['new']);
+
 $pageTitle = 'イベント管理';
+$topActions = '<a class="btn" href="events.php?new=1">＋ 新規イベントを作成</a>';
 require __DIR__ . '/_app_header.php';
 ?>
+<style>
+    .ev-modal { display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:1000;
+        align-items:flex-start; justify-content:center; padding:24px; overflow-y:auto; }
+    .ev-modal.is-open { display:flex; }
+    .ev-modal__box { background:#fff; border-radius:14px; max-width:640px; width:100%; position:relative;
+        box-shadow:0 20px 60px rgba(0,0,0,.3); }
+    .ev-modal__close { position:absolute; top:8px; right:14px; background:none; border:none; font-size:1.7rem;
+        line-height:1; cursor:pointer; color:#6b7280; z-index:1; }
+    @media (max-width:480px){ .ev-modal{ padding:10px; } }
+</style>
 <?php if (stored_stripe_key() === null): ?>
     <div class="flash flash--ng">⚠️ Stripe キー未設定です。<a href="stripe.php">Stripe 設定</a>から API キーを登録してください。カード決済だけでなく、<strong>当日支払いの申込受付・参加者管理（名簿）にも Stripe を使う</strong>ため、現金のみの運用でも設定が必要です。</div>
 <?php endif; ?>
@@ -41,9 +55,12 @@ require __DIR__ . '/_app_header.php';
     <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
 <?php endif; ?>
 
-<div class="card">
-    <div class="card__title"><?= $editing ? 'イベントを編集' : 'イベントを新規登録' ?></div>
-    <form method="post" action="event_save.php">
+<div class="ev-modal<?= $openModal ? ' is-open' : '' ?>" id="eventModal" onclick="if(event.target===this)closeEventModal()">
+  <div class="ev-modal__box">
+    <button type="button" class="ev-modal__close" onclick="closeEventModal()" aria-label="閉じる">×</button>
+    <div class="card" style="margin:0;">
+        <div class="card__title"><?= $editing ? 'イベントを編集' : 'イベントを新規登録' ?></div>
+        <form method="post" action="event_save.php">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="id" value="<?= e((string) $form['id']) ?>">
 
@@ -94,15 +111,17 @@ require __DIR__ . '/_app_header.php';
 
         <p style="margin-top:18px;">
             <button type="submit" class="btn"><?= $editing ? '更新する' : '登録する' ?></button>
-            <?php if ($editing): ?><a class="btn btn--ghost" href="events.php">新規登録に切り替え</a><?php endif; ?>
+            <a class="btn btn--ghost" href="events.php" onclick="closeEventModal();">閉じる</a>
         </p>
-    </form>
+        </form>
+    </div>
+  </div>
 </div>
 
 <div class="card">
     <div class="card__title">登録済みイベント（<?= count($events) ?>件）</div>
     <?php if (empty($events)): ?>
-        <p class="muted">まだイベントがありません。上のフォームから登録してください。</p>
+        <p class="muted">まだイベントがありません。右上の「＋ 新規イベントを作成」から登録してください。</p>
     <?php else: ?>
         <div class="table-wrap">
             <table>
@@ -137,4 +156,13 @@ require __DIR__ . '/_app_header.php';
         </div>
     <?php endif; ?>
 </div>
+<script>
+    function closeEventModal() {
+        var m = document.getElementById('eventModal');
+        if (m) m.classList.remove('is-open');
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeEventModal();
+    });
+</script>
 <?php require __DIR__ . '/_app_footer.php'; ?>
