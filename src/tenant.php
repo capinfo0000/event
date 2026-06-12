@@ -49,6 +49,14 @@ function recent_failed_logins(string $email, int $windowSec = 900): int
     return (int) $stmt->fetchColumn();
 }
 
+/** 直近 $windowSec 秒の失敗回数（IP単位）。メール横断のスプレー攻撃対策。 */
+function recent_failed_logins_by_ip(string $ip, int $windowSec = 900): int
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND created_at >= ?');
+    $stmt->execute([$ip, time() - $windowSec]);
+    return (int) $stmt->fetchColumn();
+}
+
 /** 失敗を記録する。 */
 function record_failed_login(string $email): void
 {

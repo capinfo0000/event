@@ -363,6 +363,25 @@ function event_headcount(string $eventId, ?string $account): int
 }
 
 /**
+ * 残席算定（event_headcount）の短時間キャッシュ付きラッパー。
+ * 公開ページ（apply/o）の表示用に使い、Stripe 全件取得の連打を防ぐ。
+ * 定員の最終判定（checkout.php）はキャッシュを使わず event_headcount() を直接呼ぶこと。
+ */
+function event_headcount_cached(string $eventId, ?string $account, int $ttl = 60): int
+{
+    $stmt = db()->prepare('SELECT headcount, updated_at FROM headcount_cache WHERE event_id = ?');
+    $stmt->execute([$eventId]);
+    $row = $stmt->fetch();
+    if ($row !== false && (time() - (int) $row['updated_at']) < $ttl) {
+        return (int) $row['headcount'];
+    }
+    $n = event_headcount($eventId, $account);
+    $up = db()->prepare('INSERT OR REPLACE INTO headcount_cache (event_id, headcount, updated_at) VALUES (?, ?, ?)');
+    $up->execute([$eventId, $n, time()]);
+    return $n;
+}
+
+/**
  * このアプリの公開ベースURL（success/cancel/webhook の組み立てに使用）。
  * ローカル開発では APP_BASE_URL=http://localhost:8000 を想定。
  */

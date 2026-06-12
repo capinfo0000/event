@@ -20,6 +20,12 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
+// 濫用対策: 公開ページの連打（Stripe集計の増幅・偵察）を IP 単位で緩く制限する。
+if (!rate_limit_check('view_apply', 120, 300)) {
+    http_response_code(429);
+    exit('アクセスが多すぎます。しばらくしてから再度お開きください。');
+}
+
 // 運営者の Stripe キーが設定済みか。未設定でもフォームは表示し、申込ボタン押下時（checkout.php）に案内する。
 $stripeReady = env('STRIPE_SECRET_KEY') !== null;
 
@@ -29,7 +35,7 @@ $remaining = null; // null = 定員管理なし／不明
 $isFull = false;
 if ($capacity > 0 && $stripeReady) {
     try {
-        $remaining = max(0, $capacity - event_headcount($event['id'], effective_stripe_account($event['stripe_account_id'] ?? null)));
+        $remaining = max(0, $capacity - event_headcount_cached($event['id'], effective_stripe_account($event['stripe_account_id'] ?? null)));
         $isFull = ($remaining <= 0);
     } catch (\Throwable $e) {
         $remaining = null;

@@ -18,6 +18,12 @@ if ($tenant === null) {
     exit('主催者が見つかりません。');
 }
 
+// 濫用対策: 公開一覧の連打（Stripe集計の増幅・偵察）を IP 単位で緩く制限する。
+if (!rate_limit_check('view_o', 120, 300)) {
+    http_response_code(429);
+    exit('アクセスが多すぎます。しばらくしてから再度お開きください。');
+}
+
 // 公開イベント一覧（残席計算は運営者自身の Stripe アカウントから取得）
 $events = tenant_events($tenantId);
 $account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Connect: 接続済みは主催者のStripe
@@ -47,7 +53,7 @@ $account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Co
                 $remaining = null; $full = false;
                 if ($cap > 0) {
                     try {
-                        $remaining = max(0, $cap - event_headcount($ev['id'], $account));
+                        $remaining = max(0, $cap - event_headcount_cached($ev['id'], $account));
                         $full = ($remaining <= 0);
                     } catch (\Throwable $e) { $remaining = null; }
                 }

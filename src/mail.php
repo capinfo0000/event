@@ -18,14 +18,6 @@ function send_mail(string $to, string $subject, string $body): bool
     $fromAddr = env('MAIL_FROM', 'no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
     $fromName = env('MAIL_FROM_NAME', 'イベント事前決済');
 
-    // 監査・開発用にログへ記録（個人情報を含むため logs/ は公開領域外・gitignore）。
-    // ただしパスワード再設定リンク等の秘密トークンはログに残さない（漏洩時の悪用防止）。
-    $logBody = mask_secrets_for_log($body);
-    $logLine = sprintf("[%s] to=%s subject=%s\n%s\n---\n", date('c'), $to, $subject, $logBody);
-    $logPath = APP_ROOT . '/logs/mail.log';
-    rotate_log_if_large($logPath);
-    @file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
-
     $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
     $encodedFromName = '=?UTF-8?B?' . base64_encode($fromName) . '?=';
     $headers = [
@@ -35,21 +27,37 @@ function send_mail(string $to, string $subject, string $body): bool
         'From: ' . $encodedFromName . ' <' . $fromAddr . '>',
     ];
 
-    // CLI やメール未設定環境では mail() が失敗することがあるが、ログには残る
-    return @mail($to, $encodedSubject, $body, implode("\r\n", $headers));
+    $sent = @mail($to, $encodedSubject, $body, implode("\r\n", $headers));
+
+    // 監査用ログ（既定オン）。個人情報・本文・トークンは残さない。
+    // 記録するのは「いつ・どの宛先（マスク）・件名・送信可否」のみ。MAIL_LOG=0 で完全無効化。
+    if (env('MAIL_LOG', '1') !== '0') {
+        $logPath = APP_ROOT . '/logs/mail.log';
+        rotate_log_if_large($logPath);
+        $logLine = sprintf(
+            "[%s] to=%s subject=%s sent=%d\n",
+            date('c'),
+            mask_email_for_log($to),
+            $subject,
+            $sent ? 1 : 0
+        );
+        @file_put_contents($logPath, $logLine, FILE_APPEND | LOCK_EX);
+    }
+
+    return $sent;
 }
 
 /**
- * ログ記録用に秘密情報をマスクする。
- * - パスワード再設定リンク（reset.php?token=...）や ?token=/&token= の値を伏せ字に。
+ * ログ用にメールアドレスをマスクする（ローカル部の先頭1文字＋ドメインのみ残す）。
+ * 例: yamada.taro@example.com → y***@example.com
  */
-function mask_secrets_for_log(string $text): string
+function mask_email_for_log(string $email): string
 {
-    // クエリの token=... を伏せる（URL中・本文中いずれも）
-    $text = preg_replace('/([?&]token=)[^\s&"\']+/i', '$1***', $text);
-    // reset.php への完全なリンクを伏せる（token を付けない形でも）
-    $text = preg_replace('#https?://\S*reset\.php\S*#i', '[再設定リンク（ログ非記録）]', $text);
-    return $text;
+    $at = strpos($email, '@');
+    if ($at === false || $at === 0) {
+        return '***';
+    }
+    return substr($email, 0, 1) . '***' . substr($email, $at);
 }
 
 /**

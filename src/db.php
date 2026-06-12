@@ -132,6 +132,16 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events(action, identifier, created_at);');
+
+    // 残席（headcount）の短時間キャッシュ。公開ページからの Stripe 全件取得の連打を防ぐ。
+    // ※あくまで「表示用」。定員の最終判定（checkout）はキャッシュを使わず都度算定する。
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS headcount_cache (
+            event_id   TEXT PRIMARY KEY,
+            headcount  INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+    SQL);
 }
 
 /**
