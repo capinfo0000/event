@@ -16,15 +16,15 @@ $current = basename($_SERVER['SCRIPT_NAME'] ?? '');
 
 /** ナビ項目（active 判定用に対象スクリプト名の配列を持つ）。 */
 $navItems = [
-    ['dashboard.php', '🏠', 'ダッシュボード', ['dashboard.php']],
-    ['setup.php',     '🚀', '初期設定',       ['setup.php']],
-    ['events.php',    '📅', 'イベント管理',   ['events.php']],
-    ['index.php',     '👥', '参加者管理',     ['index.php']],
-    ['stripe.php',    '💳', 'Stripe設定',     ['stripe.php']],
-    ['account.php',   '⚙️', 'アカウント設定', ['account.php']],
+    ['dashboard.php', '', 'ダッシュボード', ['dashboard.php']],
+    ['setup.php',     '', '初期設定',       ['setup.php']],
+    ['events.php',    '', 'イベント管理',   ['events.php']],
+    ['index.php',     '', '参加者管理',     ['index.php']],
+    ['stripe.php',    '', 'Stripe設定',     ['stripe.php']],
+    ['account.php',   '', 'アカウント設定', ['account.php']],
 ];
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {
-    $navItems[] = ['invites.php', '✉️', '招待を発行', ['invites.php']];
+    $navItems[] = ['invites.php', '', '招待を発行', ['invites.php']];
 }
 ?>
 <!DOCTYPE html>
@@ -38,16 +38,16 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand"><span class="logo">🎟️</span> イベント決済</div>
+        <div class="sidebar__brand">イベント決済</div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
                 <a href="<?= e($href) ?>" class="<?= in_array($current, $match, true) ? 'active' : '' ?>">
-                    <span class="ic"><?= $icon ?></span> <?= e($label) ?>
+                    <?= e($label) ?>
                 </a>
             <?php endforeach; ?>
             <div class="nav__sep"></div>
-            <a href="../o.php?t=<?= e(urlencode($tenant['id'])) ?>" target="_blank"><span class="ic">🔗</span> 公開ページを見る</a>
-            <a href="logout.php"><span class="ic">↩</span> ログアウト</a>
+            <a href="../o.php?t=<?= e(urlencode($tenant['id'])) ?>" target="_blank">公開ページを見る</a>
+            <a href="logout.php">ログアウト</a>
         </nav>
         <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
     </aside>

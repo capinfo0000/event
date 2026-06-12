@@ -36,7 +36,7 @@ $account = null; // Connect 不使用 → 自アカウント
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> <?= e($tenant['display_name']) ?> のイベント</div>
+    <div class="brandbar"><?= e($tenant['display_name']) ?> のイベント</div>
 
     <?php if (empty($events)): ?>
         <div class="card"><p style="margin:0;">現在受付中のイベントはありません。</p></div>
@@ -54,7 +54,7 @@ $account = null; // Connect 不使用 → 自アカウント
             ?>
             <div class="card">
                 <div class="card__title" style="font-size:1.15rem;"><?= e($ev['name']) ?></div>
-                <p class="muted">📅 <?= e($ev['date']) ?>　📍 <?= e($ev['place']) ?></p>
+                <p class="muted"><?= e($ev['date']) ?>　<?= e($ev['place']) ?></p>
                 <p><?= e($ev['description']) ?></p>
                 <p class="ev-price">
                     <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>

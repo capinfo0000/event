@@ -13,4 +13,4 @@ declare(strict_types=1);
 </head>
 <body>
 <div class="container container--narrow">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント決済</div>
+    <div class="brandbar">イベント決済</div>

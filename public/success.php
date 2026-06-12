@@ -51,7 +51,7 @@ if ($sessionId !== '') {
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <div class="card">
         <?php if ($paid): ?>
             <p class="ok">✅ お申し込みが完了しました</p>

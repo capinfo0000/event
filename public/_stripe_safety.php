@@ -7,7 +7,7 @@
  */
 ?>
 <button type="button" class="safety-trigger" onclick="document.getElementById('stripeSafetyModal').classList.add('is-open')">
-    🔒 クレジットカード決済の安全性について
+    Stripeについて
 </button>
 
 <div id="stripeSafetyModal" class="safety-modal" role="dialog" aria-modal="true" aria-labelledby="safetyTitle"
@@ -15,7 +15,7 @@
     <div class="safety-modal__box">
         <button type="button" class="safety-modal__close" aria-label="閉じる"
                 onclick="document.getElementById('stripeSafetyModal').classList.remove('is-open')">×</button>
-        <h2 id="safetyTitle">クレジットカード決済の安全性について</h2>
+        <h2 id="safetyTitle">Stripe（決済サービス）について</h2>
         <p class="safety-lead">このイベントのカード決済は、世界的な決済代行サービス <strong>Stripe（ストライプ）</strong> を通じて行われます。
         以下は、その安全性を客観的な事実にもとづいて説明したものです。</p>
 

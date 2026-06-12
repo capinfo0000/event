@@ -70,12 +70,12 @@ function step_badge(bool $ok): string
             <div class="card__title" style="margin:0;">申込リンクを共有する</div>
             <p class="muted">この公開リンクを参加者に渡せば、一覧から選んで申し込めます。</p>
             <input type="text" readonly value="<?= e($publicUrl) ?>" onclick="this.select()">
-            <p style="margin-top:10px;"><a class="btn btn--ghost" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">公開ページを開く ↗</a></p>
+            <p style="margin-top:10px;"><a class="btn btn--ghost" href="<?= e($publicUrl) ?>" target="_blank" rel="noopener">公開ページを開く</a></p>
         </div>
     </div>
 </div>
 
 <?php if ($hasKey && $hasEvent): ?>
-    <div class="flash flash--ok">🎉 基本セットアップは完了です。あとは申込リンクを共有するだけ！</div>
+    <div class="flash flash--ok">基本セットアップは完了です。あとは申込リンクを共有するだけ！</div>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>

@@ -112,7 +112,7 @@ require __DIR__ . '/_app_header.php';
 
 <?php if ($selectedEvent !== null): ?>
     <p class="muted">
-        📅 <?= e($selectedEvent['date'] ?? '') ?>　📍 <?= e($selectedEvent['place'] ?? '') ?>
+        <?= e($selectedEvent['date'] ?? '') ?>　<?= e($selectedEvent['place'] ?? '') ?>
         <?php if (!empty($selectedEvent['capacity'])): ?>　／ 定員目安: <?= (int) $selectedEvent['capacity'] ?> 名<?php endif; ?>
     </p>
 <?php endif; ?>

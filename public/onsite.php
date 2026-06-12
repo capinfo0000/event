@@ -30,7 +30,7 @@ $currency = $event['currency'] ?? 'jpy';
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <div class="card">
         <p class="ok">✅ お申し込みを受け付けました</p>
         <p>当日、会場で参加費をお支払いください。<strong>今回はまだお支払いは発生していません。</strong></p>

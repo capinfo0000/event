@@ -20,6 +20,6 @@ $title = $title ?? '';
 </head>
 <body>
 <div class="container legal">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント決済</div>
+    <div class="brandbar">イベント決済</div>
     <div class="card">
         <h1><?= e($title) ?></h1>

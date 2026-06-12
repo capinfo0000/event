@@ -20,7 +20,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント事前決済</div>
+    <div class="brandbar">イベント事前決済</div>
     <h1>イベント事前決済サービス</h1>
     <p class="muted">小規模イベントの参加費を、事前決済（前払い）または当日支払いで集められるサービスです。</p>
 

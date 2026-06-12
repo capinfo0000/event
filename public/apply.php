@@ -74,10 +74,10 @@ $maxParty = min($maxParty, 20);
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <h1><?= e($event['name'] ?? '') ?></h1>
     <div class="card">
-        <p class="muted">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
+        <p class="muted"><?= e($event['date'] ?? '') ?>　<?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
             <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>

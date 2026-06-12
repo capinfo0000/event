@@ -72,7 +72,7 @@ require __DIR__ . '/_app_header.php';
 <?php endif; ?>
 
 <div class="card">
-    <div class="card__title"><span class="ic">💳</span> 現在の状態</div>
+    <div class="card__title">現在の状態</div>
     <?php if ($configured): ?>
         <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
         <form method="post" style="margin-top:10px;">
@@ -86,7 +86,7 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
-    <div class="card__title"><span class="ic">🔑</span> APIキーの取得・登録</div>
+    <div class="card__title">APIキーの取得・登録</div>
     <ol class="muted" style="margin-top:0;">
         <li>Stripeにログイン →「開発者」→「APIキー」を開く（下のボタン）。</li>
         <li><strong>制限付きキー（Restricted key）</strong>の作成を推奨（万一漏れても被害を限定できます）。
@@ -94,8 +94,8 @@ require __DIR__ . '/_app_header.php';
         <li>まずは<strong>テストキー（sk_test_…）</strong>で動作確認し、本番は <strong>sk_live_…</strong> に差し替え。</li>
     </ol>
     <p>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く ↗</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener" style="margin-left:8px;">本番用APIキーを開く ↗</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener" style="margin-left:8px;">本番用APIキーを開く</a>
     </p>
 
     <form method="post" style="margin-top:16px;">
@@ -110,7 +110,7 @@ require __DIR__ . '/_app_header.php';
 
 <?php if ($configured): ?>
 <div class="card">
-    <div class="card__title"><span class="ic">🗑️</span> 鍵の削除</div>
+    <div class="card__title">鍵の削除</div>
     <form method="post" onsubmit="return confirm('保存した鍵を削除します。カード決済は使えなくなります。よろしいですか？');">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="action" value="clear">

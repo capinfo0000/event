@@ -22,7 +22,7 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <div class="card">
         <h1 style="font-size:1.2rem;">お支払いは完了していません</h1>
         <p class="muted">料金は請求されていません。もう一度お申し込みいただけます。</p>

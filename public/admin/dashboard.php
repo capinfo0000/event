@@ -60,7 +60,7 @@ foreach ($byDate as $day => $cnt) {
 
 $pageTitle = 'ダッシュボード';
 $pageSub = 'ようこそ、' . $tenant['display_name'] . ' さん';
-$topActions = '<a class="btn" href="events.php">＋ イベントを作成</a>';
+$topActions = '<a class="btn" href="events.php">イベントを作成</a>';
 require __DIR__ . '/_app_header.php';
 ?>
 <div class="stat-grid">
@@ -72,7 +72,7 @@ require __DIR__ . '/_app_header.php';
 
 <div class="charts">
     <div class="card chart-card">
-        <div class="card__title"><span class="ic">📈</span> 申込推移（累計）</div>
+        <div class="card__title">申込推移（累計）</div>
         <?php if ($totalApplied > 0): ?>
             <div class="chart-box"><canvas id="chartTrend"></canvas></div>
         <?php else: ?>
@@ -80,7 +80,7 @@ require __DIR__ . '/_app_header.php';
         <?php endif; ?>
     </div>
     <div class="card chart-card">
-        <div class="card__title"><span class="ic">🍩</span> 支払い方法の内訳</div>
+        <div class="card__title">支払い方法の内訳</div>
         <?php if ($totalApplied > 0): ?>
             <div class="chart-box"><canvas id="chartMethods"></canvas></div>
         <?php else: ?>
@@ -90,7 +90,7 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
-    <div class="card__title"><span class="ic">💳</span> Stripe（決済）</div>
+    <div class="card__title">Stripe（決済）</div>
     <?php if ($stripeReady): ?>
         <p>✅ Stripe キー設定済み。参加費はあなたの Stripe アカウントへ直接入金されます。</p>
         <p class="muted">クレジットカード（事前決済）と現金（当日支払い）の両方に対応します。</p>
@@ -106,7 +106,7 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
-    <div class="card__title"><span class="ic">🔗</span> 公開イベントページ</div>
+    <div class="card__title">公開イベントページ</div>
     <p class="muted" style="margin-top:0;">この1つのリンクを参加者に共有すれば、開催中のイベントを一覧から選んで申し込めます。</p>
     <input type="text" readonly value="<?= e($publicUrl) ?>" onclick="this.select()">
     <p style="margin: 16px 0 0;">
