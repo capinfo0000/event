@@ -157,7 +157,7 @@ textarea { min-height: 72px; resize: vertical; }
 /* ---------- テーブル ---------- */
 .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow); }
 table { border-collapse: collapse; width: 100%; background: var(--surface); }
-th, td { border-bottom: 1px solid var(--border); padding: 11px 14px; text-align: left; font-size: .88rem; vertical-align: middle; }
+th, td { border-bottom: 1px solid var(--border); padding: 11px 14px; text-align: left; font-size: .88rem; vertical-align: middle; white-space: nowrap; }
 th { background: #f8fafc; font-size: .76rem; letter-spacing: .03em; text-transform: none; color: var(--muted); font-weight: 700; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #fafbfc; }
