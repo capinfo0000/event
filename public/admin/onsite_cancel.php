@@ -37,6 +37,12 @@ if ($customerId === '' || env('STRIPE_SECRET_KEY') === null) {
     back_to_admin($eventId, '取消対象が不正です。', 'ng');
 }
 
+// IDOR対策: 指定 customer_id が「このイベントの当日支払い参加者」であることを Stripe 側で検証する。
+$target = find_event_participant_by_customer($eventId, $account, $customerId);
+if ($target === null || ($target['payment_type'] ?? '') !== 'onsite') {
+    back_to_admin($eventId, '取消対象の参加者が見つかりません。', 'ng');
+}
+
 init_stripe();
 $opts = stripe_opts($account);
 

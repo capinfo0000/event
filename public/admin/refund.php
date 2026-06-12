@@ -48,6 +48,12 @@ if ($paymentIntent === '') {
     back_to_admin($eventId, '返金対象が不正です。', 'ng');
 }
 
+// IDOR対策: 指定 payment_intent が「このイベントの事前決済」であることを Stripe 側で検証する。
+// （単一 Stripe 共有のため、検証しないと他テナントの決済に返金できてしまう。）
+if (find_event_participant_by_payment_intent($eventId, $account, $paymentIntent) === null) {
+    back_to_admin($eventId, '返金対象の決済が見つかりません。', 'ng');
+}
+
 init_stripe();
 $opts = stripe_opts($account);
 

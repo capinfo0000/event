@@ -25,6 +25,15 @@ function db(): \PDO
     if (!is_dir($dir)) {
         mkdir($dir, 0700, true);
     }
+    // 保険的防御: data/ が万一公開領域に置かれても Web から DB を直接DLできないよう deny を置く。
+    $htaccess = $dir . '/.htaccess';
+    if (!is_file($htaccess)) {
+        @file_put_contents(
+            $htaccess,
+            "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n"
+        );
+    }
     $path = env('DB_PATH', $dir . '/app.sqlite');
 
     $pdo = new \PDO('sqlite:' . $path, null, null, [
@@ -112,6 +121,17 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts_id ON login_attempts(identifier, created_at);');
+
+    // 汎用レート制限（未認証エンドポイントの濫用対策）。action 単位・identifier(IP等)単位で回数を数える。
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS rate_events (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            action     TEXT NOT NULL,   -- 'signup' / 'forgot' / 'apply' など
+            identifier TEXT NOT NULL,   -- 通常は送信元IP
+            created_at INTEGER NOT NULL
+        );
+    SQL);
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events(action, identifier, created_at);');
 }
 
 /**

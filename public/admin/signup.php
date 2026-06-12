@@ -11,19 +11,27 @@ require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// 新規登録の受付可否（単独運営に切り替える場合は .env で ALLOW_SIGNUP=0 にして閉じられる）。
+$signupOpen = env('ALLOW_SIGNUP', '1') !== '0';
+
+if ($signupOpen && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $email = (string) ($_POST['email'] ?? '');
     $name = (string) ($_POST['display_name'] ?? '');
     $password = (string) ($_POST['password'] ?? '');
 
-    try {
-        create_tenant($email, $password, $name);
-        login_tenant($email, $password);
-        header('Location: dashboard.php');
-        exit;
-    } catch (\Throwable $e) {
-        $error = $e->getMessage();
+    // 濫用対策: 同一IPからの登録は一定時間内の回数を制限する。
+    if (!rate_limit_check('signup', 5, 3600)) {
+        $error = '登録の試行が多すぎます。しばらく時間をおいて再度お試しください。';
+    } else {
+        try {
+            create_tenant($email, $password, $name);
+            login_tenant($email, $password);
+            header('Location: dashboard.php');
+            exit;
+        } catch (\Throwable $e) {
+            $error = $e->getMessage();
+        }
     }
 }
 
@@ -37,6 +45,10 @@ $token = csrf_token();
 require __DIR__ . '/_auth_header.php';
 ?>
 <h1>主催者アカウント登録</h1>
+<?php if (!$signupOpen): ?>
+    <div class="card"><p style="margin:0;">現在、新規登録の受付を停止しています。アカウントについては運営者へお問い合わせください。</p></div>
+    <p class="muted">すでにアカウントをお持ちですか？ <a href="login.php">ログイン</a></p>
+<?php else: ?>
 <p class="muted">メールアドレスとパスワードを入力するだけで、すぐに始められます。</p>
 <?php if ($error !== ''): ?><p class="err"><?= e($error) ?></p><?php endif; ?>
 <form method="post" class="card">
@@ -50,4 +62,5 @@ require __DIR__ . '/_auth_header.php';
     <p style="margin-top:16px;"><button type="submit" class="btn">登録してはじめる</button></p>
 </form>
 <p class="muted">すでにアカウントをお持ちですか？ <a href="login.php">ログイン</a></p>
+<?php endif; ?>
 <?php require __DIR__ . '/_auth_footer.php'; ?>

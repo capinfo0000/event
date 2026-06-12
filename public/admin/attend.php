@@ -38,6 +38,12 @@ if ($customerId === '' || env('STRIPE_SECRET_KEY') === null) {
     back_to_admin($eventId, '対象が不正です。', 'ng');
 }
 
+// IDOR対策: 指定 customer_id が「このイベントの参加者」であることを Stripe 側で検証する。
+// （全テナントが単一 Stripe を共有するため、ID だけでは他テナントの顧客も指せてしまう。）
+if (find_event_participant_by_customer($eventId, $account, $customerId) === null) {
+    back_to_admin($eventId, '対象の参加者が見つかりません。', 'ng');
+}
+
 init_stripe();
 $opts = stripe_opts($account);
 

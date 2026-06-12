@@ -55,6 +55,47 @@ function load_env(string $path): void
 load_env(APP_ROOT . '/.env');
 
 /**
+ * リクエストが HTTPS で配信されているか（リバースプロキシ経由も考慮）。
+ * APP_BASE_URL が https の場合も「HTTPS 配信前提」とみなす。
+ */
+function request_is_https(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+    if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') {
+        return true;
+    }
+    return str_starts_with(strtolower((string) getenv('APP_BASE_URL')), 'https://');
+}
+
+/**
+ * 全レスポンス共通のセキュリティヘッダを送る（出力前に bootstrap で1回だけ）。
+ * - クリックジャッキング対策（frame-ancestors / X-Frame-Options）
+ * - MIME スニッフィング抑止、リファラ最小化
+ * - HTTPS 配信時は HSTS
+ * インラインの style/script/イベントハンドラを使う既存UIを壊さないため、
+ * script/style は 'unsafe-inline' を許可しつつ、frame/base/form を厳格化する。
+ */
+function send_baseline_security_headers(): void
+{
+    if (PHP_SAPI === 'cli' || headers_sent()) {
+        return;
+    }
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
+        . "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+        . "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    header('X-Frame-Options: DENY');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: same-origin');
+    if (request_is_https()) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+}
+
+send_baseline_security_headers();
+
+/**
  * 環境変数を取得。必須かつ未設定なら例外。
  */
 function env(string $key, ?string $default = null): ?string
@@ -513,4 +554,56 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 
     return $participants;
+}
+
+/**
+ * 指定イベントの参加者の中から customer_id 一致を返す（無ければ null）。
+ * 出席/集金/当日取消の操作対象が「本当にそのイベントの参加者か」を検証するために使う
+ * （全テナントが単一 Stripe アカウントを共有するため、ID だけでは他テナントの顧客も指せてしまう＝IDOR 対策）。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_customer(string $eventId, ?string $account, string $customerId): ?array
+{
+    if ($customerId === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (($p['customer_id'] ?? '') === $customerId) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/**
+ * 指定イベントの参加者の中から payment_intent 一致を返す（無ければ null）。返金の IDOR 対策に使う。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_payment_intent(string $eventId, ?string $account, string $paymentIntent): ?array
+{
+    if ($paymentIntent === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (($p['payment_intent'] ?? '') === $paymentIntent) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/**
+ * CSV セルの数式インジェクション対策。
+ * 先頭が = + - @ または制御文字（Tab/CR）で始まる値は、Excel/Sheets が数式として
+ * 解釈・実行しないよう先頭にシングルクオートを付けて無害化する。
+ */
+function csv_cell(?string $value): string
+{
+    $value = (string) $value;
+    if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        return "'" . $value;
+    }
+    return $value;
 }

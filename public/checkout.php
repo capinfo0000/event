@@ -17,6 +17,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit('POST のみ許可されています。');
 }
 
+// 濫用対策: 未認証の申込（当日申込はメール送信・Stripe顧客作成を伴う）は
+// 同一IPからの回数を制限する。メール爆撃・偽顧客大量投入・定員枠潰しを防ぐ。
+if (!rate_limit_check('apply', 20, 3600)) {
+    http_response_code(429);
+    exit('申込の試行が多すぎます。しばらく時間をおいて再度お試しください。');
+}
+
 $eventId = (string)($_POST['event_id'] ?? '');
 $event = find_event($eventId);
 

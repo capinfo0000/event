@@ -1,0 +1,8 @@
+# ログ（個人情報を含む）への Web 直接アクセスを全面拒否する。
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

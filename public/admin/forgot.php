@@ -15,16 +15,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $email = trim((string) ($_POST['email'] ?? ''));
 
-    $token = create_password_reset($email);
-    if ($token !== null) {
-        $link = base_url() . '/admin/reset.php?token=' . $token;
-        $body = "パスワード再設定のご依頼を受け付けました。\n\n"
-            . "以下のリンクから1時間以内に新しいパスワードを設定してください。\n"
-            . $link . "\n\n"
-            . "心当たりがない場合は、このメールは破棄してください。\n";
-        send_mail($email, 'パスワード再設定のご案内', $body);
+    // 濫用対策（メール爆撃防止）: 同一IPからの再設定申請は一定時間内の回数を制限する。
+    // ブロック時もアカウント有無を漏らさないよう、表示は常に同じにする。
+    if (rate_limit_check('forgot', 5, 3600)) {
+        $token = create_password_reset($email);
+        if ($token !== null) {
+            $link = base_url() . '/admin/reset.php?token=' . $token;
+            $body = "パスワード再設定のご依頼を受け付けました。\n\n"
+                . "以下のリンクから1時間以内に新しいパスワードを設定してください。\n"
+                . $link . "\n\n"
+                . "心当たりがない場合は、このメールは破棄してください。\n";
+            send_mail($email, 'パスワード再設定のご案内', $body);
+        }
     }
-    $done = true; // 有無に関わらず同じ応答
+    $done = true; // 有無・制限に関わらず同じ応答
 }
 
 $tk = csrf_token();

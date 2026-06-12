@@ -7,23 +7,36 @@
 
 declare(strict_types=1);
 
+/** ログインセッションのアイドルタイムアウト（秒）。最終操作からこの時間で失効。 */
+const SESSION_IDLE_TIMEOUT = 1800; // 30分
+
 /** セッションを開始（未開始なら）。Cookie を堅牢化してから開始する。 */
 function session_boot(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
-    // HTTPS 配信時は Secure 属性を付ける（リバースプロキシ経由も考慮）
-    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    // HTTPS 配信（プロキシ経由・APP_BASE_URL が https を含む）なら Secure 属性を常時付与
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
         'httponly' => true,
-        'secure' => $secure,
+        'secure' => request_is_https(),
         'samesite' => 'Lax',
     ]);
     session_start();
+
+    // ログイン中セッションのアイドルタイムアウト（最終操作から一定時間で強制ログアウト）
+    if (!empty($_SESSION['tenant_id'])) {
+        $now = time();
+        $last = (int) ($_SESSION['last_activity'] ?? $now);
+        if ($now - $last > SESSION_IDLE_TIMEOUT) {
+            $_SESSION = [];
+            session_destroy();
+            return;
+        }
+        $_SESSION['last_activity'] = $now;
+    }
 }
 
 /* ------------------- ログイン試行の制限（総当たり対策） ------------------- */
@@ -50,11 +63,70 @@ function clear_failed_logins(string $email): void
     $stmt->execute([strtolower(trim($email))]);
 }
 
+/* ------------------- 汎用レート制限（未認証エンドポイントの濫用対策） ------------------- */
+
+/** 現在の送信元IPを返す（取得できなければ 'unknown'）。 */
+function client_ip(): string
+{
+    return (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+}
+
+/**
+ * 直近 $windowSec 秒の $action 実行回数（identifier 単位）を数え、$max 未満なら許可して記録する。
+ * 上限に達していれば記録せず false を返す（＝ブロック）。$identifier 省略時は送信元IP。
+ */
+function rate_limit_check(string $action, int $max, int $windowSec, ?string $identifier = null): bool
+{
+    $id = $identifier ?? client_ip();
+    $since = time() - $windowSec;
+
+    $stmt = db()->prepare('SELECT COUNT(*) FROM rate_events WHERE action = ? AND identifier = ? AND created_at >= ?');
+    $stmt->execute([$action, $id, $since]);
+    if ((int) $stmt->fetchColumn() >= $max) {
+        return false;
+    }
+
+    $ins = db()->prepare('INSERT INTO rate_events (action, identifier, created_at) VALUES (?, ?, ?)');
+    $ins->execute([$action, $id, time()]);
+
+    // 古いレコードを時々掃除（肥大防止）。確率的に実行。
+    if (random_int(1, 50) === 1) {
+        $del = db()->prepare('DELETE FROM rate_events WHERE created_at < ?');
+        $del->execute([time() - 86400]);
+    }
+    return true;
+}
+
 /* ------------------------- テナント ------------------------- */
 
 function generate_tenant_id(): string
 {
     return 'tn_' . bin2hex(random_bytes(6));
+}
+
+/**
+ * パスワード強度を検証する。満たさなければ InvalidArgumentException。
+ * - 8文字以上
+ * - よくある脆弱なパスワード・単一文字の繰り返しを拒否
+ */
+function assert_password_strength(string $password): void
+{
+    if (strlen($password) < 8) {
+        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
+    }
+    $lower = strtolower($password);
+    $weak = [
+        'password', 'passw0rd', '12345678', '123456789', '1234567890',
+        'qwerty', 'qwertyui', 'abc12345', 'test1234', 'admin123',
+        '11111111', '00000000', 'iloveyou', 'letmein1', 'welcome1',
+    ];
+    if (in_array($lower, $weak, true)) {
+        throw new \InvalidArgumentException('このパスワードは推測されやすいため使用できません。別のパスワードにしてください。');
+    }
+    // 同一文字の繰り返しのみ（例: aaaaaaaa）を拒否
+    if (preg_match('/^(.)\1+$/', $password)) {
+        throw new \InvalidArgumentException('このパスワードは単純すぎます。別のパスワードにしてください。');
+    }
 }
 
 function find_tenant_by_email(string $email): ?array
@@ -82,9 +154,7 @@ function create_tenant(string $email, string $password, string $displayName, boo
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new \InvalidArgumentException('メールアドレスの形式が正しくありません。');
     }
-    if (strlen($password) < 8) {
-        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
-    }
+    assert_password_strength($password);
     if (find_tenant_by_email($email) !== null) {
         throw new \RuntimeException('このメールアドレスは既に登録されています。');
     }
@@ -244,12 +314,10 @@ function update_tenant_display_name(string $tenantId, string $name): void
     $stmt->execute([$name !== '' ? $name : '主催者', $tenantId]);
 }
 
-/** パスワードを更新する（8文字以上）。 */
+/** パスワードを更新する（強度チェックあり）。 */
 function update_tenant_password(string $tenantId, string $newPassword): void
 {
-    if (strlen($newPassword) < 8) {
-        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
-    }
+    assert_password_strength($newPassword);
     $stmt = db()->prepare('UPDATE tenants SET password_hash = ? WHERE id = ?');
     $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $tenantId]);
 }

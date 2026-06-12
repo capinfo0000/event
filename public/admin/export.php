@@ -55,19 +55,20 @@ foreach ($participants as $p) {
         $idRef = $p['payment_intent'];
     }
 
+    // 参加者由来の文字列（氏名・メール・電話・備考）は数式インジェクション対策で無害化する。
     fputcsv($out, [
         date('Y-m-d H:i', $p['created']),
-        $p['name'],
-        $p['email'],
-        $p['phone'],
+        csv_cell($p['name']),
+        csv_cell($p['email']),
+        csv_cell($p['phone']),
         (int) $p['party_size'] . '名',
         $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),
         $status,
         !empty($p['attended']) ? '出席済み' : '',
-        $p['note'],
-        $idRef,
+        csv_cell($p['note']),
+        csv_cell($idRef),
     ]);
 }
 

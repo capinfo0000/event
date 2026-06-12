@@ -1,0 +1,25 @@
+# 保険的防御: 万一ドキュメントルートがプロジェクト直下に誤設定された場合でも、
+# 機微なファイル/ディレクトリへの直接アクセスを拒否する。
+# 正しくは公開ディレクトリを public/ に設定すること（推奨）。
+
+# ドットファイル（.env 等）を隠す
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# 環境設定・DB・ログ・ソース等の拡張子を直接配信しない
+<FilesMatch "\.(env|sqlite|sqlite3|db|log|sql|md|lock|json)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
