@@ -29,7 +29,7 @@ $account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Co
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($tenant['display_name']) ?> のイベント</title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .ev-price { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
         .full { color: var(--dng); font-weight: 700; }
     </style>

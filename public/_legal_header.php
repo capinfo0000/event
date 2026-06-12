@@ -11,11 +11,13 @@ $title = $title ?? '';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($title) ?></title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <script src="/assets/app.js" defer></script>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .legal { line-height: 1.9; }
         .legal h2 { font-size: 1.05rem; margin-top: 24px; }
         .legal th { white-space: nowrap; width: 30%; }
         .legal ol { padding-left: 1.2em; }
+        .legal .back { margin-top: 24px; }
     </style>
 </head>
 <body>

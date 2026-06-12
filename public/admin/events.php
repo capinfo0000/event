@@ -118,12 +118,12 @@ require __DIR__ . '/_app_header.php';
                                 事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
                                 <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
                             </td>
-                            <td><input type="text" readonly value="<?= e($applyUrl) ?>" onclick="this.select()" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
+                            <td><input type="text" class="js-select" readonly value="<?= e($applyUrl) ?>" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center;">
                                     <a class="btn btn--ghost" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
                                     <form method="post" action="event_delete.php"
-                                          onsubmit="return confirm('「<?= e(addslashes($ev['name'] ?? '')) ?>」を削除します。よろしいですか？（過去の申込・決済データは Stripe に残ります）');">
+                                          data-confirm="「<?= e($ev['name'] ?? '') ?>」を削除します。よろしいですか？（過去の申込・決済データは Stripe に残ります）">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="id" value="<?= e($ev['id']) ?>">
                                         <button type="submit" class="btn btn--danger">削除</button>

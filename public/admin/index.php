@@ -79,7 +79,7 @@ $pageTitle = '参加者管理';
 $pageSub = '名簿はあなたの Stripe アカウントから取得しています（参加者DBは持ちません）';
 require __DIR__ . '/_app_header.php';
 ?>
-<style>
+<style nonce="<?= e(csp_nonce()) ?>">
     .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 18px; }
     .bar select { width: auto; }
     .refund-form { display: flex; gap: 6px; align-items: center; }
@@ -95,7 +95,7 @@ require __DIR__ . '/_app_header.php';
 <?php else: ?>
 <form method="get" class="bar">
     <label style="margin:0; font-weight:600;">イベント：</label>
-    <select name="event_id" onchange="this.form.submit()">
+    <select name="event_id" class="js-autosubmit">
         <?php foreach ($events as $ev): ?>
             <option value="<?= e($ev['id']) ?>" <?= $ev['id'] === $selectedId ? 'selected' : '' ?>>
                 <?= e($ev['name'] ?? $ev['id']) ?>
@@ -209,7 +209,7 @@ require __DIR__ . '/_app_header.php';
                                             <?php endif; ?>
                                         </form>
                                         <form method="post" action="onsite_cancel.php"
-                                              onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？');">
+                                              data-confirm="「<?= e($p['name']) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？">
                                             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                             <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                             <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
@@ -220,7 +220,7 @@ require __DIR__ . '/_app_header.php';
                                     <span class="muted">—</span>
                                 <?php else: ?>
                                     <form method="post" action="refund.php" class="refund-form"
-                                          onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さんへ返金します。よろしいですか？');">
+                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">

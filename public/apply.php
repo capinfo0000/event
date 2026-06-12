@@ -66,7 +66,7 @@ $maxParty = min($maxParty, 20);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
         .pay-options input[type=radio] { width: auto; }
@@ -105,7 +105,7 @@ $maxParty = min($maxParty, 20);
         <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
 
         <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
-        <select id="party_size" name="party_size" required onchange="updateTotal()">
+        <select id="party_size" name="party_size" required>
             <?php for ($i = 1; $i <= $maxParty; $i++): ?>
                 <option value="<?= $i ?>"><?= $i ?> 名</option>
             <?php endfor; ?>
@@ -118,13 +118,13 @@ $maxParty = min($maxParty, 20);
         <div class="pay-options">
             <?php if ($allowPrepay): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
-                    <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> style="width:auto;">
                     事前決済（今すぐカード等で前払い・<?= e(format_amount($prepayUnit, $currency)) ?>/名）
                 </label>
             <?php endif; ?>
             <?php if ($allowOnsite): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
-                    <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> style="width:auto;">
                     当日支払い（会場で集金・<?= e(format_amount($onsiteUnit, $currency)) ?>/名）
                 </label>
             <?php endif; ?>
@@ -146,7 +146,7 @@ $maxParty = min($maxParty, 20);
     <p class="muted"><a href="index.php">← トップへ戻る</a></p>
 </div>
 
-    <script>
+    <script nonce="<?= e(csp_nonce()) ?>">
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
         const PREPAY_UNIT = <?= $prepayUnit ?>;
         const ONSITE_UNIT = <?= $onsiteUnit ?>;
@@ -191,7 +191,15 @@ $maxParty = min($maxParty, 20);
                 blockNote.style.display = blocked ? '' : 'none';
             }
         }
-        updateTotal();
+        // インライン属性の代わりにここでイベントを束ねる（CSP厳格化対応）
+        document.addEventListener('DOMContentLoaded', function () {
+            const ps = document.getElementById('party_size');
+            if (ps) { ps.addEventListener('change', updateTotal); }
+            document.querySelectorAll('input[name="payment_type"]').forEach(function (r) {
+                r.addEventListener('change', updateTotal);
+            });
+            updateTotal();
+        });
     </script>
 </body>
 </html>

@@ -22,7 +22,7 @@ $currency = $event['currency'] ?? 'jpy';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>申込完了（当日支払い）</title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .ok { color: #16a34a; font-size: 1.4rem; font-weight: 800; margin: 0 0 8px; }
         dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 16px 0; }
         dt { color: var(--muted); }

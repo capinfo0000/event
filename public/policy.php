@@ -15,7 +15,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>キャンセル・返金ポリシー</title>
-    <style>
+    <style nonce="<?= e(csp_nonce()) ?>">
         body { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
                line-height: 1.8; color: #1f2937; max-width: 680px; margin: 0 auto; padding: 24px; background: #f9fafb; }
         .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px 28px; }

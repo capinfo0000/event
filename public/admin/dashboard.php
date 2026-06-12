@@ -103,7 +103,7 @@ require __DIR__ . '/_app_header.php';
     <?php if (connect_enabled()): ?>
         <?php if ($connected): ?>
             <p>✅ あなたの Stripe アカウントを接続済みです（<code><?= e((string) $tenant['stripe_account_id']) ?></code>）。参加費はあなたの口座へ直接入金され、名簿・決済データもあなたのアカウントで分離管理されます。</p>
-            <form method="post" action="connect.php?action=disconnect" onsubmit="return confirm('Stripe 接続を解除します。よろしいですか？（解除後は新規決済を受け付けられません）');">
+            <form method="post" action="connect.php?action=disconnect" data-confirm="Stripe 接続を解除します。よろしいですか？（解除後は新規決済を受け付けられません）">
                 <input type="hidden" name="csrf_token" value="<?= e($connectToken) ?>">
                 <button type="submit" class="btn btn--ghost">接続を解除</button>
             </form>
@@ -124,7 +124,7 @@ require __DIR__ . '/_app_header.php';
 <div class="card">
     <div class="card__title"><span class="ic">🔗</span> 公開イベントページ</div>
     <p class="muted" style="margin-top:0;">この1つのリンクを参加者に共有すれば、開催中のイベントを一覧から選んで申し込めます。</p>
-    <input type="text" readonly value="<?= e($publicUrl) ?>" onclick="this.select()">
+    <input type="text" class="js-select" readonly value="<?= e($publicUrl) ?>">
     <p style="margin: 16px 0 0;">
         <a class="btn" href="events.php">イベント管理</a>
         <a class="btn btn--ghost" href="index.php">参加者管理</a>
@@ -132,8 +132,8 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <?php if ($totalApplied > 0): ?>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script>
+<script src="/assets/chart.umd.min.js"></script>
+<script nonce="<?= e(csp_nonce()) ?>">
     const ACCENT = '#2563eb';
     const trendCtx = document.getElementById('chartTrend');
     if (trendCtx) {

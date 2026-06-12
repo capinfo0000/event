@@ -56,6 +56,19 @@ function load_env(string $path): void
 load_env(APP_ROOT . '/.env');
 
 /**
+ * このリクエスト用の CSP nonce（1リクエストにつき1つ）。
+ * インライン <script>/<style> に nonce 属性として付け、'unsafe-inline' なしで許可する。
+ */
+function csp_nonce(): string
+{
+    static $nonce = null;
+    if ($nonce === null) {
+        $nonce = base64_encode(random_bytes(16));
+    }
+    return $nonce;
+}
+
+/**
  * リクエストが HTTPS で配信されているか（リバースプロキシ経由も考慮）。
  * APP_BASE_URL が https の場合も「HTTPS 配信前提」とみなす。
  */
@@ -85,9 +98,12 @@ function send_baseline_security_headers(): void
     }
     // CAPTCHA(Turnstile)有効時は、そのウィジェット配信元を許可リストに加える。
     $captchaHost = captcha_enabled() ? ' https://challenges.cloudflare.com' : '';
+    $nonce = "'nonce-" . csp_nonce() . "'";
+    // script はインラインを禁止し、自ホスト＋nonce のみ許可（XSS耐性）。
+    // style は <style nonce> と style属性の両方を許可するため style-src-attr 'unsafe-inline' を併用。
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
-        . "style-src 'self' 'unsafe-inline'; "
-        . "script-src 'self' 'unsafe-inline'" . $captchaHost . "; "
+        . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
+        . "script-src 'self' $nonce" . $captchaHost . "; "
         . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
         . "frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     header('X-Frame-Options: DENY');
