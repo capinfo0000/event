@@ -34,7 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         save_stripe_key('');
         $msg = '鍵を削除しました。';
     } elseif ($action === 'test') {
+        // 入力欄に鍵があれば、その鍵を保存してから確認する（無ければ保存済みの鍵で確認）
+        $typed = trim((string) ($_POST['stripe_key'] ?? ''));
+        if ($typed !== '' && !preg_match('/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/', $typed)) {
+            $msg = '鍵の形式が正しくないようです（sk_test_… / rk_… で始まります）。';
+            $msgType = 'ng';
+        } elseif ($typed !== '') {
+            save_stripe_key($typed);
+        }
         try {
+            if ($msgType === 'ng') {
+                throw new \RuntimeException('鍵の形式が不正です。');
+            }
             init_stripe(); // 保存済みの鍵を使用
             // 権限確認を兼ねた軽い呼び出し（Checkout Sessions の読み取りで疎通確認）
             \Stripe\Checkout\Session::all(['limit' => 1]);
@@ -65,14 +76,17 @@ require __DIR__ . '/_app_header.php';
 
 <?php if ($testResult !== null): ?>
     <?php if ($testResult['ok']): ?>
-        <div class="flash flash--ok">✅ 接続成功（<?= e($testResult['mode']) ?>）／ アカウント：<?= e((string) $testResult['name']) ?> <?= $testResult['country'] !== '' ? '（' . e($testResult['country']) . '）' : '' ?></div>
+        <div class="flash flash--ok">✅ 接続成功（<?= e($testResult['mode']) ?>）。Stripe との通信を確認しました。</div>
     <?php else: ?>
         <div class="flash flash--ng">❌ 接続できませんでした：<?= e($testResult['error']) ?></div>
     <?php endif; ?>
 <?php endif; ?>
 
 <div class="card">
-    <div class="card__title">APIキーの取得・登録</div>
+    <div class="card__title" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <span>APIキーの取得・登録</span>
+        <?php include dirname(__DIR__) . '/_stripe_safety.php'; ?>
+    </div>
     <ol class="muted" style="margin-top:0;">
         <li>Stripeにログイン →「開発者」→「APIキー」を開く（下のボタン）。</li>
         <li>まずは<strong>標準のシークレットキー（sk_test_…）</strong>を使うのが簡単です。本番は <strong>sk_live_…</strong> に差し替え。</li>
@@ -94,11 +108,13 @@ require __DIR__ . '/_app_header.php';
 
     <form method="post" style="margin-top:16px;">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-        <input type="hidden" name="action" value="save">
         <label>Stripe 秘密鍵（sk_… または 制限付き rk_…）</label>
         <input type="password" name="stripe_key" autocomplete="off" placeholder="sk_test_xxxxx" value="">
         <p class="muted" style="margin:6px 0 0;">※ 鍵は DB には保存せず、公開フォルダ外のファイルにのみ保存します。空で保存すると削除します。</p>
-        <p style="margin-top:14px;"><button type="submit" class="btn">保存する</button></p>
+        <p style="margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button type="submit" name="action" value="save" class="btn">保存する</button>
+            <button type="submit" name="action" value="test" class="btn btn--ghost">接続確認</button>
+        </p>
     </form>
 </div>
 
@@ -126,7 +142,6 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title">現在の状態</div>
-    <p style="margin-top:0;"><?php include dirname(__DIR__) . '/_stripe_safety.php'; ?></p>
     <?php if ($configured): ?>
         <p>設定済み：<code><?= e($masked) ?></code>　<?= $isLive ? '<strong style="color:#b91c1c;">本番キー（live）</strong>' : 'テストキー（test）' ?></p>
         <form method="post" style="margin-top:10px;">
