@@ -21,10 +21,11 @@
 |---|---|
 | `public/index.php` | ランディング（参加者は主催者発行の申込リンクから申込） |
 | `public/apply.php?event_id=…` | 参加申込フォーム（事前/当日の選択・人数・氏名等） |
-| `public/checkout.php` | 申込を検証し、主催者の接続アカウントで Checkout 作成 or 当日申込を記録 |
+| `public/checkout.php` | 申込を検証し、運営者の Stripe で Checkout 作成 or 当日申込を記録 |
 | `public/success.php` / `cancel.php` / `onsite.php` | 決済成功 / 中断 / 当日申込完了 |
+| `public/o.php?t=…` | 公開イベント一覧（参加者に共有する1リンク） |
 | `public/policy.php` | キャンセル・返金ポリシー |
-| `public/admin/login.php` / `signup.php` / `logout.php` | 主催者ログイン・招待制サインアップ |
+| `public/admin/login.php` / `signup.php` / `logout.php` | ログイン・オープン登録（メール＋パスワード） |
 | `public/admin/dashboard.php` | 運営者トップ（Stripe キー設定状況） |
 | `public/admin/events.php` ほか | イベントの登録・編集・削除（DB保存） |
 | `public/admin/index.php` | 参加者名簿（事前決済の返金、当日支払いの集金確認・取消、CSV） |
@@ -72,6 +73,14 @@ php -S localhost:8000 -t public
 
 ## 既知の制限
 
-- **定員の自動制御は行いません**（`capacity` は表示・申込人数の上限目安）。
-- 領収書の発行は各主催者の Stripe ダッシュボードで行います。
-- 本番運用では HTTPS 必須。`data/`（SQLite）は Web 公開領域外に置き、バックアップしてください。
+- 定員（`capacity`）は申込時点の人数で締め切ります（厳密な在庫ロックではないため、ごく短時間の同時申込では超過の可能性）。
+- 領収書の発行は運営者の Stripe ダッシュボードで行います。
+- メール送信は `mail()`＋`logs/mail.log` の最小実装です（本番は SMTP 等へ差し替え推奨）。
+- 法務ページはテンプレートです。公開前に内容を確定してください。
+- 本番運用では HTTPS 必須。`src/` `vendor/` `data/` `.env` は Web 公開領域外に置き（公開フォルダは `public/`）、`data/`（SQLite）はバックアップしてください。
+
+## 関連ドキュメント
+
+- `docs/システム概要.md` … サービスの概要（一言説明・仕組み）
+- `docs/開発の記録.md` … 開発の背景・意思決定・課題と対応・方針転換の記録
+- `設置手順-CoreServer.txt`（配布ZIP同梱） … 共有サーバーへの設置手順
