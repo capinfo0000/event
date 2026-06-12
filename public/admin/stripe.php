@@ -113,9 +113,10 @@ require __DIR__ . '/_app_header.php';
             <span style="display:inline-block;margin-top:4px;">上記以外はすべて「なし」でOK。</span>
         </li>
     </ol>
-    <p>
+    <p style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener" style="margin-left:8px;">本番用APIキーを開く</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">本番用APIキーを開く</a>
+        <?php include __DIR__ . '/_stripe_setup_guide.php'; ?>
     </p>
 
     <form method="post" style="margin-top:16px;">
