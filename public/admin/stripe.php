@@ -78,9 +78,9 @@ require __DIR__ . '/_app_header.php';
         <li>まずは<strong>標準のシークレットキー（sk_test_…）</strong>を使うのが簡単です。本番は <strong>sk_live_…</strong> に差し替え。</li>
         <li><strong>制限付きキー（Restricted key）</strong>を使う場合は、次の権限だけを設定してください：
             <ul style="margin:6px 0 0;">
+                <li><strong>Charges and Refunds</strong> … 書き込み</li>
                 <li><strong>Checkout Sessions</strong> … 書き込み</li>
                 <li><strong>Customers</strong> … 書き込み</li>
-                <li><strong>Charges and Refunds</strong> … 書き込み</li>
                 <li><strong>Payment Intents</strong> … 読み取り</li>
                 <li><strong>Accounts</strong>（Basic Business Contact Information）… 読み取り</li>
             </ul>
