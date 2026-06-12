@@ -66,7 +66,7 @@ if ($sessionId !== '') {
             <p class="ng">お支払いを確認できませんでした</p>
             <p>恐れ入りますが、もう一度お試しいただくか、主催者までご連絡ください。</p>
         <?php endif; ?>
-        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
+        <p style="margin-top:20px;"><a href="<?= e($event !== null ? 'o.php?t=' . urlencode($event['tenant_id']) : 'index.php') ?>">← イベント一覧へ戻る</a></p>
     </div>
 </div>
 </body>

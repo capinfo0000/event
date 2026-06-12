@@ -41,7 +41,7 @@ $currency = $event['currency'] ?? 'jpy';
             <dt>当日お支払い額</dt><dd><span class="total" style="margin:0;"><?= e(format_amount($total, $currency)) ?></span></dd>
         </dl>
         <p class="muted">※ ご都合が悪くなった場合は、お手数ですが主催者までご連絡ください。</p>
-        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
+        <p style="margin-top:20px;"><a href="<?= e($event !== null ? 'o.php?t=' . urlencode($event['tenant_id']) : 'index.php') ?>">← イベント一覧へ戻る</a></p>
     </div>
 </div>
 </body>

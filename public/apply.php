@@ -149,7 +149,7 @@ $maxParty = min($maxParty, 20);
     </form>
     <?php endif; ?>
 
-    <p class="muted"><a href="index.php">← トップへ戻る</a></p>
+    <p class="muted"><a href="o.php?t=<?= e(urlencode($event['tenant_id'])) ?>">← イベント一覧へ戻る</a></p>
 </div>
 
     <script>
