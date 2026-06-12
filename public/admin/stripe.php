@@ -146,9 +146,10 @@ require __DIR__ . '/_app_header.php';
         <li>必要に応じて「コンビニ決済（Konbini）」なども同様に有効化。</li>
         <li>有効化すると、このアプリの決済画面に自動で表示されます（再設定不要）。</li>
     </ol>
-    <p>
+    <p style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">支払い方法（テスト）を開く</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener" style="margin-left:8px;">支払い方法（本番）を開く</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">支払い方法（本番）を開く</a>
+        <?php include __DIR__ . '/_paymethods_guide.php'; ?>
     </p>
     <p class="muted" style="font-size:.82rem;">※ PayPay はテストモードでも有効化でき、テスト決済を試せます。利用可否は Stripe 側の対応条件（国・通貨・審査状況）により異なります。</p>
 </div>
