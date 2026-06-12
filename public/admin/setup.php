@@ -46,7 +46,7 @@ function step_badge(bool $ok): string
         <div class="step__no <?= $hasKey ? 'done' : '' ?>">1</div>
         <div class="step__body">
             <div class="card__title" style="margin:0;">Stripe を設定する <?= step_badge($hasKey) ?></div>
-            <p class="muted">クレジットカードの事前決済を使うには、ご自身の Stripe API キーを登録します（現金のみなら不要）。</p>
+            <p class="muted">ご自身の Stripe API キーを登録します。カード決済だけでなく、当日支払いの申込受付・参加者管理（名簿）にも Stripe を使うため、現金のみの運用でも設定が必要です。</p>
             <p><a class="btn" href="stripe.php"><?= $hasKey ? 'Stripe設定を確認' : 'Stripeキーを登録する' ?></a></p>
         </div>
     </div>

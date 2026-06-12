@@ -96,8 +96,8 @@ require __DIR__ . '/_app_header.php';
         <p class="muted">クレジットカード（事前決済）と現金（当日支払い）の両方に対応します。</p>
         <p style="margin:14px 0 0;"><a class="btn btn--ghost" href="stripe.php">Stripe 設定・接続テスト</a></p>
     <?php else: ?>
-        <p>⚠️ まだクレジットカード決済の準備ができていません。<strong>初期設定</strong>から Stripe の API キーを登録してください。</p>
-        <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
+        <p>⚠️ まだ Stripe の API キーが未設定です。<strong>初期設定</strong>から登録してください。</p>
+        <p class="muted">※ 当日支払い（現金）の申込受付や参加者管理（名簿）も Stripe を使って記録・取得するため、現金のみの運用でも API キーの設定が必要です。</p>
         <p style="margin:14px 0 0;">
             <a class="btn" href="setup.php">初期設定をはじめる</a>
             <a class="btn btn--ghost" href="stripe.php" style="margin-left:8px;">Stripe 設定</a>

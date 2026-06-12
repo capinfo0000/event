@@ -34,7 +34,7 @@ $pageTitle = 'イベント管理';
 require __DIR__ . '/_app_header.php';
 ?>
 <?php if (stored_stripe_key() === null): ?>
-    <div class="flash flash--ng">⚠️ Stripe キー未設定です。クレジットカード決済を使うには <a href="stripe.php">Stripe 設定</a>から API キーを登録してください（当日支払い・現金のみなら設定不要）。</div>
+    <div class="flash flash--ng">⚠️ Stripe キー未設定です。<a href="stripe.php">Stripe 設定</a>から API キーを登録してください。カード決済だけでなく、<strong>当日支払いの申込受付・参加者管理（名簿）にも Stripe を使う</strong>ため、現金のみの運用でも設定が必要です。</div>
 <?php endif; ?>
 
 <?php if ($flash !== ''): ?>

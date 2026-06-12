@@ -81,7 +81,7 @@ require __DIR__ . '/_app_header.php';
             <button type="submit" class="btn">接続テスト</button>
         </form>
     <?php else: ?>
-        <p>⚠️ 未設定です。下のフォームに Stripe の秘密鍵を貼り付けて保存してください。未設定の間はカード決済を受け付けられません（当日支払い＝現金のみ可）。</p>
+        <p>⚠️ 未設定です。下のフォームに Stripe の秘密鍵を貼り付けて保存してください。未設定の間は、カード決済はもちろん、<strong>当日支払いの申込受付・参加者管理（名簿）も利用できません</strong>（いずれも Stripe に記録・取得するため）。</p>
     <?php endif; ?>
 </div>
 
