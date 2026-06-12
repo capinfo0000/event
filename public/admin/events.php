@@ -14,6 +14,18 @@ $tenant = require_tenant();
 
 $events = tenant_events($tenant['id']);
 
+// 各イベントの現在の参加人数（Stripe由来。返金済みを除く）。編集・削除時の警告に使う。
+$counts = [];
+if (stored_stripe_key() !== null) {
+    foreach ($events as $ev) {
+        try {
+            $counts[$ev['id']] = event_headcount($ev['id'], null);
+        } catch (\Throwable $e) {
+            $counts[$ev['id']] = null; // 取得失敗時は不明
+        }
+    }
+}
+
 // 編集対象（?edit=ID）。新規のときは空のひな形。他テナントのものは編集不可。
 $editId = (string) ($_GET['edit'] ?? '');
 $editing = $editId !== '' ? find_event($editId) : null;
@@ -60,6 +72,12 @@ require __DIR__ . '/_app_header.php';
     <button type="button" class="ev-modal__close" onclick="closeEventModal()" aria-label="閉じる">×</button>
     <div class="card" style="margin:0;">
         <div class="card__title"><?= $editing ? 'イベントを編集' : 'イベントを新規登録' ?></div>
+        <?php if ($editing !== null && !empty($counts[$editing['id']])): ?>
+            <div class="flash flash--ng" style="margin-bottom:14px;">
+                ⚠️ このイベントには現在 <strong><?= (int) $counts[$editing['id']] ?> 名</strong>の参加者がいます。
+                日時・場所・参加費などの変更は、<strong>返金やクレームが発生する場合</strong>があります。内容をよくご確認ください。
+            </div>
+        <?php endif; ?>
         <form method="post" action="event_save.php">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="id" value="<?= e((string) $form['id']) ?>">
@@ -133,8 +151,11 @@ require __DIR__ . '/_app_header.php';
                 <tbody>
                     <?php foreach ($events as $ev): ?>
                         <?php $applyUrl = base_url() . '/apply.php?event_id=' . urlencode($ev['id']); ?>
+                        <?php $cnt = $counts[$ev['id']] ?? null; ?>
                         <tr>
-                            <td><strong><?= e($ev['name'] ?? '') ?></strong></td>
+                            <td><strong><?= e($ev['name'] ?? '') ?></strong>
+                                <?php if (!empty($cnt)): ?><br><span class="muted">参加 <?= (int) $cnt ?> 名</span><?php endif; ?>
+                            </td>
                             <td class="muted"><?= e($ev['date'] ?? '') ?></td>
                             <td class="muted"><?= e($ev['place'] ?? '') ?></td>
                             <td>
@@ -146,8 +167,15 @@ require __DIR__ . '/_app_header.php';
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center;">
                                     <a class="btn" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
+                                    <?php
+                                        $delMsg = '「' . ($ev['name'] ?? '') . '」を削除します。';
+                                        if (!empty($cnt)) {
+                                            $delMsg .= 'このイベントには現在 ' . (int) $cnt . ' 名の参加者がいます。削除すると返金やクレーム対応が必要になる場合があります。';
+                                        }
+                                        $delMsg .= 'よろしいですか？（過去の申込・決済データは Stripe に残ります。参加者には中止メールを送信します）';
+                                    ?>
                                     <form method="post" action="event_delete.php"
-                                          onsubmit="return confirm('「<?= e(addslashes($ev['name'] ?? '')) ?>」を削除します。よろしいですか？（過去の申込・決済データは Stripe に残ります）');">
+                                          onsubmit="return confirm('<?= e(addslashes($delMsg)) ?>');">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="id" value="<?= e($ev['id']) ?>">
                                         <button type="submit" class="btn btn--danger">削除</button>
