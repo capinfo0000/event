@@ -56,6 +56,10 @@ if ($amountOnsite !== '' && !ctype_digit($amountOnsite)) {
 if (!$allowPrepay && !$allowOnsite) {
     back_to_events('支払い方法を少なくとも1つ選んでください（事前決済／当日支払い）。', 'ng', $id);
 }
+// 事前決済（カード等）を使う場合、JPYはStripeの最低決済額（¥50）以上が必要
+if ($allowPrepay && $currency === 'jpy' && $amount !== '' && ctype_digit($amount) && (int) $amount < 50) {
+    back_to_events('事前決済の参加費は、Stripe の最低決済額により ¥50 以上にしてください（当日支払いのみのイベントは¥50未満も可）。', 'ng', $id);
+}
 
 // 日時は年月日が判定できる形式であることを確認（カレンダー入力なら常に満たす）
 if (event_month($date) === null) {

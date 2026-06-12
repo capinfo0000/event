@@ -68,7 +68,7 @@ require __DIR__ . '/_app_header.php';
             <div>
                 <label>事前決済の参加費（1名・円） <span class="req">必須</span></label>
                 <input type="number" name="amount" required min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
-            </div>
+                <p class="hint" style="margin:4px 0 0;">※ 事前決済（カード等）を使う場合は <strong>¥50 以上</strong>（Stripeの最低決済額）。当日支払いのみなら制限なし。</p>            </div>
             <div>
                 <label>当日支払いの参加費（1名）<span class="hint">空欄なら事前と同額</span></label>
                 <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
