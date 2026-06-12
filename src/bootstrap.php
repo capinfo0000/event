@@ -267,6 +267,37 @@ function event_month(string $dateStr): ?string
 }
 
 /**
+ * 指定イベントの現在の参加者（Stripe由来）へ一斉メールを送る。
+ * 返金済み（キャンセル済）を除く、メールアドレスのある参加者に重複なく送信する。
+ * Stripe から取得できない場合（鍵未設定等）は 0 を返す。送信できた件数を返す。
+ */
+function notify_event_participants(string $eventId, string $subject, string $body): int
+{
+    try {
+        $participants = fetch_event_participants($eventId); // 鍵はイベントの所有者から解決
+    } catch (\Throwable $e) {
+        error_log('参加者通知の取得失敗: ' . $e->getMessage());
+        return 0;
+    }
+    $seen = [];
+    $count = 0;
+    foreach ($participants as $p) {
+        if (!empty($p['fully_refunded'])) {
+            continue; // 既に全額返金（キャンセル済）の人は除外
+        }
+        $email = strtolower(trim((string) ($p['email'] ?? '')));
+        if ($email === '' || isset($seen[$email])) {
+            continue;
+        }
+        $seen[$email] = true;
+        if (send_mail((string) $p['email'], $subject, $body)) {
+            $count++;
+        }
+    }
+    return $count;
+}
+
+/**
  * 指定テナントが、ある開催月に登録済みのイベント数を数える（プラン上限の判定用）。
  * $excludeId を渡すと、そのイベント自身は除外する（編集時の自己重複回避）。
  */

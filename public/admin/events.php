@@ -109,6 +109,10 @@ require __DIR__ . '/_app_header.php';
             <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
         </div>
 
+        <?php if ($editing): ?>
+            <label style="font-weight:400; margin-top:14px;"><input type="checkbox" name="notify" value="1" checked style="width:auto;"> この変更を現在の参加者にメールで通知する</label>
+        <?php endif; ?>
+
         <p style="margin-top:18px;">
             <button type="submit" class="btn"><?= $editing ? '更新する' : '登録する' ?></button>
             <a class="btn btn--ghost" href="events.php" onclick="closeEventModal();">閉じる</a>

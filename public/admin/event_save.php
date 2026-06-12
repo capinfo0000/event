@@ -88,7 +88,23 @@ try {
             back_to_events('対象イベントが見つかりません。', 'ng');
         }
         update_event($tenant['id'], $id, $data);
-        back_to_events('イベントを更新しました。', 'ok');
+
+        // 変更を現在の参加者にメール通知（チェックON時）
+        $note = '';
+        if (!empty($_POST['notify'])) {
+            $body = ($data['name']) . " にお申し込みの皆さまへ\n\n"
+                . "イベント内容が更新されましたのでお知らせします。\n\n"
+                . '日時：' . $data['date'] . "\n"
+                . '場所：' . $data['place'] . "\n"
+                . '参加費：事前 ' . format_amount($data['amount'], $data['currency'])
+                . ($data['allow_onsite'] ? ' ／ 当日 ' . format_amount($data['amount_onsite'], $data['currency']) : '') . "\n\n"
+                . "ご不明点は主催者までご連絡ください。\n";
+            $n = notify_event_participants($id, '【イベント変更のお知らせ】' . $data['name'], $body);
+            if ($n > 0) {
+                $note = "（参加者 {$n} 名に変更を通知しました）";
+            }
+        }
+        back_to_events('イベントを更新しました。' . $note, 'ok');
     } else {
         create_event($tenant['id'], $data);
         back_to_events('イベントを登録しました。', 'ok');
