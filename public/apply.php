@@ -73,6 +73,7 @@ $maxParty = min($maxParty, 20);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
     <link rel="stylesheet" href="/assets/app.css">
+    <script src="/assets/app.js" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
@@ -147,11 +148,16 @@ $maxParty = min($maxParty, 20);
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
         <p class="hint">キャンセル時の返金は<a href="policy.php?event_id=<?= e($event['id']) ?>" target="_blank">キャンセルポリシー</a>をご確認ください。</p>
+        <?php if ($allowPrepay): ?>
+            <p class="hint"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済（カード）の安全性について</button></p>
+        <?php endif; ?>
     </form>
     <?php endif; ?>
 
     <p class="muted"><a href="index.php">← トップへ戻る</a></p>
 </div>
+
+<?php require __DIR__ . '/_prepay_info_modal.php'; ?>
 
     <script nonce="<?= e(csp_nonce()) ?>">
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
