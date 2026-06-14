@@ -199,13 +199,16 @@ require __DIR__ . '/_app_header.php';
             <div class="guide__num">1</div>
             <div class="guide__body">
                 <div class="gt">APIキー画面を開く</div>
-                <p>右上の ⚙（設定）→「開発者」→「APIキーの管理」。「制限付きのキー」の右上 <strong>＋ 制限付きのキーを作成</strong> を押す。</p>
+                <p>右上の ⚙（設定） →「開発者」→「APIキーの管理」。</p>
+                <p class="muted">⚙ 設定 › 開発者 › APIキー</p>
+                <p>「制限付きのキー」の右上 <strong>＋ 制限付きのキーを作成</strong> を押す。</p>
             </div>
         </div>
         <div class="guide__row">
             <div class="guide__num">2</div>
             <div class="guide__body">
                 <div class="gt">テンプレートを選ぶ</div>
+                <p>「One-time payments」を選択 → 続ける。</p>
                 <div class="tpl tpl--on">☑ One-time payments<small>チェックアウト/決済リンク等での支払い受付</small></div>
                 <div class="tpl">Recurring subscriptions and billing</div>
                 <div class="tpl">In-person payments with Terminal</div>
@@ -232,14 +235,14 @@ require __DIR__ . '/_app_header.php';
                     <div class="perm__head">Checkout Sessions</div>
                     <div class="perm__row"><span>Checkout Sessions</span><span class="perm__pills"><span class="pill">なし</span><span class="pill">読取</span><span class="pill pill--on">書込</span></span></div>
                 </div>
-                <p class="muted">※「Accounts＝読取」も入れておくと確実です。項目は Ctrl+F で検索すると速い。</p>
+                <p class="muted">※「Accounts＝読取」は特に忘れずに（無いと接続確認で弾かれます）。項目は Ctrl+F で検索すると速い。</p>
             </div>
         </div>
         <div class="guide__row">
             <div class="guide__num">5</div>
             <div class="guide__body">
                 <div class="gt">作成してトークンをコピー</div>
-                <p>一番下の <strong>キーを作成</strong> を押す。</p>
+                <p>一番下の <strong>キーを作成</strong> → 表示される <code>rk_test_…</code> の長い文字をコピー。</p>
                 <div class="mockfield"><input type="text" value="rk_test_51Teq…UuJCFWm" readonly><span class="btn btn--ghost">コピー</span></div>
             </div>
         </div>
@@ -247,8 +250,8 @@ require __DIR__ . '/_app_header.php';
             <div class="guide__num">6</div>
             <div class="guide__body">
                 <div class="gt">このページに貼り付けて確認</div>
-                <p>「Stripe 秘密鍵」欄に貼り付け → <strong>保存する</strong>。✅「接続成功」でOK。</p>
-                <p class="muted">権限エラーが出たら、表示された権限（例：Checkout Sessions／Accounts）を追加して再確認。</p>
+                <p>下の「Stripe 秘密鍵」欄に貼り付け → <strong>接続確認</strong>。✅「接続成功」でOK。</p>
+                <p class="muted">※ 権限エラーが出たら、表示された権限（例：Checkout Sessions Read／Accounts）を追加して再確認。</p>
             </div>
         </div>
 
@@ -270,7 +273,9 @@ require __DIR__ . '/_app_header.php';
             <div class="guide__num">1</div>
             <div class="guide__body">
                 <div class="gt">「決済手段」設定を開く</div>
-                <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong> →「決済手段」。下のボタンからも直接開けます。</p>
+                <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong>（決済・チェックアウト・決済手段） →「決済手段」。</p>
+                <p class="muted">⚙ 設定 › Payments › 決済手段</p>
+                <p class="muted">※ 下の「支払い方法（テスト）を開く」ボタンからも直接開けます。</p>
             </div>
         </div>
         <div class="guide__row">
@@ -290,7 +295,7 @@ require __DIR__ . '/_app_header.php';
             <div class="guide__body">
                 <div class="gt">PayPay を有効にする</div>
                 <p>PayPay の行をクリック（または右の …）→ <strong>有効にする</strong> を押す。</p>
-                <p class="muted">利用には「通貨＝日本円・日本のアカウント」等の条件があります。テストでも決済可。</p>
+                <p class="muted">※ 利用には「通貨＝日本円・日本のアカウント」などStripe側の条件があります。テストでは「プレビューで有効」と表示される場合がありますが、テスト決済は可能です。</p>
             </div>
         </div>
         <div class="guide__row">
