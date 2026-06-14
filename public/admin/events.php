@@ -33,8 +33,8 @@ $token = csrf_token();
 $pageTitle = 'イベント管理';
 require __DIR__ . '/_app_header.php';
 ?>
-<?php if (env('STRIPE_SECRET_KEY') === null): ?>
-    <div class="flash flash--ng">⚠️ Stripe キー未設定です。クレジットカード決済を使うには <code>.env</code> の <code>STRIPE_SECRET_KEY</code>（<code>sk_...</code>）を設定してください（当日支払い・現金のみなら設定不要）。</div>
+<?php if (!stripe_ready_for_tenant($tenant)): ?>
+    <div class="flash flash--ng">⚠️ Stripe 未設定です。クレジットカード決済（事前決済）を使うには <a href="stripe.php">Stripe設定</a> から鍵を登録してください（当日支払い・現金のみなら設定不要）。</div>
 <?php endif; ?>
 
 <?php if ($flash !== ''): ?>

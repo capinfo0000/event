@@ -73,6 +73,12 @@ require __DIR__ . '/_app_header.php';
 <?php if ($flash !== ''): ?>
     <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
 <?php endif; ?>
+<?php if (!$connected): ?>
+    <div class="flash flash--ng" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
+        <span>⚠️ <strong>Stripe が未設定です。</strong>事前決済（カード）を受け付けるには、ご自身の Stripe キーを登録してください。</span>
+        <a class="btn" href="stripe.php" style="white-space:nowrap;">Stripe を設定する →</a>
+    </div>
+<?php endif; ?>
 <div class="stat-grid">
     <div class="stat"><span class="stat__num accent"><?= $totalApplied ?></span><span class="stat__label">総申込数（事前<?= $prepayCount ?>・当日<?= $onsiteCount ?>）</span></div>
     <div class="stat"><span class="stat__num"><?= e(format_amount($collected, 'jpy')) ?></span><span class="stat__label">事前入金合計</span></div>
