@@ -30,6 +30,41 @@ function crypto_available(): bool
 }
 
 /**
+ * APP_KEY が無ければ自動生成して .env に保存し、当該プロセスでも有効化する。
+ * これにより、主催者の鍵を常に「暗号化」で保存できる（平文ディスク保存を避ける）。
+ * .env が書き込めない等で用意できなければ false（呼び出し側は平文フォールバック）。
+ */
+function ensure_app_key(): bool
+{
+    if (app_key() !== null) {
+        return true;
+    }
+    $key = base64_encode(random_bytes(32));
+    $path = APP_ROOT . '/.env';
+    $writable = is_file($path) ? is_writable($path) : is_writable(dirname($path));
+    if (!$writable) {
+        return false;
+    }
+    $lines = is_file($path) ? file($path, FILE_IGNORE_NEW_LINES) : [];
+    $found = false;
+    foreach ($lines as $i => $l) {
+        if (preg_match('/^\s*APP_KEY\s*=/', $l)) {
+            $lines[$i] = 'APP_KEY=' . $key;
+            $found = true;
+        }
+    }
+    if (!$found) {
+        $lines[] = 'APP_KEY=' . $key;
+    }
+    if (@file_put_contents($path, implode("\n", $lines) . "\n", LOCK_EX) === false) {
+        return false;
+    }
+    putenv('APP_KEY=' . $key);
+    $_ENV['APP_KEY'] = $key;
+    return app_key() !== null;
+}
+
+/**
  * 平文を暗号化して base64 文字列を返す。APP_KEY 未設定なら例外。
  * 形式: base64( iv(12) || tag(16) || ciphertext )
  */

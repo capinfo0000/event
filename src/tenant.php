@@ -245,6 +245,8 @@ function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
     if (!is_dir($dir)) {
         @mkdir($dir, 0700, true);
     }
+    // 平文ディスク保存を避けるため、可能なら APP_KEY を用意して常に暗号化する。
+    ensure_app_key();
     $payload = crypto_available() ? ('enc:' . app_encrypt($plainKey)) : ('raw:' . $plainKey);
     file_put_contents($path, $payload, LOCK_EX);
     @chmod($path, 0600);
