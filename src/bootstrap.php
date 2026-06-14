@@ -537,6 +537,58 @@ function datetime_local_value(string $date): string
 }
 
 /**
+ * 指定パスが Web 公開領域（DOCUMENT_ROOT 配下）にあるか。
+ * 判定不能（CLI 等で DOCUMENT_ROOT 不明）なら null。
+ */
+function path_within_docroot(string $path): ?bool
+{
+    $docroot = (string) ($_SERVER['DOCUMENT_ROOT'] ?? '');
+    if ($docroot === '') {
+        return null;
+    }
+    $rd = realpath($docroot);
+    if ($rd === false) {
+        return null;
+    }
+    // ファイルが未作成でも親ディレクトリで判定する
+    $target = realpath($path);
+    if ($target === false) {
+        $target = realpath(dirname($path));
+        if ($target === false) {
+            return null;
+        }
+    }
+    $rd = rtrim($rd, '/') . '/';
+    return $target === rtrim($rd, '/') || str_starts_with($target . '/', $rd);
+}
+
+/**
+ * 重大な構成リスクを検知して返す（運用者へ警告するため）。
+ * 最重要: SQLite DB が公開ディレクトリ内にある（= Web から直接ダウンロード可能になりうる）。
+ * DB が外にあれば、APP_KEY が漏れても暗号化済みの主催者鍵は復号できない（被害連鎖を遮断）。
+ *
+ * @return array<int, array{level:string, msg:string}>
+ */
+function security_warnings(): array
+{
+    $w = [];
+    if (path_within_docroot(current_db_path()) === true) {
+        $w[] = [
+            'level' => 'critical',
+            'msg' => 'データベースが公開ディレクトリ内にあります。サーバー設定次第で Web から直接ダウンロードされ、保存済みの認証情報・暗号化鍵が漏えいする恐れがあります。'
+                . ' .env の DB_PATH に「公開ディレクトリの外」の絶対パスを設定してください（例: /home/アカウント/private/app.sqlite）。',
+        ];
+    }
+    if (is_file(APP_ROOT . '/.env') && path_within_docroot(APP_ROOT . '/.env') === true) {
+        $w[] = [
+            'level' => 'high',
+            'msg' => '.env が公開ディレクトリ内にあります。.htaccess によるアクセス拒否が有効か必ず確認してください（ブラウザで /.env が 403/404 になること）。',
+        ];
+    }
+    return $w;
+}
+
+/**
  * 出力エスケープ。
  */
 function e(?string $value): string

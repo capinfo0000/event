@@ -14,6 +14,12 @@ declare(strict_types=1);
 /**
  * PDO(SQLite) のシングルトン。初回アクセス時にスキーマを作成する。
  */
+/** 使用する SQLite ファイルのパス（DB_PATH 指定が無ければ data/app.sqlite）。 */
+function current_db_path(): string
+{
+    return env('DB_PATH', APP_ROOT . '/data/app.sqlite');
+}
+
 function db(): \PDO
 {
     static $pdo = null;
@@ -34,7 +40,7 @@ function db(): \PDO
             . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n"
         );
     }
-    $path = env('DB_PATH', $dir . '/app.sqlite');
+    $path = current_db_path();
 
     $pdo = new \PDO('sqlite:' . $path, null, null, [
         \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
