@@ -563,6 +563,46 @@ function path_within_docroot(string $path): ?bool
 }
 
 /**
+ * .env が実際に Web から取得できる状態か（誤検知防止のため実測）。
+ * 自サイトの /.env を取得して 200 なら露出。403/404 等なら保護されている。
+ * 結果は private 領域にキャッシュ（既定1日）。判定不能なら null。
+ */
+function env_web_exposed(): ?bool
+{
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    if ($host === '' || !function_exists('curl_init')) {
+        return null;
+    }
+    $cacheFile = dirname(current_db_path()) . '/.envcheck.json';
+    if (is_file($cacheFile)) {
+        $c = json_decode((string) @file_get_contents($cacheFile), true);
+        if (is_array($c) && isset($c['ts']) && (time() - (int) $c['ts'] < 86400)) {
+            return array_key_exists('result', $c) ? $c['result'] : null;
+        }
+    }
+    $scheme = request_is_https() ? 'https' : 'http';
+    $url = $scheme . '://' . $host . '/.env';
+    $result = null;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+    ]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_errno($ch);
+    curl_close($ch);
+    if ($err === 0 && $code > 0) {
+        // 200 かつ中身が .env らしい（=実際に配信されている）なら露出とみなす
+        $result = ($code === 200 && is_string($body) && (str_contains($body, 'APP_BASE_URL') || str_contains($body, 'DB_PATH') || str_contains($body, 'MAIL_FROM')));
+    }
+    @file_put_contents($cacheFile, json_encode(['ts' => time(), 'result' => $result]));
+    return $result;
+}
+
+/**
  * 重大な構成リスクを検知して返す（運用者へ警告するため）。
  * 最重要: SQLite DB が公開ディレクトリ内にある（= Web から直接ダウンロード可能になりうる）。
  * DB が外にあれば、APP_KEY が漏れても暗号化済みの主催者鍵は復号できない（被害連鎖を遮断）。
@@ -579,10 +619,11 @@ function security_warnings(): array
                 . ' .env の DB_PATH に「公開ディレクトリの外」の絶対パスを設定してください（例: /home/アカウント/private/app.sqlite）。',
         ];
     }
-    if (is_file(APP_ROOT . '/.env') && path_within_docroot(APP_ROOT . '/.env') === true) {
+    // .env はフラット配置では公開フォルダ内に置かれるため、パスではなく「実際にWeb取得できるか」で判定。
+    if (env_web_exposed() === true) {
         $w[] = [
-            'level' => 'high',
-            'msg' => '.env が公開ディレクトリ内にあります。.htaccess によるアクセス拒否が有効か必ず確認してください（ブラウザで /.env が 403/404 になること）。',
+            'level' => 'critical',
+            'msg' => '.env が Web から直接ダウンロードできる状態です（/.env が 200 を返します）。直ちに .htaccess を有効化するか、機密を公開フォルダの外へ移してください。',
         ];
     }
     // Stripe 鍵ファイルの保存先（STRIPE_KEY_DIR 既定は DB と同じ場所）が公開領域内かどうか。
