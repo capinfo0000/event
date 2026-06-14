@@ -210,40 +210,62 @@ function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
 }
 
 /**
- * 主催者が画面登録した Stripe 秘密鍵を暗号化して保存する。null/空で消去（解除）。
- * APP_KEY 未設定なら例外（平文保存は許可しない）。
+ * 主催者の Stripe 鍵を保存するファイルのパス。
+ * 既定は DB と同じディレクトリ（運用では DB ごと公開フォルダ外に置く前提）。
+ * STRIPE_KEY_DIR で明示指定も可能。鍵は DB には保存しない（旧来の方式）。
  */
-function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
+function tenant_key_path(string $tenantId): string
 {
-    $enc = null;
-    if ($plainKey !== null && $plainKey !== '') {
-        if (!crypto_available()) {
-            throw new \RuntimeException('APP_KEY が未設定のため鍵を安全に保存できません。.env に APP_KEY を設定してください。');
-        }
-        $enc = app_encrypt($plainKey);
-    }
-    $stmt = db()->prepare('UPDATE tenants SET stripe_secret_enc = ? WHERE id = ?');
-    $stmt->execute([$enc, $tenantId]);
+    $dir = env('STRIPE_KEY_DIR', dirname(current_db_path()));
+    $safe = preg_replace('/[^a-zA-Z0-9_]/', '', $tenantId);
+    return rtrim($dir, '/') . '/stripe_' . $safe . '.key';
 }
 
 /**
- * 主催者の Stripe 秘密鍵（復号済み平文）を返す。未登録/復号不可なら null。
- * 画面表示には使わないこと（決済処理にのみ使用）。
+ * 主催者の Stripe 鍵を「公開フォルダ外のファイル」に保存する。null/空で削除。
+ * APP_KEY があれば暗号化（enc:）、無ければそのまま（raw:）保存する（ファイル自体が非公開前提）。
+ */
+function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
+{
+    $path = tenant_key_path($tenantId);
+    if ($plainKey === null || $plainKey === '') {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+        return;
+    }
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    $payload = crypto_available() ? ('enc:' . app_encrypt($plainKey)) : ('raw:' . $plainKey);
+    file_put_contents($path, $payload, LOCK_EX);
+    @chmod($path, 0600);
+}
+
+/**
+ * 主催者の Stripe 鍵（平文）を返す。未登録/復号不可なら null。決済処理にのみ使用（画面表示はマスク）。
  */
 function get_tenant_stripe_key(array $tenant): ?string
 {
-    $enc = $tenant['stripe_secret_enc'] ?? null;
-    if ($enc === null || $enc === '') {
+    $path = tenant_key_path((string) ($tenant['id'] ?? ''));
+    if (!is_file($path)) {
         return null;
     }
-    return app_decrypt((string) $enc);
+    $data = (string) file_get_contents($path);
+    if (str_starts_with($data, 'enc:')) {
+        return app_decrypt(substr($data, 4));
+    }
+    if (str_starts_with($data, 'raw:')) {
+        return substr($data, 4);
+    }
+    return $data !== '' ? $data : null;
 }
 
-/** 主催者が Stripe 秘密鍵を登録済みか（復号可否は問わない）。 */
+/** 主催者が Stripe 鍵を登録済みか。 */
 function tenant_has_stripe_key(array $tenant): bool
 {
-    $enc = $tenant['stripe_secret_enc'] ?? null;
-    return $enc !== null && $enc !== '';
+    return is_file(tenant_key_path((string) ($tenant['id'] ?? '')));
 }
 
 function set_tenant_plan(string $tenantId, string $plan): void

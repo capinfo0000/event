@@ -585,6 +585,15 @@ function security_warnings(): array
             'msg' => '.env が公開ディレクトリ内にあります。.htaccess によるアクセス拒否が有効か必ず確認してください（ブラウザで /.env が 403/404 になること）。',
         ];
     }
+    // Stripe 鍵ファイルの保存先（STRIPE_KEY_DIR 既定は DB と同じ場所）が公開領域内かどうか。
+    $keyDir = env('STRIPE_KEY_DIR', dirname(current_db_path()));
+    if (path_within_docroot($keyDir) === true) {
+        $w[] = [
+            'level' => 'critical',
+            'msg' => 'Stripe 鍵の保存先が公開ディレクトリ内です。Web から直接ダウンロードされ鍵が漏えいする恐れがあります。'
+                . ' .env の DB_PATH（または STRIPE_KEY_DIR）を公開ディレクトリの外に設定してください。',
+        ];
+    }
     return $w;
 }
 
