@@ -28,6 +28,7 @@ if ($signupOpen && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         try {
             create_tenant($email, $password, $name);
+            audit_log('signup', ['email' => mask_email_for_log($email)]);
             login_tenant($email, $password);
             header('Location: dashboard.php');
             exit;

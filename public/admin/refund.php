@@ -37,6 +37,7 @@ function back_to_admin(string $eventId, string $msg, string $type): never
 // 対象イベントが自分のものか確認し、自分の接続アカウントに対して返金する
 $event = $eventId !== '' ? find_event($eventId) : null;
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
+    audit_log('authz.deny', ['action' => 'refund', 'tenant' => $tenant['id'], 'event' => $eventId]);
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
 $account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラットフォームの順で文脈確立
@@ -51,6 +52,7 @@ if ($paymentIntent === '') {
 // IDOR対策: 指定 payment_intent が「このイベントの事前決済」であることを Stripe 側で検証する。
 // （単一 Stripe 共有のため、検証しないと他テナントの決済に返金できてしまう。）
 if (find_event_participant_by_payment_intent($eventId, $account, $paymentIntent) === null) {
+    audit_log('authz.deny', ['action' => 'refund.pi', 'tenant' => $tenant['id'], 'event' => $eventId]);
     back_to_admin($eventId, '返金対象の決済が見つかりません。', 'ng');
 }
 
@@ -79,6 +81,7 @@ if ($amountRaw !== '') {
 
 try {
     $refund = \Stripe\Refund::create($refundParams, $opts);
+    audit_log('refund', ['tenant' => $tenant['id'], 'event' => $eventId, 'pi' => substr($paymentIntent, 0, 10) . '…', 'partial' => isset($refundParams['amount']) ? '1' : '0']);
     $isPartial = isset($refundParams['amount']);
     $msg = $isPartial
         ? '一部返金を実行しました（返金ID: ' . $refund->id . '）。'

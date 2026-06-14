@@ -40,6 +40,7 @@ if ($customerId === '' || !stripe_ready_for_tenant($tenant)) {
 // IDOR対策: 指定 customer_id が「このイベントの当日支払い参加者」であることを Stripe 側で検証する。
 $target = find_event_participant_by_customer($eventId, $account, $customerId);
 if ($target === null || ($target['payment_type'] ?? '') !== 'onsite') {
+    audit_log('authz.deny', ['action' => 'onsite_cancel', 'tenant' => $tenant['id'], 'event' => $eventId]);
     back_to_admin($eventId, '取消対象の参加者が見つかりません。', 'ng');
 }
 

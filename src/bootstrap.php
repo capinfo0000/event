@@ -639,6 +639,36 @@ function security_warnings(): array
 }
 
 /**
+ * 監査ログ（誰が・いつ・どこから・何をしたか）。
+ * 公開フォルダ外（DB と同じ private 領域）に追記。秘密（鍵・カード情報・トークン）は記録しない。
+ * 漏えい・不正アクセスの調査と、原因箇所を塞ぐための証跡として使う。
+ *
+ * @param array<string, scalar> $ctx 付帯情報（event_id, result 等。PII/秘密は入れないこと）
+ */
+function audit_log(string $event, array $ctx = []): void
+{
+    $path = dirname(current_db_path()) . '/audit.log';
+    $max = (int) env('AUDIT_LOG_MAX_BYTES', '5242880'); // 5MB
+    if ($max > 0 && is_file($path) && @filesize($path) >= $max) {
+        @rename($path, $path . '.1'); // 1世代ローテーション
+    }
+    $parts = [];
+    foreach ($ctx as $k => $v) {
+        // 改行・空白を除去してログ1行を壊さない
+        $parts[] = $k . '=' . preg_replace('/\s+/', '_', (string) $v);
+    }
+    $line = sprintf(
+        "[%s] ip=%s ua=%s event=%s %s\n",
+        date('c'),
+        client_ip(),
+        substr(preg_replace('/\s+/', '_', (string) ($_SERVER['HTTP_USER_AGENT'] ?? '-')), 0, 60),
+        $event,
+        implode(' ', $parts)
+    );
+    @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
+}
+
+/**
  * 出力エスケープ。
  */
 function e(?string $value): string
@@ -673,6 +703,7 @@ function csrf_verify(?string $token): void
     session_boot();
     $expected = $_SESSION['csrf_token'] ?? '';
     if ($expected === '' || !is_string($token) || !hash_equals($expected, $token)) {
+        audit_log('csrf.fail', ['path' => $_SERVER['SCRIPT_NAME'] ?? '']);
         http_response_code(400);
         exit('不正なリクエストです（CSRF トークン不一致）。画面を開き直してください。');
     }

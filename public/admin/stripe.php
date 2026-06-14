@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($key === '') {
             // 空で保存＝削除
             set_tenant_stripe_key($tenant['id'], null);
+            audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
             $msg = 'Stripe 鍵を削除しました。';
             $tenant = find_tenant_by_id($tenant['id']);
         } elseif (!preg_match('/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/', $key)) {
@@ -50,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 set_tenant_stripe_key($tenant['id'], $key);
                 [$okTest, $detail] = stripe_test_key($key);
+                audit_log('stripe.key.save', ['tenant' => $tenant['id'], 'mode' => str_contains($key, '_live_') ? 'live' : 'test', 'verify' => $okTest ? 'ok' : 'ng']);
                 $msg = 'Stripe 鍵を保存しました。' . $detail;
                 $msgType = $okTest ? 'ok' : 'ng';
                 $tenant = find_tenant_by_id($tenant['id']);
@@ -71,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'clear') {
         set_tenant_stripe_key($tenant['id'], null);
+        audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
         $msg = '保存した鍵を削除しました。';
         $tenant = find_tenant_by_id($tenant['id']);
     }

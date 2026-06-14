@@ -363,6 +363,7 @@ function require_admin_tenant(): array
 {
     $tenant = require_tenant();
     if ((int) ($tenant['is_admin'] ?? 0) !== 1) {
+        audit_log('authz.admin_deny', ['tenant' => $tenant['id'], 'path' => $_SERVER['SCRIPT_NAME'] ?? '']);
         http_response_code(403);
         exit('この操作にはプラットフォーム管理者権限が必要です。');
     }

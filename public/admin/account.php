@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 update_tenant_password($tenant['id'], $new);
+                audit_log('account.password_change', ['tenant' => $tenant['id']]);
                 $msg = 'パスワードを変更しました。';
             } catch (\Throwable $e) {
                 $msg = $e->getMessage();

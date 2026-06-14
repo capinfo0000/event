@@ -41,6 +41,7 @@ if ($customerId === '' || !stripe_ready_for_tenant($tenant)) {
 
 // IDOR対策: 指定 customer_id が「このイベントの参加者」であることを Stripe 側で検証する。
 if (find_event_participant_by_customer($eventId, $account, $customerId) === null) {
+    audit_log('authz.deny', ['action' => 'onsite_collect', 'tenant' => $tenant['id'], 'event' => $eventId]);
     back_to_admin($eventId, '対象の参加者が見つかりません。', 'ng');
 }
 

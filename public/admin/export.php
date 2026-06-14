@@ -15,6 +15,7 @@ $eventId = (string) ($_GET['event_id'] ?? '');
 $event = $eventId !== '' ? find_event($eventId) : null;
 
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
+    audit_log('authz.deny', ['action' => 'csv.export', 'tenant' => $tenant['id'], 'event' => $eventId]);
     http_response_code(404);
     exit('イベントが見つかりません。');
 }
@@ -22,6 +23,7 @@ if ($event === null || $event['tenant_id'] !== $tenant['id']) {
 try {
     $account = stripe_resolve_tenant($tenant);
     $participants = fetch_event_participants($eventId, $account);
+    audit_log('csv.export', ['tenant' => $tenant['id'], 'event' => $eventId, 'count' => count($participants)]);
 } catch (\Throwable $ex) {
     http_response_code(502);
     error_log('CSV 用名簿取得失敗: ' . $ex->getMessage());
