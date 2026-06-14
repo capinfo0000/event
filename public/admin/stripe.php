@@ -14,14 +14,18 @@ $tenant = require_tenant();
 $msg = '';
 $msgType = 'ok';
 
-/** 鍵を Stripe で疎通確認する（Balance 取得）。成功で [true, 説明]。 */
+/**
+ * 鍵を Stripe で疎通確認する。アプリが実際に使う「Checkout Sessions の取得」で検証するため、
+ * 案内している制限付きキー権限（Checkout Sessions 書き込み）だけで通る（Balance 権限は不要）。
+ * モード（test/live）は鍵の接頭辞から判定する。成功で [true, 説明]。
+ */
 function stripe_test_key(string $key): array
 {
     try {
         \Stripe\Stripe::setApiKey($key);
-        $bal = \Stripe\Balance::retrieve();
-        $live = ($bal->livemode ?? false) ? '本番(live)' : 'テスト(test)';
-        return [true, "接続成功（{$live} モード）"];
+        \Stripe\Checkout\Session::all(['limit' => 1]);
+        $mode = str_contains($key, '_live_') ? '本番(live)' : 'テスト(test)';
+        return [true, "接続成功（{$mode} モード）"];
     } catch (\Throwable $e) {
         return [false, '接続失敗: ' . $e->getMessage()];
     }
