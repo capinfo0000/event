@@ -128,7 +128,7 @@ require __DIR__ . '/_app_header.php';
         <input type="hidden" name="action" value="save">
         <label>Stripe 秘密鍵（<code>sk_…</code> または 制限付き <code>rk_…</code>）</label>
         <input type="password" name="stripe_key" autocomplete="off" placeholder="sk_test_xxxxx">
-        <p class="hint">※ 鍵は DB には保存せず、<strong>公開フォルダ外のファイル</strong>にのみ保存します（APP_KEY があれば暗号化も併用）。空で保存すると削除します。</p>
+        <p class="hint">※ 入力した鍵は安全に保管され、画面には再表示されません。空のまま保存すると登録を解除します。</p>
         <p style="margin-top:14px;">
             <button type="submit" class="btn">保存する</button>
         </p>
