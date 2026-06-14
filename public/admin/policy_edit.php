@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $msg = trim($text) === '' ? 'ポリシーを既定の文面に戻しました。' : 'キャンセルポリシーを保存しました。';
 }
 
-$current = (string) ($tenant['cancel_policy'] ?? '');
+$policyText = (string) ($tenant['cancel_policy'] ?? '');
 $sample = "本イベントは事前決済（前払い）制です。お支払い後のキャンセルは、以下の規定を適用します。\n\n"
     . "【返金率（開催日基準）】\n"
     . "・開催8日前まで：全額返金（決済手数料を除く）\n"
@@ -45,7 +45,7 @@ require __DIR__ . '/_app_header.php';
     <p class="muted">この文面が、参加者の申込ページ等の「キャンセル・返金ポリシー」に表示されます。<strong>空のまま保存すると既定の文面</strong>が使われます。</p>
     <form method="post">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-        <textarea name="cancel_policy" rows="12" maxlength="5000" placeholder="<?= e($sample) ?>"><?= e($current) ?></textarea>
+        <textarea name="cancel_policy" rows="12" maxlength="5000" placeholder="<?= e($sample) ?>"><?= e($policyText) ?></textarea>
         <p class="hint">改行はそのまま反映されます。HTMLタグは使えません（安全のため自動でエスケープされます）。</p>
         <p style="margin-top:14px;">
             <button type="submit" class="btn">保存する</button>
