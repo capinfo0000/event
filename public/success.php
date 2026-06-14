@@ -20,7 +20,8 @@ $email = '';
 $event = $eventId !== '' ? find_event($eventId) : null;
 $account = $event !== null ? stripe_resolve_event($event) : null;
 
-if ($sessionId !== '') {
+// 正規の遷移は「実在イベント＋Stripe文脈あり」。細工された値での 500 を避け、graceful に表示する。
+if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
     init_stripe();
     try {
         $session = \Stripe\Checkout\Session::retrieve($sessionId, stripe_opts($account));
