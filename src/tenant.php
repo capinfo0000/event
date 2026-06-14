@@ -16,6 +16,15 @@ function session_boot(): void
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
+    // セッションファイルを公開領域外の専用ディレクトリに隔離する。
+    // 共有ホスティングで保存先が共有・覗き見可能な場合のセッション窃取（→名簿PII流出）を防ぐ。
+    $sessDir = dirname(current_db_path()) . '/sessions';
+    if (!is_dir($sessDir)) {
+        @mkdir($sessDir, 0700, true);
+    }
+    if (is_dir($sessDir) && is_writable($sessDir)) {
+        session_save_path($sessDir);
+    }
     // HTTPS 配信（プロキシ経由・APP_BASE_URL が https を含む）なら Secure 属性を常時付与
     session_set_cookie_params([
         'lifetime' => 0,

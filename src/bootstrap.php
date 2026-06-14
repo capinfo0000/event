@@ -569,8 +569,9 @@ function path_within_docroot(string $path): ?bool
  */
 function env_web_exposed(): ?bool
 {
-    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
-    if ($host === '' || !function_exists('curl_init')) {
+    // SSRF/Hostヘッダ注入を避けるため、宛先は信頼できる APP_BASE_URL のみを使う（HTTP_HOST は使わない）。
+    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
+    if ($base === '' || !preg_match('#^https?://#i', $base) || !function_exists('curl_init')) {
         return null;
     }
     $cacheFile = dirname(current_db_path()) . '/.envcheck.json';
@@ -580,8 +581,7 @@ function env_web_exposed(): ?bool
             return array_key_exists('result', $c) ? $c['result'] : null;
         }
     }
-    $scheme = request_is_https() ? 'https' : 'http';
-    $url = $scheme . '://' . $host . '/.env';
+    $url = $base . '/.env';
     $result = null;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
