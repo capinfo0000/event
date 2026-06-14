@@ -104,10 +104,7 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title">APIキーの取得・登録</div>
-    <details>
-        <summary>事前決済について</summary>
-        <p class="muted">参加費を <strong>あなた自身の Stripe アカウント</strong> へ直接入金するため、ご自身の API キーを登録します。カード情報は Stripe 上で入力され、当サービスは保持しません。</p>
-    </details>
+    <p><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済について</button></p>
     <p>Stripe にログイン →「開発者」→「APIキー」を開く（下のボタン）。</p>
     <ul class="muted" style="line-height:1.9;">
         <li>まずは標準のシークレットキー（<code>sk_test_…</code>）を使うのが簡単です。本番は <code>sk_live_…</code> に差し替え。</li>
@@ -322,4 +319,5 @@ require __DIR__ . '/_app_header.php';
         </div>
     </div>
 </div>
+<?php require dirname(__DIR__) . '/_prepay_info_modal.php'; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>
