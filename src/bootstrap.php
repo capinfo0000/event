@@ -426,8 +426,8 @@ function init_stripe(): void
 {
     $key = stripe_active_key() ?? env('STRIPE_SECRET_KEY');
     if ($key === null) {
-        http_response_code(500);
-        exit("設定エラー: Stripe の鍵が設定されていません。\n");
+        // 例外にして呼び出し側の try/catch で受け、500 即死や白画面を避ける。
+        throw new \RuntimeException('Stripe の鍵が設定されていません。');
     }
     \Stripe\Stripe::setApiKey($key);
     $clientId = env('STRIPE_CONNECT_CLIENT_ID');
@@ -474,19 +474,22 @@ function stripe_resolve_event(array $event): ?string
     return effective_stripe_account($event['stripe_account_id'] ?? null);
 }
 
-/** テナントが決済可能な Stripe 文脈を持つか（画面登録鍵 or プラットフォーム鍵）。 */
+/**
+ * テナントが決済可能な Stripe 文脈を持つか。
+ * 「実際に使える鍵」で判定する（ファイル存在だけでは不十分＝復号できないと init で失敗するため）。
+ */
 function stripe_ready_for_tenant(array $tenant): bool
 {
-    return tenant_has_stripe_key($tenant) || env('STRIPE_SECRET_KEY') !== null;
+    return get_tenant_stripe_key($tenant) !== null || env('STRIPE_SECRET_KEY') !== null;
 }
 
-/** イベント所有者が決済可能な Stripe 文脈を持つか。 */
+/** イベント所有者が決済可能な Stripe 文脈を持つか（実際に使える鍵で判定）。 */
 function stripe_ready_for_event(array $event): bool
 {
     $ownerId = (string) ($event['tenant_id'] ?? '');
     if ($ownerId !== '') {
         $owner = find_tenant_by_id($ownerId);
-        if ($owner !== null && tenant_has_stripe_key($owner)) {
+        if ($owner !== null && get_tenant_stripe_key($owner) !== null) {
             return true;
         }
     }
