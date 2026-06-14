@@ -74,9 +74,17 @@ require __DIR__ . '/_app_header.php';
     <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
 <?php endif; ?>
 <?php if (!$connected): ?>
-    <div class="flash flash--ng" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;">
-        <span>⚠️ <strong>Stripe が未設定です。</strong>事前決済（カード）を受け付けるには、ご自身の Stripe キーを登録してください。</span>
-        <a class="btn" href="stripe.php" style="white-space:nowrap;">Stripe を設定する →</a>
+    <div class="modal is-open" id="setupModal" role="dialog" aria-modal="true">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__box">
+            <div class="modal__title">⚠️ Stripe が未設定です</div>
+            <p>事前決済（クレジットカード）を受け付けるには、<strong>ご自身の Stripe API キー</strong>を登録してください。</p>
+            <p class="muted">当日支払い（現金）のみのイベントは、設定なしでも利用できます。</p>
+            <div class="modal__actions">
+                <a class="btn" href="stripe.php">Stripe を設定する →</a>
+                <button type="button" class="btn btn--ghost" data-modal-close>後で</button>
+            </div>
+        </div>
     </div>
 <?php endif; ?>
 <div class="stat-grid">

@@ -21,5 +21,33 @@
         if (!window.confirm(f.getAttribute('data-confirm'))) { e.preventDefault(); }
       });
     });
+
+    // モーダル（ポップアップ）: data-modal-open="ID" で開く
+    function closeModal(m) { if (m) { m.classList.remove('is-open'); } }
+    document.querySelectorAll('[data-modal-open]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var m = document.getElementById(btn.getAttribute('data-modal-open'));
+        if (m) { m.classList.add('is-open'); }
+      });
+    });
+    // 背景クリック / data-modal-close で閉じる
+    document.querySelectorAll('.modal').forEach(function (m) {
+      m.addEventListener('click', function (e) {
+        if (e.target === m || (e.target.closest && e.target.closest('[data-modal-close]'))) {
+          closeModal(m);
+        }
+      });
+    });
+    // ESC キーで閉じる
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.modal.is-open').forEach(closeModal);
+      }
+    });
+    // data-auto-open のモーダルは表示時に自動で開く
+    document.querySelectorAll('.modal[data-auto-open]').forEach(function (m) {
+      m.classList.add('is-open');
+    });
   });
 })();

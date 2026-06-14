@@ -120,7 +120,7 @@ require __DIR__ . '/_app_header.php';
     <p>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">本番用APIキーを開く</a>
-        <a class="btn btn--ghost" href="https://stripe.com/docs/keys#create-restricted-api-secret-key" target="_blank" rel="noopener">制限付きキーの作り方（詳細手順）</a>
+        <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキー（rk_）の作り方</button>
     </p>
 
     <form method="post" style="margin-top:18px;">
@@ -149,18 +149,10 @@ require __DIR__ . '/_app_header.php';
         <li>クレジットカード／Apple Pay／Google Pay：対応端末・ブラウザなら自動表示（基本的に追加設定は不要）。</li>
         <li>PayPay／コンビニ払い／銀行振込など：使うには Stripe ダッシュボードでの<strong>有効化</strong>が必要です（未有効だと決済画面に出ません）。</li>
     </ul>
-    <details>
-        <summary>PayPay を有効にする手順</summary>
-        <ol class="muted" style="line-height:1.9;">
-            <li>下のボタンから Stripe の「設定 → 支払い方法」を開く。</li>
-            <li>一覧から <strong>PayPay</strong> を探して「有効にする」（通貨が日本円・日本のアカウントが条件）。</li>
-            <li>必要に応じて「コンビニ決済（Konbini）」なども同様に有効化。</li>
-            <li>有効化すると、このアプリの決済画面に自動で表示されます（再設定不要）。</li>
-        </ol>
-    </details>
     <p>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">支払い方法（テスト）を開く</a>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">支払い方法（本番）を開く</a>
+        <button type="button" class="btn btn--ghost" data-modal-open="paypayGuide">PayPay 等を有効にする手順（詳細）</button>
     </p>
     <p class="hint">※ PayPay はテストモードでも有効化でき、テスト決済を試せます。利用可否は Stripe 側の対応条件（国・通貨・審査状況）により異なります。</p>
 </div>
@@ -195,5 +187,85 @@ require __DIR__ . '/_app_header.php';
     <?php else: ?>
         <p class="muted">まだ登録されていません。</p>
     <?php endif; ?>
+</div>
+<!-- 制限付きキー（rk_）の作り方モーダル -->
+<div class="modal" id="rkGuide" role="dialog" aria-modal="true">
+    <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+    <div class="modal__box">
+        <div class="modal__title">制限付きキー（rk_）の作り方</div>
+        <p class="muted">権限を絞ったキーです。万一漏れても被害を限定できます。テスト環境（sandbox）でそのまま作れます。</p>
+
+        <div class="modal__step">1. APIキー画面を開く</div>
+        <p>右上の ⚙（設定） →「開発者」→「APIキーの管理」。<br>
+           「制限付きのキー」の右上 <strong>＋ 制限付きのキーを作成</strong> を押す。</p>
+
+        <div class="modal__step">2. テンプレートを選ぶ</div>
+        <p><strong>「One-time payments」</strong>を選択 → 続ける。<br>
+           <span class="muted">（チェックアウト/決済リンク等での支払い受付）</span></p>
+
+        <div class="modal__step">3. キーの名前を入力</div>
+        <p><code>event-app</code> など。</p>
+
+        <div class="modal__step">4. 権限を設定（下記だけ／他は「なし」）</div>
+        <ul>
+            <li><strong>Core</strong>
+                <ul>
+                    <li>Charges and Refunds … <strong>書込</strong></li>
+                    <li>Customers … <strong>書込</strong></li>
+                    <li>Payment Intents … <strong>読取</strong></li>
+                </ul>
+            </li>
+            <li><strong>Accounts</strong>
+                <ul><li>Accounts … <strong>読取</strong></li></ul>
+            </li>
+            <li><strong>Checkout Sessions</strong>
+                <ul><li>Checkout Sessions … <strong>読取/書込</strong></li></ul>
+            </li>
+        </ul>
+        <p class="hint">※「Accounts＝読取」も入れておくと確実です。項目は Ctrl+F で検索すると速い。</p>
+
+        <div class="modal__step">5. 作成してトークンをコピー</div>
+        <p>一番下の <strong>キーを作成</strong> → 表示される <code>rk_test_…</code> の長い文字をコピー。</p>
+
+        <div class="modal__step">6. このページに貼り付けて確認</div>
+        <p>「Stripe 秘密鍵」欄に貼り付け → <strong>保存する</strong>。✅「接続成功」でOK。<br>
+           <span class="muted">権限エラーが出たら、表示された権限（例：Checkout Sessions／Accounts）を追加して再確認。</span></p>
+
+        <div class="modal__actions">
+            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー画面を開く（テスト）</a>
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- PayPay 等を有効にする手順モーダル -->
+<div class="modal" id="paypayGuide" role="dialog" aria-modal="true">
+    <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+    <div class="modal__box">
+        <div class="modal__title">PayPay・コンビニ払い等を有効にする手順</div>
+        <p class="muted">決済画面には「Stripe で有効にした支払い方法」が自動で表示されます。PayPay 等は既定でオフのことがあるため、ダッシュボードで有効化します（テスト環境でも可）。</p>
+
+        <div class="modal__step">1. 「決済手段」設定を開く</div>
+        <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong> →「決済手段」。<br>
+           <span class="muted">下のボタンからも直接開けます。</span></p>
+
+        <div class="modal__step">2. 一覧から「PayPay」を探す</div>
+        <p>「デジタルウォレット」タイプ・地域「日本」にあります。検索枠で <code>PayPay</code> と入力すると速いです。</p>
+
+        <div class="modal__step">3. PayPay を有効にする</div>
+        <p>PayPay の行をクリック（または右の …）→ <strong>有効にする</strong> を押す。<br>
+           <span class="muted">利用には「通貨＝日本円・日本のアカウント」等の条件があります。テストでも決済可。</span></p>
+
+        <div class="modal__step">4. 必要なら他の方法も有効化</div>
+        <p>コンビニ決済（Konbini）・銀行振込 なども同じ手順で有効にできます。</p>
+
+        <div class="modal__step">5. 完了（アプリ側の作業は不要）</div>
+        <p>有効にした方法は、このアプリの決済画面に自動で表示されます。コード変更や再設定は要りません。</p>
+
+        <div class="modal__actions">
+            <a class="btn" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">決済手段（テスト）を開く</a>
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
 </div>
 <?php require __DIR__ . '/_app_footer.php'; ?>
