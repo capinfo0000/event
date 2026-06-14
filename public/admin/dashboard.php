@@ -75,8 +75,8 @@ require __DIR__ . '/_app_header.php';
 <?php endif; ?>
 <?php if (!$connected): ?>
     <div class="modal is-open" id="setupModal" role="dialog" aria-modal="true">
-        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
         <div class="modal__box">
+            <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
             <div class="modal__title">⚠️ Stripe が未設定です</div>
             <p>事前決済（クレジットカード）を受け付けるには、<strong>ご自身の Stripe API キー</strong>を登録してください。</p>
             <p class="muted">当日支払い（現金）のみのイベントは、設定なしでも利用できます。</p>

@@ -190,46 +190,67 @@ require __DIR__ . '/_app_header.php';
 </div>
 <!-- 制限付きキー（rk_）の作り方モーダル -->
 <div class="modal" id="rkGuide" role="dialog" aria-modal="true">
-    <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
     <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
         <div class="modal__title">制限付きキー（rk_）の作り方</div>
-        <p class="muted">権限を絞ったキーです。万一漏れても被害を限定できます。テスト環境（sandbox）でそのまま作れます。</p>
+        <p class="modal__lead">権限を絞ったキーです。万一漏れても被害を限定できます。テスト環境（sandbox）でそのまま作れます。</p>
 
-        <div class="modal__step">1. APIキー画面を開く</div>
-        <p>右上の ⚙（設定） →「開発者」→「APIキーの管理」。<br>
-           「制限付きのキー」の右上 <strong>＋ 制限付きのキーを作成</strong> を押す。</p>
-
-        <div class="modal__step">2. テンプレートを選ぶ</div>
-        <p><strong>「One-time payments」</strong>を選択 → 続ける。<br>
-           <span class="muted">（チェックアウト/決済リンク等での支払い受付）</span></p>
-
-        <div class="modal__step">3. キーの名前を入力</div>
-        <p><code>event-app</code> など。</p>
-
-        <div class="modal__step">4. 権限を設定（下記だけ／他は「なし」）</div>
-        <ul>
-            <li><strong>Core</strong>
-                <ul>
-                    <li>Charges and Refunds … <strong>書込</strong></li>
-                    <li>Customers … <strong>書込</strong></li>
-                    <li>Payment Intents … <strong>読取</strong></li>
-                </ul>
-            </li>
-            <li><strong>Accounts</strong>
-                <ul><li>Accounts … <strong>読取</strong></li></ul>
-            </li>
-            <li><strong>Checkout Sessions</strong>
-                <ul><li>Checkout Sessions … <strong>読取/書込</strong></li></ul>
-            </li>
-        </ul>
-        <p class="hint">※「Accounts＝読取」も入れておくと確実です。項目は Ctrl+F で検索すると速い。</p>
-
-        <div class="modal__step">5. 作成してトークンをコピー</div>
-        <p>一番下の <strong>キーを作成</strong> → 表示される <code>rk_test_…</code> の長い文字をコピー。</p>
-
-        <div class="modal__step">6. このページに貼り付けて確認</div>
-        <p>「Stripe 秘密鍵」欄に貼り付け → <strong>保存する</strong>。✅「接続成功」でOK。<br>
-           <span class="muted">権限エラーが出たら、表示された権限（例：Checkout Sessions／Accounts）を追加して再確認。</span></p>
+        <div class="guide__row">
+            <div class="guide__num">1</div>
+            <div class="guide__body">
+                <div class="gt">APIキー画面を開く</div>
+                <p>右上の ⚙（設定）→「開発者」→「APIキーの管理」。「制限付きのキー」の右上 <strong>＋ 制限付きのキーを作成</strong> を押す。</p>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">2</div>
+            <div class="guide__body">
+                <div class="gt">テンプレートを選ぶ</div>
+                <div class="tpl tpl--on">☑ One-time payments<small>チェックアウト/決済リンク等での支払い受付</small></div>
+                <div class="tpl">Recurring subscriptions and billing</div>
+                <div class="tpl">In-person payments with Terminal</div>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">3</div>
+            <div class="guide__body">
+                <div class="gt">キーの名前を入力</div>
+                <div class="mockfield"><input type="text" value="event-app" readonly></div>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">4</div>
+            <div class="guide__body">
+                <div class="gt">権限を設定（下記だけ／他は「なし」）</div>
+                <div class="perm">
+                    <div class="perm__head">Core</div>
+                    <div class="perm__row"><span>Charges and Refunds</span><span class="perm__pills"><span class="pill">なし</span><span class="pill">読取</span><span class="pill pill--on">書込</span></span></div>
+                    <div class="perm__row"><span>Customers</span><span class="perm__pills"><span class="pill">なし</span><span class="pill">読取</span><span class="pill pill--on">書込</span></span></div>
+                    <div class="perm__row"><span>Payment Intents</span><span class="perm__pills"><span class="pill">なし</span><span class="pill pill--on">読取</span><span class="pill">書込</span></span></div>
+                    <div class="perm__head">Accounts</div>
+                    <div class="perm__row"><span>Accounts</span><span class="perm__pills"><span class="pill">なし</span><span class="pill pill--on">読取</span><span class="pill">書込</span></span></div>
+                    <div class="perm__head">Checkout Sessions</div>
+                    <div class="perm__row"><span>Checkout Sessions</span><span class="perm__pills"><span class="pill">なし</span><span class="pill">読取</span><span class="pill pill--on">書込</span></span></div>
+                </div>
+                <p class="muted">※「Accounts＝読取」も入れておくと確実です。項目は Ctrl+F で検索すると速い。</p>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">5</div>
+            <div class="guide__body">
+                <div class="gt">作成してトークンをコピー</div>
+                <p>一番下の <strong>キーを作成</strong> を押す。</p>
+                <div class="mockfield"><input type="text" value="rk_test_51Teq…UuJCFWm" readonly><span class="btn btn--ghost">コピー</span></div>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">6</div>
+            <div class="guide__body">
+                <div class="gt">このページに貼り付けて確認</div>
+                <p>「Stripe 秘密鍵」欄に貼り付け → <strong>保存する</strong>。✅「接続成功」でOK。</p>
+                <p class="muted">権限エラーが出たら、表示された権限（例：Checkout Sessions／Accounts）を追加して再確認。</p>
+            </div>
+        </div>
 
         <div class="modal__actions">
             <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー画面を開く（テスト）</a>
@@ -240,27 +261,52 @@ require __DIR__ . '/_app_header.php';
 
 <!-- PayPay 等を有効にする手順モーダル -->
 <div class="modal" id="paypayGuide" role="dialog" aria-modal="true">
-    <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
     <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
         <div class="modal__title">PayPay・コンビニ払い等を有効にする手順</div>
-        <p class="muted">決済画面には「Stripe で有効にした支払い方法」が自動で表示されます。PayPay 等は既定でオフのことがあるため、ダッシュボードで有効化します（テスト環境でも可）。</p>
+        <p class="modal__lead">決済画面には「Stripe で有効にした支払い方法」が自動で表示されます。PayPay 等は既定でオフのことがあるため、ダッシュボードで有効化します（テスト環境でも可）。</p>
 
-        <div class="modal__step">1. 「決済手段」設定を開く</div>
-        <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong> →「決済手段」。<br>
-           <span class="muted">下のボタンからも直接開けます。</span></p>
-
-        <div class="modal__step">2. 一覧から「PayPay」を探す</div>
-        <p>「デジタルウォレット」タイプ・地域「日本」にあります。検索枠で <code>PayPay</code> と入力すると速いです。</p>
-
-        <div class="modal__step">3. PayPay を有効にする</div>
-        <p>PayPay の行をクリック（または右の …）→ <strong>有効にする</strong> を押す。<br>
-           <span class="muted">利用には「通貨＝日本円・日本のアカウント」等の条件があります。テストでも決済可。</span></p>
-
-        <div class="modal__step">4. 必要なら他の方法も有効化</div>
-        <p>コンビニ決済（Konbini）・銀行振込 なども同じ手順で有効にできます。</p>
-
-        <div class="modal__step">5. 完了（アプリ側の作業は不要）</div>
-        <p>有効にした方法は、このアプリの決済画面に自動で表示されます。コード変更や再設定は要りません。</p>
+        <div class="guide__row">
+            <div class="guide__num">1</div>
+            <div class="guide__body">
+                <div class="gt">「決済手段」設定を開く</div>
+                <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong> →「決済手段」。下のボタンからも直接開けます。</p>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">2</div>
+            <div class="guide__body">
+                <div class="gt">一覧から「PayPay」を探す</div>
+                <p>「デジタルウォレット」タイプ・地域「日本」にあります。検索枠で <code>PayPay</code> と入力すると速いです。</p>
+                <div class="perm">
+                    <div class="perm__row"><span>Apple Pay</span><span class="pill pill--on">有効</span></div>
+                    <div class="perm__row"><span>Google Pay</span><span class="pill pill--on">有効</span></div>
+                    <div class="perm__row"><span>PayPay</span><span class="pill">無効</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">3</div>
+            <div class="guide__body">
+                <div class="gt">PayPay を有効にする</div>
+                <p>PayPay の行をクリック（または右の …）→ <strong>有効にする</strong> を押す。</p>
+                <p class="muted">利用には「通貨＝日本円・日本のアカウント」等の条件があります。テストでも決済可。</p>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">4</div>
+            <div class="guide__body">
+                <div class="gt">必要なら他の方法も有効化</div>
+                <p>コンビニ決済（Konbini）・銀行振込 なども同じ手順で有効にできます。</p>
+            </div>
+        </div>
+        <div class="guide__row">
+            <div class="guide__num">5</div>
+            <div class="guide__body">
+                <div class="gt">完了（アプリ側の作業は不要）</div>
+                <p>有効にした方法は、このアプリの決済画面に自動で表示されます。コード変更や再設定は要りません。</p>
+            </div>
+        </div>
 
         <div class="modal__actions">
             <a class="btn" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">決済手段（テスト）を開く</a>
