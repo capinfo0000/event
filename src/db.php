@@ -41,6 +41,11 @@ function db(): \PDO
         );
     }
     $path = current_db_path();
+    // DB_PATH に指定したディレクトリ（例: 公開フォルダ外の private/）が無ければ作成する。
+    $pathDir = dirname($path);
+    if ($pathDir !== '' && !is_dir($pathDir)) {
+        @mkdir($pathDir, 0700, true);
+    }
 
     $pdo = new \PDO('sqlite:' . $path, null, null, [
         \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
