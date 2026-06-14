@@ -96,7 +96,7 @@ require __DIR__ . '/_app_header.php';
 
 <div class="charts">
     <div class="card chart-card">
-        <div class="card__title"><span class="ic">📈</span> 申込推移（累計）</div>
+        <div class="card__title">申込推移（累計）</div>
         <?php if ($totalApplied > 0): ?>
             <div class="chart-box"><canvas id="chartTrend"></canvas></div>
         <?php else: ?>
@@ -104,7 +104,7 @@ require __DIR__ . '/_app_header.php';
         <?php endif; ?>
     </div>
     <div class="card chart-card">
-        <div class="card__title"><span class="ic">🍩</span> 支払い方法の内訳</div>
+        <div class="card__title">支払い方法の内訳</div>
         <?php if ($totalApplied > 0): ?>
             <div class="chart-box"><canvas id="chartMethods"></canvas></div>
         <?php else: ?>
@@ -114,7 +114,7 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
-    <div class="card__title"><span class="ic">💳</span> Stripe（決済）</div>
+    <div class="card__title">Stripe（決済）</div>
     <?php if ($hasOwnKey): ?>
         <p>✅ あなたの Stripe API キーを登録済みです。参加費は<strong>あなた自身の Stripe アカウント</strong>へ直接入金され、名簿・決済データもあなたのアカウントで管理されます。</p>
         <p><a class="btn btn--ghost" href="stripe.php">Stripe 設定・接続テスト</a></p>
@@ -129,7 +129,7 @@ require __DIR__ . '/_app_header.php';
 </div>
 
 <div class="card">
-    <div class="card__title"><span class="ic">🔗</span> 公開イベントページ</div>
+    <div class="card__title">公開イベントページ</div>
     <p class="muted" style="margin-top:0;">この1つのリンクを参加者に共有すれば、開催中のイベントを一覧から選んで申し込めます。</p>
     <input type="text" class="js-select" readonly value="<?= e($publicUrl) ?>">
     <p style="margin: 16px 0 0;">

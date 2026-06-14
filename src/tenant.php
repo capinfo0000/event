@@ -212,6 +212,14 @@ function create_tenant(string $email, string $password, string $displayName, boo
     return $id;
 }
 
+/** 主催者のキャンセル・返金ポリシー本文を保存する（空/null で既定文面に戻す）。 */
+function set_tenant_cancel_policy(string $tenantId, ?string $text): void
+{
+    $text = ($text !== null && trim($text) !== '') ? $text : null;
+    $stmt = db()->prepare('UPDATE tenants SET cancel_policy = ? WHERE id = ?');
+    $stmt->execute([$text, $tenantId]);
+}
+
 function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
 {
     $stmt = db()->prepare('UPDATE tenants SET stripe_account_id = ? WHERE id = ?');

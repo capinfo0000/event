@@ -81,10 +81,10 @@ $maxParty = min($maxParty, 20);
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <h1><?= e($event['name'] ?? '') ?></h1>
     <div class="card">
-        <p class="muted">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
+        <p class="muted"><?= e($event['date'] ?? '') ?>　<?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
             <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
@@ -146,7 +146,7 @@ $maxParty = min($maxParty, 20);
             <p class="notice" id="prepayBlockNote" style="<?= $blockedInit ? '' : 'display:none;' ?>">⚠️ 現在この主催者は支払い口座の設定が完了していないため、<strong>事前決済（オンライン前払い）</strong>は利用できません。<?= $allowOnsite ? '「当日支払い」を選んでお申し込みください。' : '準備が整うまでお待ちください。' ?></p>
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
-        <p class="hint">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
+        <p class="hint">キャンセル時の返金は<a href="policy.php?event_id=<?= e($event['id']) ?>" target="_blank">キャンセルポリシー</a>をご確認ください。</p>
     </form>
     <?php endif; ?>
 

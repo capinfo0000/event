@@ -55,6 +55,6 @@ function step_badge(bool $done): string
 </div>
 
 <?php if ($hasKey && $hasEvent): ?>
-    <div class="flash flash--ok">🎉 セットアップ完了です。<a href="dashboard.php">ダッシュボードへ</a></div>
+    <div class="flash flash--ok">セットアップ完了です。<a href="dashboard.php">ダッシュボードへ</a></div>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>

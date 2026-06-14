@@ -43,7 +43,7 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> <?= e($tenant['display_name']) ?> のイベント</div>
+    <div class="brandbar"><?= e($tenant['display_name']) ?> のイベント</div>
 
     <?php if (empty($events)): ?>
         <div class="card"><p style="margin:0;">現在受付中のイベントはありません。</p></div>
@@ -61,7 +61,7 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
             ?>
             <div class="card">
                 <div class="card__title" style="font-size:1.15rem;"><?= e($ev['name']) ?></div>
-                <p class="muted">📅 <?= e($ev['date']) ?>　📍 <?= e($ev['place']) ?></p>
+                <p class="muted"><?= e($ev['date']) ?>　<?= e($ev['place']) ?></p>
                 <p><?= e($ev['description']) ?></p>
                 <p class="ev-price">
                     <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
@@ -82,7 +82,7 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
 
     <p class="muted" style="margin-top:24px; font-size:.85rem;">
         カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。
-        <a href="policy.php">キャンセル・返金ポリシー</a>
+        <a href="policy.php?t=<?= e(urlencode($tenantId)) ?>">キャンセル・返金ポリシー</a>
     </p>
 </div>
 </body>

@@ -82,6 +82,7 @@ function db_migrate(\PDO $pdo): void
     db_add_column_if_missing($pdo, 'tenants', 'plan', "TEXT NOT NULL DEFAULT 'free'");
     db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
     db_add_column_if_missing($pdo, 'tenants', 'stripe_secret_enc', 'TEXT');  // 主催者が画面登録した Stripe 秘密鍵（AES-256-GCM 暗号化）
+    db_add_column_if_missing($pdo, 'tenants', 'cancel_policy', 'TEXT');      // 主催者ごとのキャンセル・返金ポリシー本文（未設定なら既定文面）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (

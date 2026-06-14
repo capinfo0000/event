@@ -112,7 +112,7 @@ require __DIR__ . '/_app_header.php';
 
 <?php if ($selectedEvent !== null): ?>
     <p class="muted">
-        📅 <?= e($selectedEvent['date'] ?? '') ?>　📍 <?= e($selectedEvent['place'] ?? '') ?>
+        <?= e($selectedEvent['date'] ?? '') ?>　<?= e($selectedEvent['place'] ?? '') ?>
         <?php if (!empty($selectedEvent['capacity'])): ?>　／ 定員目安: <?= (int) $selectedEvent['capacity'] ?> 名<?php endif; ?>
     </p>
 <?php endif; ?>
@@ -166,7 +166,7 @@ require __DIR__ . '/_app_header.php';
                             <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
                             <td<?= $p['note'] !== '' ? ' title="' . e('備考: ' . $p['note']) . '"' : '' ?>>
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
-                                <?php if ($p['note'] !== ''): ?><span class="muted" title="<?= e($p['note']) ?>">📝</span><?php endif; ?>
+                                <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
                             </td>
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>
