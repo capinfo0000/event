@@ -220,7 +220,7 @@ require __DIR__ . '/_app_header.php';
                                     <span class="muted">—</span>
                                 <?php else: ?>
                                     <form method="post" action="refund.php" class="refund-form"
-                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？">
+                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（Stripe の決済手数料は返金されません）">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
@@ -241,6 +241,7 @@ require __DIR__ . '/_app_header.php';
             </table>
         </div>
         <p class="muted" style="margin-top:10px;">返金欄を空欄で実行すると全額返金（＝キャンセル）になります。</p>
+        <p class="muted" style="margin-top:4px;">⚠️ 返金しても、Stripe の決済手数料は返金されません（手数料は主催者の負担となります）。全額返金でも手数料分は戻りません。</p>
     <?php endif; ?>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>
