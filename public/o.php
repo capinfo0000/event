@@ -27,6 +27,7 @@ if (!rate_limit_check('view_o', 120, 300)) {
 // 公開イベント一覧（残席計算は運営者自身の Stripe アカウントから取得）
 $events = tenant_events($tenantId);
 $account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラットフォームの順で残席計算用の文脈を確立
+$ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残席計算は行わない（500回避）
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -51,7 +52,7 @@ $account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラ
             <?php
                 $cap = (int) $ev['capacity'];
                 $remaining = null; $full = false;
-                if ($cap > 0) {
+                if ($cap > 0 && $ownerReady) {
                     try {
                         $remaining = max(0, $cap - event_headcount_cached($ev['id'], $account));
                         $full = ($remaining <= 0);
