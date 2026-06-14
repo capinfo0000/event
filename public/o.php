@@ -26,7 +26,7 @@ if (!rate_limit_check('view_o', 120, 300)) {
 
 // 公開イベント一覧（残席計算は運営者自身の Stripe アカウントから取得）
 $events = tenant_events($tenantId);
-$account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Connect: 接続済みは主催者のStripe
+$account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラットフォームの順で残席計算用の文脈を確立
 ?>
 <!DOCTYPE html>
 <html lang="ja">

@@ -14,8 +14,8 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-// 名簿は運営者の Stripe から取得する。Connect 接続済みなら自分のアカウント、未接続はプラットフォーム（後方互換）。
-$account = effective_stripe_account($tenant['stripe_account_id'] ?? null);
+// 名簿は運営者の Stripe から取得する。画面登録鍵→Connect→プラットフォームの順で文脈確立。
+$account = stripe_resolve_tenant($tenant);
 
 $events = tenant_events($tenant['id']);
 $selectedId = (string) ($_GET['event_id'] ?? ($events[0]['id'] ?? ''));
@@ -41,8 +41,8 @@ $onsiteDue = 0;   // 当日支払い予定（未収）合計
 $attendedCount = 0; // 出席確認済みの申込数（頭数ではなく行数）
 $headcount = 0;     // 参加予定の頭数（返金済みを除く party_size 合計）
 
-if ($selectedEvent !== null && env('STRIPE_SECRET_KEY') === null) {
-    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。.env の STRIPE_SECRET_KEY を設定してください。';
+if ($selectedEvent !== null && !stripe_ready_for_tenant($tenant)) {
+    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。「Stripe設定」から鍵を登録してください。';
 } elseif ($selectedEvent !== null) {
     try {
         $participants = fetch_event_participants($selectedId, $account);

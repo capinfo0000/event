@@ -36,8 +36,8 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-// 決済はイベント所有者の Stripe で行う。Connect 接続済みなら主催者の接続アカウント、未接続はプラットフォーム（後方互換）。
-$account = effective_stripe_account($event['stripe_account_id'] ?? null);
+// 決済はイベント所有者の Stripe で行う。所有者の画面登録鍵→Connect→プラットフォームの順で文脈確立。
+$account = stripe_resolve_event($event);
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
 $name  = trim((string)($_POST['name'] ?? ''));
@@ -84,8 +84,8 @@ if ($paymentType === 'onsite' && !$allowOnsite) {
     exit('このイベントでは当日支払いを受け付けていません。');
 }
 
-// 決済（事前・当日とも）は運営者の Stripe を使う。キー未設定なら受付不可。
-if (env('STRIPE_SECRET_KEY') === null) {
+// 決済（事前・当日とも）は運営者の Stripe を使う。鍵未設定なら受付不可。
+if (!stripe_ready_for_event($event)) {
     http_response_code(503);
     exit('現在このイベントは決済の準備が完了していません。主催者へお問い合わせください。');
 }

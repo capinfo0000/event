@@ -11,10 +11,11 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-// Connect: 接続済みなら自分の Stripe アカウントで集計、未接続はプラットフォーム（後方互換）。
-$account = effective_stripe_account($tenant['stripe_account_id'] ?? null);
-$connected = $account !== null;          // 自分の Stripe を接続済みか
-$stripeReady = env('STRIPE_SECRET_KEY') !== null; // Stripe API を呼べる構成か（プラットフォーム鍵）
+// 画面登録鍵→Connect→プラットフォームの順で Stripe 文脈を確立して集計。
+$account = stripe_resolve_tenant($tenant);
+$hasOwnKey = tenant_has_stripe_key($tenant);     // 画面で自分の鍵を登録済みか
+$connected = $hasOwnKey || $account !== null;    // 自分の Stripe を使える状態か
+$stripeReady = stripe_ready_for_tenant($tenant); // 名簿取得・決済が可能な構成か
 $events = tenant_events($tenant['id']);
 $usedEvents = count($events);
 $publicUrl = base_url() . '/o.php?t=' . urlencode($tenant['id']);
@@ -100,23 +101,15 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title"><span class="ic">💳</span> Stripe（決済）</div>
-    <?php if (connect_enabled()): ?>
-        <?php if ($connected): ?>
-            <p>✅ あなたの Stripe アカウントを接続済みです（<code><?= e((string) $tenant['stripe_account_id']) ?></code>）。参加費はあなたの口座へ直接入金され、名簿・決済データもあなたのアカウントで分離管理されます。</p>
-            <form method="post" action="connect.php?action=disconnect" data-confirm="Stripe 接続を解除します。よろしいですか？（解除後は新規決済を受け付けられません）">
-                <input type="hidden" name="csrf_token" value="<?= e($connectToken) ?>">
-                <button type="submit" class="btn btn--ghost">接続を解除</button>
-            </form>
-        <?php else: ?>
-            <p>⚠️ まだ Stripe アカウントを接続していません。接続すると、参加費が<strong>あなた自身の Stripe アカウント</strong>へ入金され、名簿・決済データも他主催者と分離されます。</p>
-            <p><a class="btn" href="connect.php?action=start">Stripe アカウントを接続する</a></p>
-            <p class="muted">未接続でも「当日支払い（現金）」のみのイベントは利用できます。</p>
-        <?php endif; ?>
-    <?php elseif ($stripeReady): ?>
-        <p>✅ Stripe キー設定済み。参加費はあなたの Stripe アカウントへ直接入金されます。</p>
-        <p class="muted">クレジットカード（事前決済）と現金（当日支払い）の両方に対応します。</p>
+    <?php if ($hasOwnKey): ?>
+        <p>✅ あなたの Stripe API キーを登録済みです。参加費は<strong>あなた自身の Stripe アカウント</strong>へ直接入金され、名簿・決済データもあなたのアカウントで管理されます。</p>
+        <p><a class="btn btn--ghost" href="stripe.php">Stripe 設定・接続テスト</a></p>
+    <?php elseif (connect_enabled() && $account !== null): ?>
+        <p>✅ あなたの Stripe アカウントを接続済みです（<code><?= e((string) $tenant['stripe_account_id']) ?></code>）。</p>
+        <p><a class="btn btn--ghost" href="stripe.php">Stripe 設定</a></p>
     <?php else: ?>
-        <p>⚠️ Stripe キーが未設定です。<code>.env</code> の <code>STRIPE_SECRET_KEY</code> にご自身の Stripe シークレットキー（<code>sk_...</code>）を設定すると、クレジットカード決済を受け付けられます。</p>
+        <p>⚠️ まだ Stripe を設定していません。<strong>ご自身の Stripe API キーを登録</strong>すると、参加費があなたの口座へ直接入金されます。</p>
+        <p><a class="btn" href="stripe.php">Stripe を設定する</a></p>
         <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
     <?php endif; ?>
 </div>

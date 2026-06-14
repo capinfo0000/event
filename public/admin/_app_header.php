@@ -19,6 +19,7 @@ $navItems = [
     ['dashboard.php', '🏠', 'ダッシュボード', ['dashboard.php']],
     ['events.php',    '📅', 'イベント管理',   ['events.php']],
     ['index.php',     '👥', '参加者管理',     ['index.php']],
+    ['stripe.php',    '💳', 'Stripe設定',    ['stripe.php', 'setup.php']],
     ['account.php',   '⚙️', 'アカウント設定', ['account.php']],
 ];
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {

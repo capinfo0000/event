@@ -39,8 +39,8 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
-$account = effective_stripe_account($tenant['stripe_account_id'] ?? null); // Connect: 接続済みは自分のStripe／未接続はプラットフォーム
-if (env('STRIPE_SECRET_KEY') === null) {
+$account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラットフォームの順で文脈確立
+if (!stripe_ready_for_tenant($tenant)) {
     back_to_admin($eventId, 'Stripe キー未設定のため返金できません。', 'ng');
 }
 

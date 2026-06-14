@@ -26,8 +26,9 @@ if (!rate_limit_check('view_apply', 120, 300)) {
     exit('アクセスが多すぎます。しばらくしてから再度お開きください。');
 }
 
-// 運営者の Stripe キーが設定済みか。未設定でもフォームは表示し、申込ボタン押下時（checkout.php）に案内する。
-$stripeReady = env('STRIPE_SECRET_KEY') !== null;
+// 運営者の Stripe が使えるか（画面登録鍵 or Connect/プラットフォーム）。未設定でもフォームは表示。
+$stripeReady = stripe_ready_for_event($event);
+$account = stripe_resolve_event($event); // 残席計算で使う Stripe 文脈を確立
 
 // 定員と残席（capacity>0 のとき）。取得に失敗しても申込は止めない。
 $capacity = (int) ($event['capacity'] ?? 0);
@@ -35,7 +36,7 @@ $remaining = null; // null = 定員管理なし／不明
 $isFull = false;
 if ($capacity > 0 && $stripeReady) {
     try {
-        $remaining = max(0, $capacity - event_headcount_cached($event['id'], effective_stripe_account($event['stripe_account_id'] ?? null)));
+        $remaining = max(0, $capacity - event_headcount_cached($event['id'], $account));
         $isFull = ($remaining <= 0);
     } catch (\Throwable $e) {
         $remaining = null;

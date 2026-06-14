@@ -21,6 +21,7 @@ require __DIR__ . '/db.php';
 require __DIR__ . '/tenant.php';
 require __DIR__ . '/mail.php';
 require __DIR__ . '/captcha.php';
+require __DIR__ . '/crypto.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
@@ -401,16 +402,95 @@ function base_url(): string
 }
 
 /**
- * Stripe SDK を初期化（プラットフォームの秘密鍵をセット）。
- * Connect 利用時は、各 API 呼び出しで stripe_opts($accountId) により接続アカウントを指定する。
+ * このリクエストで使う Stripe APIキーの上書き（主催者が画面登録した鍵）。
+ * セットされていれば init_stripe() はプラットフォーム鍵ではなくこの鍵を使う。
+ */
+function stripe_active_key(?string $set = null, bool $clear = false): ?string
+{
+    static $key = null;
+    if ($clear) {
+        $key = null;
+    } elseif ($set !== null) {
+        $key = $set;
+    }
+    return $key;
+}
+
+/**
+ * Stripe SDK を初期化。優先順位:
+ *   1) 主催者が画面登録した鍵（stripe_active_key）
+ *   2) プラットフォームの STRIPE_SECRET_KEY
+ * Connect 利用時は各 API 呼び出しで stripe_opts($accountId) によりアカウント指定。
  */
 function init_stripe(): void
 {
-    \Stripe\Stripe::setApiKey(env_required('STRIPE_SECRET_KEY'));
+    $key = stripe_active_key() ?? env('STRIPE_SECRET_KEY');
+    if ($key === null) {
+        http_response_code(500);
+        exit("設定エラー: Stripe の鍵が設定されていません。\n");
+    }
+    \Stripe\Stripe::setApiKey($key);
     $clientId = env('STRIPE_CONNECT_CLIENT_ID');
     if ($clientId !== null) {
         \Stripe\Stripe::setClientId($clientId);
     }
+}
+
+/**
+ * 管理コンテキストで、ログイン中テナントの Stripe 文脈を確立する。
+ * - 画面登録鍵があれば active key にセットし、接続アカウントは使わない（null を返す）。
+ * - 無ければ Connect 接続アカウント（あれば）にフォールバック。
+ * 戻り値は既存の $account（acct_... または null）。init_stripe() が active key を拾う。
+ */
+function stripe_resolve_tenant(array $tenant): ?string
+{
+    stripe_active_key(null, true); // リセット
+    $key = get_tenant_stripe_key($tenant);
+    if ($key !== null) {
+        stripe_active_key($key);
+        return null;
+    }
+    return effective_stripe_account($tenant['stripe_account_id'] ?? null);
+}
+
+/**
+ * 公開コンテキストで、イベント所有者の Stripe 文脈を確立する。
+ * 所有者の画面登録鍵があれば active key に、無ければ Connect/プラットフォームへフォールバック。
+ */
+function stripe_resolve_event(array $event): ?string
+{
+    stripe_active_key(null, true);
+    $ownerId = (string) ($event['tenant_id'] ?? '');
+    if ($ownerId !== '') {
+        $owner = find_tenant_by_id($ownerId);
+        if ($owner !== null) {
+            $key = get_tenant_stripe_key($owner);
+            if ($key !== null) {
+                stripe_active_key($key);
+                return null;
+            }
+        }
+    }
+    return effective_stripe_account($event['stripe_account_id'] ?? null);
+}
+
+/** テナントが決済可能な Stripe 文脈を持つか（画面登録鍵 or プラットフォーム鍵）。 */
+function stripe_ready_for_tenant(array $tenant): bool
+{
+    return tenant_has_stripe_key($tenant) || env('STRIPE_SECRET_KEY') !== null;
+}
+
+/** イベント所有者が決済可能な Stripe 文脈を持つか。 */
+function stripe_ready_for_event(array $event): bool
+{
+    $ownerId = (string) ($event['tenant_id'] ?? '');
+    if ($ownerId !== '') {
+        $owner = find_tenant_by_id($ownerId);
+        if ($owner !== null && tenant_has_stripe_key($owner)) {
+            return true;
+        }
+    }
+    return env('STRIPE_SECRET_KEY') !== null;
 }
 
 /**

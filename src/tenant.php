@@ -209,6 +209,43 @@ function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
     $stmt->execute([$accountId, $tenantId]);
 }
 
+/**
+ * 主催者が画面登録した Stripe 秘密鍵を暗号化して保存する。null/空で消去（解除）。
+ * APP_KEY 未設定なら例外（平文保存は許可しない）。
+ */
+function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
+{
+    $enc = null;
+    if ($plainKey !== null && $plainKey !== '') {
+        if (!crypto_available()) {
+            throw new \RuntimeException('APP_KEY が未設定のため鍵を安全に保存できません。.env に APP_KEY を設定してください。');
+        }
+        $enc = app_encrypt($plainKey);
+    }
+    $stmt = db()->prepare('UPDATE tenants SET stripe_secret_enc = ? WHERE id = ?');
+    $stmt->execute([$enc, $tenantId]);
+}
+
+/**
+ * 主催者の Stripe 秘密鍵（復号済み平文）を返す。未登録/復号不可なら null。
+ * 画面表示には使わないこと（決済処理にのみ使用）。
+ */
+function get_tenant_stripe_key(array $tenant): ?string
+{
+    $enc = $tenant['stripe_secret_enc'] ?? null;
+    if ($enc === null || $enc === '') {
+        return null;
+    }
+    return app_decrypt((string) $enc);
+}
+
+/** 主催者が Stripe 秘密鍵を登録済みか（復号可否は問わない）。 */
+function tenant_has_stripe_key(array $tenant): bool
+{
+    $enc = $tenant['stripe_secret_enc'] ?? null;
+    return $enc !== null && $enc !== '';
+}
+
 function set_tenant_plan(string $tenantId, string $plan): void
 {
     $stmt = db()->prepare('UPDATE tenants SET plan = ? WHERE id = ?');
