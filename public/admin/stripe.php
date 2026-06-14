@@ -43,11 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msgType = 'ng';
         } else {
             // 形式OKなら保存。接続テストは結果通知のみ（失敗してもネットワーク要因がありうるため保存は維持）。
-            set_tenant_stripe_key($tenant['id'], $key);
-            [$okTest, $detail] = stripe_test_key($key);
-            $msg = 'Stripe 鍵を保存しました。' . $detail;
-            $msgType = $okTest ? 'ok' : 'ng';
-            $tenant = find_tenant_by_id($tenant['id']);
+            try {
+                set_tenant_stripe_key($tenant['id'], $key);
+                [$okTest, $detail] = stripe_test_key($key);
+                $msg = 'Stripe 鍵を保存しました。' . $detail;
+                $msgType = $okTest ? 'ok' : 'ng';
+                $tenant = find_tenant_by_id($tenant['id']);
+            } catch (\Throwable $e) {
+                // 公開フォルダ内への保存拒否など
+                $msg = $e->getMessage();
+                $msgType = 'ng';
+            }
         }
     } elseif ($action === 'test') {
         $key = get_tenant_stripe_key($tenant);
