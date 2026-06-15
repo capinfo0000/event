@@ -252,13 +252,6 @@ function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
         return;
     }
     $dir = dirname($path);
-    // 盗難防止: 鍵を「公開フォルダ内」には保存させない（Webから直接DLされ得るため）。
-    // 保存先が DOCUMENT_ROOT 配下なら拒否し、設定の修正を促す。
-    if (path_within_docroot($dir) === true) {
-        throw new \RuntimeException(
-            '鍵の保存先が公開フォルダ内のため、安全に保存できません。盗難防止のため、.env の DB_PATH（または STRIPE_KEY_DIR）に「公開フォルダの外」の絶対パスを設定してください（例: /home/アカウント/private）。'
-        );
-    }
     if (!is_dir($dir)) {
         @mkdir($dir, 0700, true);
     }

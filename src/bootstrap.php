@@ -566,26 +566,23 @@ function path_within_docroot(string $path): ?bool
 }
 
 /**
- * .env が実際に Web から取得できる状態か（誤検知防止のため実測）。
- * 自サイトの /.env を取得して 200 なら露出。403/404 等なら保護されている。
- * 結果は private 領域にキャッシュ（既定1日）。判定不能なら null。
+ * 指定URLのHTTPステータスを取得（1日キャッシュ）。判定不能なら null。
+ * 露出の実測（誤検知防止）に使う。宛先は信頼できる APP_BASE_URL ベースのみ。
  */
-function env_web_exposed(): ?bool
+function remote_status_cached(string $url): ?int
 {
-    // SSRF/Hostヘッダ注入を避けるため、宛先は信頼できる APP_BASE_URL のみを使う（HTTP_HOST は使わない）。
-    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
-    if ($base === '' || !preg_match('#^https?://#i', $base) || !function_exists('curl_init')) {
+    $cacheFile = dirname(current_db_path()) . '/.webcheck.json';
+    $map = [];
+    if (is_file($cacheFile)) {
+        $map = json_decode((string) @file_get_contents($cacheFile), true) ?: [];
+    }
+    $k = md5($url);
+    if (isset($map[$k]['ts']) && (time() - (int) $map[$k]['ts'] < 86400)) {
+        return $map[$k]['code'];
+    }
+    if (!function_exists('curl_init')) {
         return null;
     }
-    $cacheFile = dirname(current_db_path()) . '/.envcheck.json';
-    if (is_file($cacheFile)) {
-        $c = json_decode((string) @file_get_contents($cacheFile), true);
-        if (is_array($c) && isset($c['ts']) && (time() - (int) $c['ts'] < 86400)) {
-            return array_key_exists('result', $c) ? $c['result'] : null;
-        }
-    }
-    $url = $base . '/.env';
-    $result = null;
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -593,49 +590,78 @@ function env_web_exposed(): ?bool
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => 0,
     ]);
-    $body = curl_exec($ch);
+    curl_exec($ch);
     $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err = curl_errno($ch);
     curl_close($ch);
-    if ($err === 0 && $code > 0) {
-        // 200 かつ中身が .env らしい（=実際に配信されている）なら露出とみなす
-        $result = ($code === 200 && is_string($body) && (str_contains($body, 'APP_BASE_URL') || str_contains($body, 'DB_PATH') || str_contains($body, 'MAIL_FROM')));
-    }
-    @file_put_contents($cacheFile, json_encode(['ts' => time(), 'result' => $result]));
+    $result = ($err === 0 && $code > 0) ? $code : null;
+    $map[$k] = ['ts' => time(), 'code' => $result];
+    @file_put_contents($cacheFile, json_encode($map));
     return $result;
 }
 
 /**
+ * 指定ファイルが「Web から実際にダウンロードできる」かを実測する。
+ * - 公開フォルダ(DOCUMENT_ROOT)の外なら false（そもそも到達不能＝安全）。
+ * - 内側なら APP_BASE_URL からの相対URLを取得し 200 なら true（露出）。403/404 なら false。
+ * 判定不能（CLI・APP_BASE_URL未設定・通信不可・ファイル未作成）は null。
+ */
+function file_web_downloadable(string $absPath): ?bool
+{
+    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
+    if ($base === '' || !preg_match('#^https?://#i', $base)) {
+        return null;
+    }
+    $docroot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
+    $real = realpath($absPath);
+    if ($docroot === false || $real === false) {
+        return null;
+    }
+    $rd = rtrim($docroot, '/') . '/';
+    if (!str_starts_with($real, $rd)) {
+        return false; // 公開フォルダ外 → Web から取得不可
+    }
+    $rel = substr($real, strlen($rd));
+    $code = remote_status_cached($base . '/' . str_replace('%2F', '/', rawurlencode($rel)));
+    return $code === null ? null : ($code === 200);
+}
+
+/**
+ * .env が実際に Web から取得できる状態か（誤検知防止のため実測）。
+ */
+function env_web_exposed(): ?bool
+{
+    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
+    if ($base === '' || !preg_match('#^https?://#i', $base)) {
+        return null;
+    }
+    $code = remote_status_cached($base . '/.env');
+    return $code === null ? null : ($code === 200);
+}
+
+/**
  * 重大な構成リスクを検知して返す（運用者へ警告するため）。
- * 最重要: SQLite DB が公開ディレクトリ内にある（= Web から直接ダウンロード可能になりうる）。
- * DB が外にあれば、APP_KEY が漏れても暗号化済みの主催者鍵は復号できない（被害連鎖を遮断）。
+ * 「パスが公開フォルダ内」だけでは警告しない（.htaccess で守られている場合があるため）。
+ * 実際に Web からダウンロードできる時だけ警告する。
  *
  * @return array<int, array{level:string, msg:string}>
  */
 function security_warnings(): array
 {
     $w = [];
-    if (path_within_docroot(current_db_path()) === true) {
+    // DB（既定では Stripe 鍵も同じディレクトリ）が実際に Web から取得できる場合のみ警告。
+    if (file_web_downloadable(current_db_path()) === true) {
         $w[] = [
             'level' => 'critical',
-            'msg' => 'データベースが公開ディレクトリ内にあります。サーバー設定次第で Web から直接ダウンロードされ、保存済みの認証情報・暗号化鍵が漏えいする恐れがあります。'
-                . ' .env の DB_PATH に「公開ディレクトリの外」の絶対パスを設定してください（例: /home/アカウント/private/app.sqlite）。',
+            'msg' => 'データベース（および Stripe 鍵）が Web から直接ダウンロードできる状態です。'
+                . ' .htaccess を有効化するか、.env の DB_PATH を公開フォルダの外（例: /home/アカウント/private/app.sqlite）に設定してください。',
         ];
     }
-    // .env はフラット配置では公開フォルダ内に置かれるため、パスではなく「実際にWeb取得できるか」で判定。
+    // .env が実際に取得できる場合のみ。
     if (env_web_exposed() === true) {
         $w[] = [
             'level' => 'critical',
-            'msg' => '.env が Web から直接ダウンロードできる状態です（/.env が 200 を返します）。直ちに .htaccess を有効化するか、機密を公開フォルダの外へ移してください。',
-        ];
-    }
-    // Stripe 鍵ファイルの保存先（STRIPE_KEY_DIR 既定は DB と同じ場所）が公開領域内かどうか。
-    $keyDir = env('STRIPE_KEY_DIR', dirname(current_db_path()));
-    if (path_within_docroot($keyDir) === true) {
-        $w[] = [
-            'level' => 'critical',
-            'msg' => 'Stripe 鍵の保存先が公開ディレクトリ内です。Web から直接ダウンロードされ鍵が漏えいする恐れがあります。'
-                . ' .env の DB_PATH（または STRIPE_KEY_DIR）を公開ディレクトリの外に設定してください。',
+            'msg' => '.env が Web から直接ダウンロードできる状態です（/.env が 200）。直ちに .htaccess を有効化するか、機密を公開フォルダの外へ移してください。',
         ];
     }
     return $w;
