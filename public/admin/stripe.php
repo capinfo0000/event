@@ -40,6 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (is_demo_tenant($tenant)) {
         $msg = 'デモモードでは Stripe 鍵の登録・変更はできません。実際の運用では、ここにご自身の Stripe キーを登録して決済を有効化します。';
         $msgType = 'ng';
+    } elseif (connect_required()) {
+        // Connect 必須モードでは、主催者の秘密鍵をサーバーに保存させない。
+        // 手動登録は無効化し、ダッシュボードの「Stripe を接続」（OAuth）へ誘導する。
+        $msg = 'この環境は Stripe 接続（Connect）必須モードです。秘密鍵の手動登録はできません。ダッシュボードの「Stripe を接続する」から連携してください（サーバーは秘密鍵を保存しません）。';
+        $msgType = 'ng';
     } elseif ($action === 'save') {
         $key = trim((string) ($_POST['stripe_key'] ?? ''));
         if ($key === '') {

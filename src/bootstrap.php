@@ -469,6 +469,14 @@ function stripe_resolve_tenant(array $tenant): ?string
         stripe_context_denied(true);
         return null;
     }
+    // Connect 必須モード: 手動登録鍵は使わず、接続アカウントのみ。未接続なら拒否。
+    if (connect_required()) {
+        $acct = effective_stripe_account($tenant['stripe_account_id'] ?? null);
+        if ($acct === null) {
+            stripe_context_denied(true);
+        }
+        return $acct;
+    }
     $key = get_tenant_stripe_key($tenant);
     if ($key !== null) {
         stripe_active_key($key);
@@ -486,19 +494,25 @@ function stripe_resolve_event(array $event): ?string
     stripe_active_key(null, true);
     stripe_context_denied(false);
     $ownerId = (string) ($event['tenant_id'] ?? '');
-    if ($ownerId !== '') {
-        $owner = find_tenant_by_id($ownerId);
-        if ($owner !== null) {
-            // デモ主催のイベントは本番 Stripe（プラットフォーム鍵）へ絶対に流さない。
-            if (is_demo_tenant($owner)) {
-                stripe_context_denied(true);
-                return null;
-            }
-            $key = get_tenant_stripe_key($owner);
-            if ($key !== null) {
-                stripe_active_key($key);
-                return null;
-            }
+    $owner = $ownerId !== '' ? find_tenant_by_id($ownerId) : null;
+    // デモ主催のイベントは本番 Stripe（プラットフォーム鍵）へ絶対に流さない。
+    if ($owner !== null && is_demo_tenant($owner)) {
+        stripe_context_denied(true);
+        return null;
+    }
+    // Connect 必須モード: 主催者の接続アカウントのみ。未接続なら拒否。
+    if (connect_required()) {
+        $acct = effective_stripe_account($event['stripe_account_id'] ?? null);
+        if ($acct === null) {
+            stripe_context_denied(true);
+        }
+        return $acct;
+    }
+    if ($owner !== null) {
+        $key = get_tenant_stripe_key($owner);
+        if ($key !== null) {
+            stripe_active_key($key);
+            return null;
         }
     }
     return effective_stripe_account($event['stripe_account_id'] ?? null);
@@ -513,6 +527,9 @@ function stripe_ready_for_tenant(array $tenant): bool
     if (is_demo_tenant($tenant)) {
         return false; // デモは決済不可（プラットフォーム鍵にも乗せない）
     }
+    if (connect_required()) {
+        return !empty($tenant['stripe_account_id']); // 接続済みのみ可
+    }
     return get_tenant_stripe_key($tenant) !== null || env('STRIPE_SECRET_KEY') !== null;
 }
 
@@ -526,10 +543,16 @@ function stripe_ready_for_event(array $event): bool
             if (is_demo_tenant($owner)) {
                 return false; // デモ主催イベントは決済不可
             }
+            if (connect_required()) {
+                return !empty($event['stripe_account_id']); // 接続済みのみ可
+            }
             if (get_tenant_stripe_key($owner) !== null) {
                 return true;
             }
         }
+    }
+    if (connect_required()) {
+        return false; // 必須モードで所有者不明なら不可
     }
     return env('STRIPE_SECRET_KEY') !== null;
 }
@@ -541,6 +564,16 @@ function stripe_ready_for_event(array $event): bool
 function connect_enabled(): bool
 {
     return env('STRIPE_SECRET_KEY') !== null && env('STRIPE_CONNECT_CLIENT_ID') !== null;
+}
+
+/**
+ * Connect 必須モード。主催者の秘密鍵をサーバーに一切保存させず、
+ * OAuth で接続したアカウント（acct_...）に対してのみ操作する。
+ * サーバーは各主催者の秘密鍵を持たない（入金・PII・決済は主催者側に分離）。
+ */
+function connect_required(): bool
+{
+    return connect_enabled() && env('STRIPE_CONNECT_REQUIRED') === '1';
 }
 
 /**

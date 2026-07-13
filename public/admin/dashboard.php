@@ -78,12 +78,20 @@ require __DIR__ . '/_app_header.php';
         <div class="modal__box">
             <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
             <div class="modal__title">⚠️ Stripe が未設定です</div>
-            <p>事前決済（クレジットカード）を受け付けるには、<strong>ご自身の Stripe API キー</strong>を登録してください。</p>
-            <p class="muted">当日支払い（現金）のみのイベントは、設定なしでも利用できます。</p>
-            <div class="modal__actions">
-                <a class="btn" href="stripe.php">Stripe を設定する →</a>
-                <button type="button" class="btn btn--ghost" data-modal-close>後で</button>
-            </div>
+            <?php if (connect_required()): ?>
+                <p>事前決済（クレジットカード）を受け付けるには、<strong>ご自身の Stripe を接続</strong>してください（サーバーは秘密鍵を保存しません）。</p>
+                <div class="modal__actions">
+                    <a class="btn" href="connect.php?action=start">Stripe を接続する →</a>
+                    <button type="button" class="btn btn--ghost" data-modal-close>後で</button>
+                </div>
+            <?php else: ?>
+                <p>事前決済（クレジットカード）を受け付けるには、<strong>ご自身の Stripe API キー</strong>を登録してください。</p>
+                <p class="muted">当日支払い（現金）のみのイベントは、設定なしでも利用できます。</p>
+                <div class="modal__actions">
+                    <a class="btn" href="stripe.php">Stripe を設定する →</a>
+                    <button type="button" class="btn btn--ghost" data-modal-close>後で</button>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>
@@ -121,9 +129,15 @@ require __DIR__ . '/_app_header.php';
     <?php elseif (connect_enabled() && $account !== null): ?>
         <p>✅ あなたの Stripe アカウントを接続済みです（<code><?= e((string) $tenant['stripe_account_id']) ?></code>）。</p>
         <p><a class="btn btn--ghost" href="stripe.php">Stripe 設定</a></p>
+    <?php elseif (connect_required()): ?>
+        <p>⚠️ まだ Stripe を接続していません。<strong>「Stripe を接続する」</strong>からご自身の Stripe を連携してください。参加費はあなたの口座へ直接入金され、<strong>サーバーはあなたの秘密鍵を保存しません</strong>（接続IDのみ保持）。</p>
+        <p><a class="btn" href="connect.php?action=start">Stripe を接続する（Connect）</a></p>
     <?php else: ?>
         <p>⚠️ まだ Stripe を設定していません。<strong>ご自身の Stripe API キーを登録</strong>すると、参加費があなたの口座へ直接入金されます。</p>
-        <p><a class="btn" href="stripe.php">Stripe を設定する</a></p>
+        <p>
+            <a class="btn" href="stripe.php">Stripe を設定する</a>
+            <?php if (connect_enabled()): ?><a class="btn btn--ghost" href="connect.php?action=start">Stripe を接続する（Connect）</a><?php endif; ?>
+        </p>
         <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
     <?php endif; ?>
 </div>
