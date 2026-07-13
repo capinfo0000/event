@@ -287,6 +287,91 @@ function tenant_has_stripe_key(array $tenant): bool
     return is_file(tenant_key_path((string) ($tenant['id'] ?? '')));
 }
 
+/* ------------------------- デモ（ポートフォリオ）モード ------------------------- */
+
+/** デモ用テナントの固定メール（実在しないドメインで通常のメール到達も無効）。 */
+const DEMO_TENANT_EMAIL = 'demo@demo.invalid';
+
+/** デモモードが有効か（.env の DEMO_MODE=1）。本番運用では 0 にして無効化する。 */
+function demo_mode_enabled(): bool
+{
+    return env('DEMO_MODE', '0') === '1';
+}
+
+/** 与えられたテナントがデモ用アカウントか。 */
+function is_demo_tenant(?array $tenant): bool
+{
+    return $tenant !== null
+        && strtolower((string) ($tenant['email'] ?? '')) === DEMO_TENANT_EMAIL;
+}
+
+/**
+ * デモ用ログイン。ログイン画面でメール・パスワードを空欄のまま送信したときに呼ぶ。
+ * デモ用テナントを用意（無ければ作成）し、サンプルイベントを毎回初期状態へリセットして
+ * セッションを張る。DEMO_MODE が無効なら何もせず false。
+ *
+ * 【安全性】デモは Stripe 鍵を持たない（＝外部送信・課金は発生しない）。書き込みは
+ * ローカルDBのイベントに限定され、他テナントのデータには一切アクセスできない
+ * （既存の所有者スコープ制御をそのまま利用）。
+ */
+function demo_login(): bool
+{
+    if (!demo_mode_enabled()) {
+        return false;
+    }
+    $tenant = find_tenant_by_email(DEMO_TENANT_EMAIL);
+    if ($tenant === null) {
+        // 通常ログイン経路では使われない乱数パスワードで作成（空欄デモログインのみで入れる）。
+        $id = create_tenant(DEMO_TENANT_EMAIL, bin2hex(random_bytes(24)), 'デモ主催者（サンプル）');
+        $tenant = find_tenant_by_id($id);
+    }
+    if ($tenant === null) {
+        return false;
+    }
+    demo_seed_events((string) $tenant['id']);
+    session_boot();
+    session_regenerate_id(true);
+    $_SESSION['tenant_id'] = $tenant['id'];
+    return true;
+}
+
+/**
+ * デモテナントのイベントをサンプル一式へリセットする（既存を全削除して作り直す）。
+ * デモは毎回まっさらな状態から体験できるようにする。
+ */
+function demo_seed_events(string $tenantId): void
+{
+    foreach (tenant_events($tenantId) as $ev) {
+        delete_event($tenantId, (string) $ev['id']);
+    }
+    $samples = [
+        [
+            'name' => '春の交流ランチ会',
+            'description' => "初参加歓迎のカジュアルなランチ会です。会場でお料理を楽しみながら交流しましょう。\n事前決済・当日支払いの両方に対応した例です。",
+            'date' => '2026-04-18 12:00', 'place' => '東京・渋谷 コミュニティキッチン',
+            'amount' => 3000, 'amount_onsite' => 3500, 'currency' => 'jpy',
+            'capacity' => 20, 'allow_prepay' => true, 'allow_onsite' => true,
+        ],
+        [
+            'name' => '初心者向け写真ワークショップ',
+            'description' => "スマホでもOK。構図と光の基礎を学ぶ2時間の実践ワークショップ。\n事前決済のみ・オンライン開催の例です。",
+            'date' => '2026-05-10 14:00', 'place' => 'オンライン（Zoom）',
+            'amount' => 1500, 'amount_onsite' => 0, 'currency' => 'jpy',
+            'capacity' => 30, 'allow_prepay' => true, 'allow_onsite' => false,
+        ],
+        [
+            'name' => '朝活もくもく会',
+            'description' => "各自の作業を持ち寄って集中する朝の作業会。\n当日支払いのみ・定員なしの例です。",
+            'date' => '2026-04-05 08:00', 'place' => '大阪・梅田 レンタルスペース',
+            'amount' => 0, 'amount_onsite' => 500, 'currency' => 'jpy',
+            'capacity' => 0, 'allow_prepay' => false, 'allow_onsite' => true,
+        ],
+    ];
+    foreach ($samples as $s) {
+        create_event($tenantId, $s);
+    }
+}
+
 function set_tenant_plan(string $tenantId, string $plan): void
 {
     $stmt = db()->prepare('UPDATE tenants SET plan = ? WHERE id = ?');

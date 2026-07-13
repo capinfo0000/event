@@ -35,7 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $action = (string) ($_POST['action'] ?? '');
 
-    if ($action === 'save') {
+    // デモアカウントでは共有される都合上、Stripe 鍵の登録・削除は受け付けない
+    // （公開デモに実鍵を置かせない安全策）。閲覧・画面操作のみ可能。
+    if (is_demo_tenant($tenant)) {
+        $msg = 'デモモードでは Stripe 鍵の登録・変更はできません。実際の運用では、ここにご自身の Stripe キーを登録して決済を有効化します。';
+        $msgType = 'ng';
+    } elseif ($action === 'save') {
         $key = trim((string) ($_POST['stripe_key'] ?? ''));
         if ($key === '') {
             // 空で保存＝削除

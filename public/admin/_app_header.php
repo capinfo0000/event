@@ -61,6 +61,12 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
             <?php if ($topActions !== ''): ?><div class="topbar__actions"><?= $topActions ?></div><?php endif; ?>
         </header>
         <main class="page">
+        <?php if (is_demo_tenant($tenant)): ?>
+            <div class="flash" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
+                <strong>デモモード（ポートフォリオ）:</strong>
+                これはサンプルデータの体験用アカウントです。決済は無効で、外部への送信は行われません。イベントは自由に編集できますが、内容は再ログイン時にリセットされます。
+            </div>
+        <?php endif; ?>
         <?php foreach (security_warnings() as $__w): ?>
             <div class="flash flash--ng">
                 <strong><?= $__w['level'] === 'critical' ? '🔴 重大なセキュリティ警告' : '⚠️ セキュリティ警告' ?>:</strong>

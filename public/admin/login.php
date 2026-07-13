@@ -15,8 +15,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = (string) ($_POST['email'] ?? '');
     $password = (string) ($_POST['password'] ?? '');
 
+    // デモ（ポートフォリオ）ログイン：DEMO_MODE 有効かつメール・パスワード空欄のとき、
+    // サンプル入りのデモ用テナントへ入る。CAPTCHA・回数制限は対象外（機密も外部送信も無い）。
+    if (demo_mode_enabled() && $email === '' && $password === '') {
+        if (demo_login()) {
+            audit_log('login.demo', []);
+            header('Location: dashboard.php');
+            exit;
+        }
+        $error = 'デモの準備に失敗しました。時間をおいて再度お試しください。';
     // 総当たり対策：メール単位（標的型）と IP 単位（メール横断スプレー）の両方で失敗回数を制限。
-    if (recent_failed_logins($email) >= 5 || recent_failed_logins_by_ip(client_ip()) >= 20) {
+    } elseif (recent_failed_logins($email) >= 5 || recent_failed_logins_by_ip(client_ip()) >= 20) {
         audit_log('login.blocked', ['email' => mask_email_for_log($email)]);
         $error = '試行回数が多すぎます。しばらく時間をおいてからお試しください。';
     } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null, true)) {
@@ -53,6 +62,16 @@ require __DIR__ . '/_auth_header.php';
     <?= captcha_widget_html() ?>
     <p style="margin-top:16px;"><button type="submit" class="btn">ログイン</button></p>
 </form>
+<?php if (demo_mode_enabled()): ?>
+<div class="card" style="border-style:dashed;">
+    <p style="margin-top:0;"><strong>デモをご覧の方へ</strong></p>
+    <p class="muted">メールアドレスとパスワードは<strong>空欄のまま</strong>で、下のボタンから主催者管理画面のデモをお試しいただけます。サンプルのイベントが入っています（決済は無効・データは都度リセット）。</p>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+        <button type="submit" class="btn btn--ghost">デモを見る（入力不要）</button>
+    </form>
+</div>
+<?php endif; ?>
 <p class="muted"><a href="forgot.php">パスワードを忘れた場合</a></p>
 <p class="muted">アカウントをお持ちでない方は <a href="signup.php">新規登録</a>（無料）</p>
 <?php require __DIR__ . '/_auth_footer.php'; ?>
