@@ -93,6 +93,6 @@ php85cli -r "(new PDO('sqlite:data/app.sqlite'))->exec('VACUUM INTO \"data/backu
 - [ ] 本番データは定期的にバックアップ（§4）
 
 ## 関連
-- `docs/編集・更新手順.md` — 日常の編集→反映フロー
-- `docs/デプロイ手順-coreserver.md` — 初回デプロイの全手順
+- `docs/edit-update-guide.md` — 日常の編集→反映フロー
+- `docs/deploy-coreserver.md` — 初回デプロイの全手順
 - `.env.example` — 環境変数の正本
