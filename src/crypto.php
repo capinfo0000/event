@@ -59,6 +59,9 @@ function ensure_app_key(): bool
     if (@file_put_contents($path, implode("\n", $lines) . "\n", LOCK_EX) === false) {
         return false;
     }
+    // .env には APP_KEY（復号鍵）が入るため、所有者のみ読める権限に絞る。
+    // より堅牢にするなら APP_KEY を .env ではなく実環境変数で渡す（鍵をディスクに置かない）。
+    @chmod($path, 0600);
     putenv('APP_KEY=' . $key);
     $_ENV['APP_KEY'] = $key;
     return app_key() !== null;
