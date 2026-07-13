@@ -18,12 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // デモ（ポートフォリオ）ログイン：DEMO_MODE 有効かつメール・パスワード空欄のとき、
     // サンプル入りのデモ用テナントへ入る。CAPTCHA・回数制限は対象外（機密も外部送信も無い）。
     if (demo_mode_enabled() && $email === '' && $password === '') {
-        if (demo_login()) {
+        // 濫用対策: 空欄デモログイン連打（毎回シード再作成・セッション生成）による資源浪費を IP 単位で抑止。
+        if (!rate_limit_check('demo_login', 20, 3600)) {
+            $error = 'デモへのアクセスが集中しています。しばらく時間をおいてからお試しください。';
+        } elseif (demo_login()) {
             audit_log('login.demo', []);
             header('Location: dashboard.php');
             exit;
+        } else {
+            $error = 'デモの準備に失敗しました。時間をおいて再度お試しください。';
         }
-        $error = 'デモの準備に失敗しました。時間をおいて再度お試しください。';
     // 総当たり対策：メール単位（標的型）と IP 単位（メール横断スプレー）の両方で失敗回数を制限。
     } elseif (recent_failed_logins($email) >= 5 || recent_failed_logins_by_ip(client_ip()) >= 20) {
         audit_log('login.blocked', ['email' => mask_email_for_log($email)]);
