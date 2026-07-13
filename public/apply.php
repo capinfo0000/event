@@ -153,8 +153,6 @@ $maxParty = min($maxParty, 20);
         <?php endif; ?>
     </form>
     <?php endif; ?>
-
-    <p class="muted"><a href="index.php">← トップへ戻る</a></p>
 </div>
 
 <?php require __DIR__ . '/_prepay_info_modal.php'; ?>

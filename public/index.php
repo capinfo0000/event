@@ -25,12 +25,6 @@ require dirname(__DIR__) . '/src/bootstrap.php';
     <p class="muted">小規模イベントの参加費を、事前決済（前払い）または当日支払いで集められるサービスです。</p>
 
     <div class="card">
-        <div class="card__title">参加者の方へ</div>
-        <p>主催者から受け取った<strong>申込リンク</strong>から、各イベントにお申し込みください。</p>
-        <p class="muted">カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。</p>
-    </div>
-
-    <div class="card">
         <div class="card__title">主催者の方へ</div>
         <p>イベントの作成・参加者管理・返金は主催者ページから行えます。</p>
         <p>

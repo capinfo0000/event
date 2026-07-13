@@ -32,7 +32,6 @@ $event = $eventId !== '' ? find_event($eventId) : null;
                 <button type="submit" class="btn">「<?= e($event['name'] ?? '') ?>」をもう一度申し込む</button>
             </form>
         <?php endif; ?>
-        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
     </div>
 </div>
 </body>
