@@ -24,6 +24,11 @@ function back_to_dashboard(string $msg, string $type): never
     exit;
 }
 
+// デモ用テナントは Stripe 連携（アカウント接続）を一切行わせない。
+if (is_demo_tenant($tenant)) {
+    back_to_dashboard('デモモードでは Stripe 連携はご利用いただけません。', 'ng');
+}
+
 if (!connect_enabled()) {
     back_to_dashboard('Stripe 連携は現在利用できません（管理者の設定待ち）。', 'ng');
 }

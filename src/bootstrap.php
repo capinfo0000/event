@@ -417,6 +417,20 @@ function stripe_active_key(?string $set = null, bool $clear = false): ?string
 }
 
 /**
+ * このリクエストで Stripe 文脈の確立が「拒否」されたか。
+ * デモ用テナント等、Stripe を一切使わせてはいけない主体で true になり、
+ * init_stripe() は例外を投げる（プラットフォーム鍵への意図しないフォールバックを封じる）。
+ */
+function stripe_context_denied(?bool $set = null): bool
+{
+    static $denied = false;
+    if ($set !== null) {
+        $denied = $set;
+    }
+    return $denied;
+}
+
+/**
  * Stripe SDK を初期化。優先順位:
  *   1) 主催者が画面登録した鍵（stripe_active_key）
  *   2) プラットフォームの STRIPE_SECRET_KEY
@@ -424,6 +438,10 @@ function stripe_active_key(?string $set = null, bool $clear = false): ?string
  */
 function init_stripe(): void
 {
+    // 文脈が拒否されている（デモ等）ときは、たとえ環境変数の鍵があっても使わせない。
+    if (stripe_context_denied()) {
+        throw new \RuntimeException('この操作では Stripe を利用できません。');
+    }
     $key = stripe_active_key() ?? env('STRIPE_SECRET_KEY');
     if ($key === null) {
         // 例外にして呼び出し側の try/catch で受け、500 即死や白画面を避ける。
@@ -444,7 +462,13 @@ function init_stripe(): void
  */
 function stripe_resolve_tenant(array $tenant): ?string
 {
-    stripe_active_key(null, true); // リセット
+    stripe_active_key(null, true);   // リセット
+    stripe_context_denied(false);    // リセット
+    // デモ用テナントは決済・名簿取得を一切行わない。プラットフォーム鍵へのフォールバックも禁止。
+    if (is_demo_tenant($tenant)) {
+        stripe_context_denied(true);
+        return null;
+    }
     $key = get_tenant_stripe_key($tenant);
     if ($key !== null) {
         stripe_active_key($key);
@@ -460,10 +484,16 @@ function stripe_resolve_tenant(array $tenant): ?string
 function stripe_resolve_event(array $event): ?string
 {
     stripe_active_key(null, true);
+    stripe_context_denied(false);
     $ownerId = (string) ($event['tenant_id'] ?? '');
     if ($ownerId !== '') {
         $owner = find_tenant_by_id($ownerId);
         if ($owner !== null) {
+            // デモ主催のイベントは本番 Stripe（プラットフォーム鍵）へ絶対に流さない。
+            if (is_demo_tenant($owner)) {
+                stripe_context_denied(true);
+                return null;
+            }
             $key = get_tenant_stripe_key($owner);
             if ($key !== null) {
                 stripe_active_key($key);
@@ -480,6 +510,9 @@ function stripe_resolve_event(array $event): ?string
  */
 function stripe_ready_for_tenant(array $tenant): bool
 {
+    if (is_demo_tenant($tenant)) {
+        return false; // デモは決済不可（プラットフォーム鍵にも乗せない）
+    }
     return get_tenant_stripe_key($tenant) !== null || env('STRIPE_SECRET_KEY') !== null;
 }
 
@@ -489,8 +522,13 @@ function stripe_ready_for_event(array $event): bool
     $ownerId = (string) ($event['tenant_id'] ?? '');
     if ($ownerId !== '') {
         $owner = find_tenant_by_id($ownerId);
-        if ($owner !== null && get_tenant_stripe_key($owner) !== null) {
-            return true;
+        if ($owner !== null) {
+            if (is_demo_tenant($owner)) {
+                return false; // デモ主催イベントは決済不可
+            }
+            if (get_tenant_stripe_key($owner) !== null) {
+                return true;
+            }
         }
     }
     return env('STRIPE_SECRET_KEY') !== null;

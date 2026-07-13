@@ -30,8 +30,9 @@
     </IfModule>
 </FilesMatch>
 
-# 環境設定・DB・ログ・ソース等の拡張子を直接配信しない
-<FilesMatch "\.(env|sqlite|sqlite3|db|log|sql|md|lock|json)$">
+# 環境設定・DB・ログ・鍵・ソース等の拡張子を直接配信しない
+# （.key/.pem は主催者の Stripe 秘密鍵ファイルの保険的防御。公開領域外保存が原則だが二重で塞ぐ）
+<FilesMatch "\.(env|sqlite|sqlite3|db|log|sql|md|lock|json|key|pem)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>
