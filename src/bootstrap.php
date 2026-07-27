@@ -20,6 +20,8 @@ require APP_ROOT . '/vendor/autoload.php';
 require __DIR__ . '/db.php';
 require __DIR__ . '/tenant.php';
 require __DIR__ . '/mail.php';
+require __DIR__ . '/captcha.php';
+require __DIR__ . '/crypto.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
@@ -53,6 +55,71 @@ function load_env(string $path): void
 }
 
 load_env(APP_ROOT . '/.env');
+
+/**
+ * このリクエスト用の CSP nonce（1リクエストにつき1つ）。
+ * インライン <script>/<style> に nonce 属性として付け、'unsafe-inline' なしで許可する。
+ */
+function csp_nonce(): string
+{
+    static $nonce = null;
+    if ($nonce === null) {
+        $nonce = base64_encode(random_bytes(16));
+    }
+    return $nonce;
+}
+
+/**
+ * リクエストが HTTPS で配信されているか（リバースプロキシ経由も考慮）。
+ * APP_BASE_URL が https の場合も「HTTPS 配信前提」とみなす。
+ */
+function request_is_https(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return true;
+    }
+    if (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') {
+        return true;
+    }
+    return str_starts_with(strtolower((string) getenv('APP_BASE_URL')), 'https://');
+}
+
+/**
+ * 全レスポンス共通のセキュリティヘッダを送る（出力前に bootstrap で1回だけ）。
+ * - クリックジャッキング対策（frame-ancestors / X-Frame-Options）
+ * - MIME スニッフィング抑止、リファラ最小化
+ * - HTTPS 配信時は HSTS
+ * インラインの style/script/イベントハンドラを使う既存UIを壊さないため、
+ * script/style は 'unsafe-inline' を許可しつつ、frame/base/form を厳格化する。
+ */
+function send_baseline_security_headers(): void
+{
+    if (PHP_SAPI === 'cli' || headers_sent()) {
+        return;
+    }
+    // CAPTCHA(Turnstile)有効時は、そのウィジェット配信元を許可リストに加える。
+    $captchaHost = captcha_enabled() ? ' https://challenges.cloudflare.com' : '';
+    $nonce = "'nonce-" . csp_nonce() . "'";
+    // script はインラインを禁止し、自ホスト＋nonce のみ許可（XSS耐性）。
+    // style は <style nonce> と style属性の両方を許可するため style-src-attr 'unsafe-inline' を併用。
+    header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
+        . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
+        . "script-src 'self' $nonce" . $captchaHost . "; "
+        . "connect-src 'self'" . $captchaHost . "; "
+        . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
+        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    header('X-Frame-Options: DENY');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: same-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cross-Origin-Resource-Policy: same-origin');
+    if (request_is_https()) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+}
+
+send_baseline_security_headers();
 
 /**
  * 環境変数を取得。必須かつ未設定なら例外。
@@ -184,7 +251,13 @@ function delete_event(string $tenantId, string $id): bool
 {
     $stmt = db()->prepare('DELETE FROM events WHERE id = ? AND tenant_id = ?');
     $stmt->execute([$id, $tenantId]);
-    return $stmt->rowCount() > 0;
+    $ok = $stmt->rowCount() > 0;
+    if ($ok) {
+        // 残席キャッシュの残骸を掃除
+        $del = db()->prepare('DELETE FROM headcount_cache WHERE event_id = ?');
+        $del->execute([$id]);
+    }
+    return $ok;
 }
 
 /**
@@ -301,6 +374,25 @@ function event_headcount(string $eventId, ?string $account): int
 }
 
 /**
+ * 残席算定（event_headcount）の短時間キャッシュ付きラッパー。
+ * 公開ページ（apply/o）の表示用に使い、Stripe 全件取得の連打を防ぐ。
+ * 定員の最終判定（checkout.php）はキャッシュを使わず event_headcount() を直接呼ぶこと。
+ */
+function event_headcount_cached(string $eventId, ?string $account, int $ttl = 60): int
+{
+    $stmt = db()->prepare('SELECT headcount, updated_at FROM headcount_cache WHERE event_id = ?');
+    $stmt->execute([$eventId]);
+    $row = $stmt->fetch();
+    if ($row !== false && (time() - (int) $row['updated_at']) < $ttl) {
+        return (int) $row['headcount'];
+    }
+    $n = event_headcount($eventId, $account);
+    $up = db()->prepare('INSERT OR REPLACE INTO headcount_cache (event_id, headcount, updated_at) VALUES (?, ?, ?)');
+    $up->execute([$eventId, $n, time()]);
+    return $n;
+}
+
+/**
  * このアプリの公開ベースURL（success/cancel/webhook の組み立てに使用）。
  * ローカル開発では APP_BASE_URL=http://localhost:8000 を想定。
  */
@@ -310,11 +402,187 @@ function base_url(): string
 }
 
 /**
- * Stripe SDK を初期化（秘密鍵をセット）。
+ * このリクエストで使う Stripe APIキーの上書き（主催者が画面登録した鍵）。
+ * セットされていれば init_stripe() はプラットフォーム鍵ではなくこの鍵を使う。
+ */
+function stripe_active_key(?string $set = null, bool $clear = false): ?string
+{
+    static $key = null;
+    if ($clear) {
+        $key = null;
+    } elseif ($set !== null) {
+        $key = $set;
+    }
+    return $key;
+}
+
+/**
+ * このリクエストで Stripe 文脈の確立が「拒否」されたか。
+ * デモ用テナント等、Stripe を一切使わせてはいけない主体で true になり、
+ * init_stripe() は例外を投げる（プラットフォーム鍵への意図しないフォールバックを封じる）。
+ */
+function stripe_context_denied(?bool $set = null): bool
+{
+    static $denied = false;
+    if ($set !== null) {
+        $denied = $set;
+    }
+    return $denied;
+}
+
+/**
+ * Stripe SDK を初期化。優先順位:
+ *   1) 主催者が画面登録した鍵（stripe_active_key）
+ *   2) プラットフォームの STRIPE_SECRET_KEY
+ * Connect 利用時は各 API 呼び出しで stripe_opts($accountId) によりアカウント指定。
  */
 function init_stripe(): void
 {
-    \Stripe\Stripe::setApiKey(env_required('STRIPE_SECRET_KEY'));
+    // 文脈が拒否されている（デモ等）ときは、たとえ環境変数の鍵があっても使わせない。
+    if (stripe_context_denied()) {
+        throw new \RuntimeException('この操作では Stripe を利用できません。');
+    }
+    $key = stripe_active_key() ?? env('STRIPE_SECRET_KEY');
+    if ($key === null) {
+        // 例外にして呼び出し側の try/catch で受け、500 即死や白画面を避ける。
+        throw new \RuntimeException('Stripe の鍵が設定されていません。');
+    }
+    \Stripe\Stripe::setApiKey($key);
+    $clientId = env('STRIPE_CONNECT_CLIENT_ID');
+    if ($clientId !== null) {
+        \Stripe\Stripe::setClientId($clientId);
+    }
+}
+
+/**
+ * 管理コンテキストで、ログイン中テナントの Stripe 文脈を確立する。
+ * - 画面登録鍵があれば active key にセットし、接続アカウントは使わない（null を返す）。
+ * - 無ければ Connect 接続アカウント（あれば）にフォールバック。
+ * 戻り値は既存の $account（acct_... または null）。init_stripe() が active key を拾う。
+ */
+function stripe_resolve_tenant(array $tenant): ?string
+{
+    stripe_active_key(null, true);   // リセット
+    stripe_context_denied(false);    // リセット
+    // デモ用テナントは決済・名簿取得を一切行わない。プラットフォーム鍵へのフォールバックも禁止。
+    if (is_demo_tenant($tenant)) {
+        stripe_context_denied(true);
+        return null;
+    }
+    // Connect 必須モード: 手動登録鍵は使わず、接続アカウントのみ。未接続なら拒否。
+    if (connect_required()) {
+        $acct = effective_stripe_account($tenant['stripe_account_id'] ?? null);
+        if ($acct === null) {
+            stripe_context_denied(true);
+        }
+        return $acct;
+    }
+    $key = get_tenant_stripe_key($tenant);
+    if ($key !== null) {
+        stripe_active_key($key);
+        return null;
+    }
+    return effective_stripe_account($tenant['stripe_account_id'] ?? null);
+}
+
+/**
+ * 公開コンテキストで、イベント所有者の Stripe 文脈を確立する。
+ * 所有者の画面登録鍵があれば active key に、無ければ Connect/プラットフォームへフォールバック。
+ */
+function stripe_resolve_event(array $event): ?string
+{
+    stripe_active_key(null, true);
+    stripe_context_denied(false);
+    $ownerId = (string) ($event['tenant_id'] ?? '');
+    $owner = $ownerId !== '' ? find_tenant_by_id($ownerId) : null;
+    // デモ主催のイベントは本番 Stripe（プラットフォーム鍵）へ絶対に流さない。
+    if ($owner !== null && is_demo_tenant($owner)) {
+        stripe_context_denied(true);
+        return null;
+    }
+    // Connect 必須モード: 主催者の接続アカウントのみ。未接続なら拒否。
+    if (connect_required()) {
+        $acct = effective_stripe_account($event['stripe_account_id'] ?? null);
+        if ($acct === null) {
+            stripe_context_denied(true);
+        }
+        return $acct;
+    }
+    if ($owner !== null) {
+        $key = get_tenant_stripe_key($owner);
+        if ($key !== null) {
+            stripe_active_key($key);
+            return null;
+        }
+    }
+    return effective_stripe_account($event['stripe_account_id'] ?? null);
+}
+
+/**
+ * テナントが決済可能な Stripe 文脈を持つか。
+ * 「実際に使える鍵」で判定する（ファイル存在だけでは不十分＝復号できないと init で失敗するため）。
+ */
+function stripe_ready_for_tenant(array $tenant): bool
+{
+    if (is_demo_tenant($tenant)) {
+        return false; // デモは決済不可（プラットフォーム鍵にも乗せない）
+    }
+    if (connect_required()) {
+        return !empty($tenant['stripe_account_id']); // 接続済みのみ可
+    }
+    return get_tenant_stripe_key($tenant) !== null || env('STRIPE_SECRET_KEY') !== null;
+}
+
+/** イベント所有者が決済可能な Stripe 文脈を持つか（実際に使える鍵で判定）。 */
+function stripe_ready_for_event(array $event): bool
+{
+    $ownerId = (string) ($event['tenant_id'] ?? '');
+    if ($ownerId !== '') {
+        $owner = find_tenant_by_id($ownerId);
+        if ($owner !== null) {
+            if (is_demo_tenant($owner)) {
+                return false; // デモ主催イベントは決済不可
+            }
+            if (connect_required()) {
+                return !empty($event['stripe_account_id']); // 接続済みのみ可
+            }
+            if (get_tenant_stripe_key($owner) !== null) {
+                return true;
+            }
+        }
+    }
+    if (connect_required()) {
+        return false; // 必須モードで所有者不明なら不可
+    }
+    return env('STRIPE_SECRET_KEY') !== null;
+}
+
+/**
+ * Stripe Connect（主催者ごとに自分の Stripe を接続して物理分離）が利用可能な構成か。
+ * プラットフォームの秘密鍵と Connect の client_id（ca_...）の両方が設定済みなら true。
+ */
+function connect_enabled(): bool
+{
+    return env('STRIPE_SECRET_KEY') !== null && env('STRIPE_CONNECT_CLIENT_ID') !== null;
+}
+
+/**
+ * Connect 必須モード。主催者の秘密鍵をサーバーに一切保存させず、
+ * OAuth で接続したアカウント（acct_...）に対してのみ操作する。
+ * サーバーは各主催者の秘密鍵を持たない（入金・PII・決済は主催者側に分離）。
+ */
+function connect_required(): bool
+{
+    return connect_enabled() && env('STRIPE_CONNECT_REQUIRED') === '1';
+}
+
+/**
+ * 操作に使う接続アカウントID を決める。
+ * 接続済みなら接続アカウント（acct_...）、未接続なら null（＝プラットフォーム自アカウント＝後方互換）。
+ */
+function effective_stripe_account(?string $connectedAccountId): ?string
+{
+    return ($connectedAccountId !== null && $connectedAccountId !== '') ? $connectedAccountId : null;
 }
 
 /**
@@ -340,6 +608,164 @@ function datetime_local_value(string $date): string
     }
     $ts = strtotime($date);
     return $ts === false ? '' : date('Y-m-d\TH:i', $ts);
+}
+
+/**
+ * 指定パスが Web 公開領域（DOCUMENT_ROOT 配下）にあるか。
+ * 判定不能（CLI 等で DOCUMENT_ROOT 不明）なら null。
+ */
+function path_within_docroot(string $path): ?bool
+{
+    $docroot = (string) ($_SERVER['DOCUMENT_ROOT'] ?? '');
+    if ($docroot === '') {
+        return null;
+    }
+    $rd = realpath($docroot);
+    if ($rd === false) {
+        return null;
+    }
+    // ファイルが未作成でも親ディレクトリで判定する
+    $target = realpath($path);
+    if ($target === false) {
+        $target = realpath(dirname($path));
+        if ($target === false) {
+            return null;
+        }
+    }
+    $rd = rtrim($rd, '/') . '/';
+    return $target === rtrim($rd, '/') || str_starts_with($target . '/', $rd);
+}
+
+/**
+ * 指定URLのHTTPステータスを取得（1日キャッシュ）。判定不能なら null。
+ * 露出の実測（誤検知防止）に使う。宛先は信頼できる APP_BASE_URL ベースのみ。
+ */
+function remote_status_cached(string $url): ?int
+{
+    $cacheFile = dirname(current_db_path()) . '/.webcheck.json';
+    $map = [];
+    if (is_file($cacheFile)) {
+        $map = json_decode((string) @file_get_contents($cacheFile), true) ?: [];
+    }
+    $k = md5($url);
+    if (isset($map[$k]['ts']) && (time() - (int) $map[$k]['ts'] < 86400)) {
+        return $map[$k]['code'];
+    }
+    if (!function_exists('curl_init')) {
+        return null;
+    }
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+    ]);
+    curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_errno($ch);
+    curl_close($ch);
+    $result = ($err === 0 && $code > 0) ? $code : null;
+    $map[$k] = ['ts' => time(), 'code' => $result];
+    @file_put_contents($cacheFile, json_encode($map));
+    return $result;
+}
+
+/**
+ * 指定ファイルが「Web から実際にダウンロードできる」かを実測する。
+ * - 公開フォルダ(DOCUMENT_ROOT)の外なら false（そもそも到達不能＝安全）。
+ * - 内側なら APP_BASE_URL からの相対URLを取得し 200 なら true（露出）。403/404 なら false。
+ * 判定不能（CLI・APP_BASE_URL未設定・通信不可・ファイル未作成）は null。
+ */
+function file_web_downloadable(string $absPath): ?bool
+{
+    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
+    if ($base === '' || !preg_match('#^https?://#i', $base)) {
+        return null;
+    }
+    $docroot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
+    $real = realpath($absPath);
+    if ($docroot === false || $real === false) {
+        return null;
+    }
+    $rd = rtrim($docroot, '/') . '/';
+    if (!str_starts_with($real, $rd)) {
+        return false; // 公開フォルダ外 → Web から取得不可
+    }
+    $rel = substr($real, strlen($rd));
+    $code = remote_status_cached($base . '/' . str_replace('%2F', '/', rawurlencode($rel)));
+    return $code === null ? null : ($code === 200);
+}
+
+/**
+ * .env が実際に Web から取得できる状態か（誤検知防止のため実測）。
+ */
+function env_web_exposed(): ?bool
+{
+    $base = rtrim((string) env('APP_BASE_URL', ''), '/');
+    if ($base === '' || !preg_match('#^https?://#i', $base)) {
+        return null;
+    }
+    $code = remote_status_cached($base . '/.env');
+    return $code === null ? null : ($code === 200);
+}
+
+/**
+ * 重大な構成リスクを検知して返す（運用者へ警告するため）。
+ * 「パスが公開フォルダ内」だけでは警告しない（.htaccess で守られている場合があるため）。
+ * 実際に Web からダウンロードできる時だけ警告する。
+ *
+ * @return array<int, array{level:string, msg:string}>
+ */
+function security_warnings(): array
+{
+    $w = [];
+    // DB（既定では Stripe 鍵も同じディレクトリ）が実際に Web から取得できる場合のみ警告。
+    if (file_web_downloadable(current_db_path()) === true) {
+        $w[] = [
+            'level' => 'critical',
+            'msg' => 'データベース（および Stripe 鍵）が Web から直接ダウンロードできる状態です。'
+                . ' .htaccess を有効化するか、.env の DB_PATH を公開フォルダの外（例: /home/アカウント/private/app.sqlite）に設定してください。',
+        ];
+    }
+    // .env が実際に取得できる場合のみ。
+    if (env_web_exposed() === true) {
+        $w[] = [
+            'level' => 'critical',
+            'msg' => '.env が Web から直接ダウンロードできる状態です（/.env が 200）。直ちに .htaccess を有効化するか、機密を公開フォルダの外へ移してください。',
+        ];
+    }
+    return $w;
+}
+
+/**
+ * 監査ログ（誰が・いつ・どこから・何をしたか）。
+ * 公開フォルダ外（DB と同じ private 領域）に追記。秘密（鍵・カード情報・トークン）は記録しない。
+ * 漏えい・不正アクセスの調査と、原因箇所を塞ぐための証跡として使う。
+ *
+ * @param array<string, scalar> $ctx 付帯情報（event_id, result 等。PII/秘密は入れないこと）
+ */
+function audit_log(string $event, array $ctx = []): void
+{
+    $path = dirname(current_db_path()) . '/audit.log';
+    $max = (int) env('AUDIT_LOG_MAX_BYTES', '5242880'); // 5MB
+    if ($max > 0 && is_file($path) && @filesize($path) >= $max) {
+        @rename($path, $path . '.1'); // 1世代ローテーション
+    }
+    $parts = [];
+    foreach ($ctx as $k => $v) {
+        // 改行・空白を除去してログ1行を壊さない
+        $parts[] = $k . '=' . preg_replace('/\s+/', '_', (string) $v);
+    }
+    $line = sprintf(
+        "[%s] ip=%s ua=%s event=%s %s\n",
+        date('c'),
+        client_ip(),
+        substr(preg_replace('/\s+/', '_', (string) ($_SERVER['HTTP_USER_AGENT'] ?? '-')), 0, 60),
+        $event,
+        implode(' ', $parts)
+    );
+    @file_put_contents($path, $line, FILE_APPEND | LOCK_EX);
 }
 
 /**
@@ -377,6 +803,7 @@ function csrf_verify(?string $token): void
     session_boot();
     $expected = $_SESSION['csrf_token'] ?? '';
     if ($expected === '' || !is_string($token) || !hash_equals($expected, $token)) {
+        audit_log('csrf.fail', ['path' => $_SERVER['SCRIPT_NAME'] ?? '']);
         http_response_code(400);
         exit('不正なリクエストです（CSRF トークン不一致）。画面を開き直してください。');
     }
@@ -513,4 +940,56 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 
     return $participants;
+}
+
+/**
+ * 指定イベントの参加者の中から customer_id 一致を返す（無ければ null）。
+ * 出席/集金/当日取消の操作対象が「本当にそのイベントの参加者か」を検証するために使う
+ * （全テナントが単一 Stripe アカウントを共有するため、ID だけでは他テナントの顧客も指せてしまう＝IDOR 対策）。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_customer(string $eventId, ?string $account, string $customerId): ?array
+{
+    if ($customerId === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (($p['customer_id'] ?? '') === $customerId) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/**
+ * 指定イベントの参加者の中から payment_intent 一致を返す（無ければ null）。返金の IDOR 対策に使う。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_payment_intent(string $eventId, ?string $account, string $paymentIntent): ?array
+{
+    if ($paymentIntent === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (($p['payment_intent'] ?? '') === $paymentIntent) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/**
+ * CSV セルの数式インジェクション対策。
+ * 先頭が = + - @ または制御文字（Tab/CR）で始まる値は、Excel/Sheets が数式として
+ * 解釈・実行しないよう先頭にシングルクオートを付けて無害化する。
+ */
+function csv_cell(?string $value): string
+{
+    $value = (string) $value;
+    if ($value !== '' && in_array($value[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+        return "'" . $value;
+    }
+    return $value;
 }

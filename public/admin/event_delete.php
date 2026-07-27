@@ -31,7 +31,9 @@ if ($id === '') {
 }
 
 if (!delete_event($tenant['id'], $id)) {
+    audit_log('authz.deny', ['action' => 'event.delete', 'tenant' => $tenant['id'], 'event' => $id]);
     back('対象のイベントが見つかりませんでした。', 'ng');
 }
 
+audit_log('event.delete', ['tenant' => $tenant['id'], 'event' => $id]);
 back('イベントを削除しました。', 'ok');

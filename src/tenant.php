@@ -7,23 +7,45 @@
 
 declare(strict_types=1);
 
+/** ログインセッションのアイドルタイムアウト（秒）。最終操作からこの時間で失効。 */
+const SESSION_IDLE_TIMEOUT = 1800; // 30分
+
 /** セッションを開始（未開始なら）。Cookie を堅牢化してから開始する。 */
 function session_boot(): void
 {
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
-    // HTTPS 配信時は Secure 属性を付ける（リバースプロキシ経由も考慮）
-    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+    // セッションファイルを公開領域外の専用ディレクトリに隔離する。
+    // 共有ホスティングで保存先が共有・覗き見可能な場合のセッション窃取（→名簿PII流出）を防ぐ。
+    $sessDir = dirname(current_db_path()) . '/sessions';
+    if (!is_dir($sessDir)) {
+        @mkdir($sessDir, 0700, true);
+    }
+    if (is_dir($sessDir) && is_writable($sessDir)) {
+        session_save_path($sessDir);
+    }
+    // HTTPS 配信（プロキシ経由・APP_BASE_URL が https を含む）なら Secure 属性を常時付与
     session_set_cookie_params([
         'lifetime' => 0,
         'path' => '/',
         'httponly' => true,
-        'secure' => $secure,
+        'secure' => request_is_https(),
         'samesite' => 'Lax',
     ]);
     session_start();
+
+    // ログイン中セッションのアイドルタイムアウト（最終操作から一定時間で強制ログアウト）
+    if (!empty($_SESSION['tenant_id'])) {
+        $now = time();
+        $last = (int) ($_SESSION['last_activity'] ?? $now);
+        if ($now - $last > SESSION_IDLE_TIMEOUT) {
+            $_SESSION = [];
+            session_destroy();
+            return;
+        }
+        $_SESSION['last_activity'] = $now;
+    }
 }
 
 /* ------------------- ログイン試行の制限（総当たり対策） ------------------- */
@@ -33,6 +55,14 @@ function recent_failed_logins(string $email, int $windowSec = 900): int
 {
     $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE identifier = ? AND created_at >= ?');
     $stmt->execute([strtolower(trim($email)), time() - $windowSec]);
+    return (int) $stmt->fetchColumn();
+}
+
+/** 直近 $windowSec 秒の失敗回数（IP単位）。メール横断のスプレー攻撃対策。 */
+function recent_failed_logins_by_ip(string $ip, int $windowSec = 900): int
+{
+    $stmt = db()->prepare('SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND created_at >= ?');
+    $stmt->execute([$ip, time() - $windowSec]);
     return (int) $stmt->fetchColumn();
 }
 
@@ -50,11 +80,90 @@ function clear_failed_logins(string $email): void
     $stmt->execute([strtolower(trim($email))]);
 }
 
+/* ------------------- 汎用レート制限（未認証エンドポイントの濫用対策） ------------------- */
+
+/**
+ * 現在の送信元IPを返す（取得できなければ 'unknown'）。
+ *
+ * 既定では REMOTE_ADDR を使う（XFF はクライアントが偽装できるため信用しない）。
+ * 信頼できるリバースプロキシ/CDN の背後では .env に TRUSTED_PROXY=1 を設定すると、
+ * X-Forwarded-For の先頭（最も外側のクライアント）を採用する。これにより
+ * 「全員が上流IPで1バケットに集約されて誤ロック/制限無効化される」問題を避ける。
+ */
+function client_ip(): string
+{
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    if (env('TRUSTED_PROXY') !== null && env('TRUSTED_PROXY') !== '0') {
+        $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+        if ($xff !== '') {
+            $first = trim(explode(',', $xff)[0]);
+            if (filter_var($first, FILTER_VALIDATE_IP) !== false) {
+                return $first;
+            }
+        }
+    }
+    return $remote;
+}
+
+/**
+ * 直近 $windowSec 秒の $action 実行回数（identifier 単位）を数え、$max 未満なら許可して記録する。
+ * 上限に達していれば記録せず false を返す（＝ブロック）。$identifier 省略時は送信元IP。
+ */
+function rate_limit_check(string $action, int $max, int $windowSec, ?string $identifier = null): bool
+{
+    $id = $identifier ?? client_ip();
+    $since = time() - $windowSec;
+
+    $stmt = db()->prepare('SELECT COUNT(*) FROM rate_events WHERE action = ? AND identifier = ? AND created_at >= ?');
+    $stmt->execute([$action, $id, $since]);
+    if ((int) $stmt->fetchColumn() >= $max) {
+        return false;
+    }
+
+    $ins = db()->prepare('INSERT INTO rate_events (action, identifier, created_at) VALUES (?, ?, ?)');
+    $ins->execute([$action, $id, time()]);
+
+    // 古いレコードを時々掃除（肥大防止）。確率的に実行。
+    if (random_int(1, 50) === 1) {
+        $del = db()->prepare('DELETE FROM rate_events WHERE created_at < ?');
+        $del->execute([time() - 86400]);
+        // 残席キャッシュの古い/不要なエントリも併せて掃除（1日以上更新なし）。
+        $delCache = db()->prepare('DELETE FROM headcount_cache WHERE updated_at < ?');
+        $delCache->execute([time() - 86400]);
+    }
+    return true;
+}
+
 /* ------------------------- テナント ------------------------- */
 
 function generate_tenant_id(): string
 {
     return 'tn_' . bin2hex(random_bytes(6));
+}
+
+/**
+ * パスワード強度を検証する。満たさなければ InvalidArgumentException。
+ * - 8文字以上
+ * - よくある脆弱なパスワード・単一文字の繰り返しを拒否
+ */
+function assert_password_strength(string $password): void
+{
+    if (strlen($password) < 8) {
+        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
+    }
+    $lower = strtolower($password);
+    $weak = [
+        'password', 'passw0rd', '12345678', '123456789', '1234567890',
+        'qwerty', 'qwertyui', 'abc12345', 'test1234', 'admin123',
+        '11111111', '00000000', 'iloveyou', 'letmein1', 'welcome1',
+    ];
+    if (in_array($lower, $weak, true)) {
+        throw new \InvalidArgumentException('このパスワードは推測されやすいため使用できません。別のパスワードにしてください。');
+    }
+    // 同一文字の繰り返しのみ（例: aaaaaaaa）を拒否
+    if (preg_match('/^(.)\1+$/', $password)) {
+        throw new \InvalidArgumentException('このパスワードは単純すぎます。別のパスワードにしてください。');
+    }
 }
 
 function find_tenant_by_email(string $email): ?array
@@ -82,9 +191,7 @@ function create_tenant(string $email, string $password, string $displayName, boo
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         throw new \InvalidArgumentException('メールアドレスの形式が正しくありません。');
     }
-    if (strlen($password) < 8) {
-        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
-    }
+    assert_password_strength($password);
     if (find_tenant_by_email($email) !== null) {
         throw new \RuntimeException('このメールアドレスは既に登録されています。');
     }
@@ -105,10 +212,164 @@ function create_tenant(string $email, string $password, string $displayName, boo
     return $id;
 }
 
+/** 主催者のキャンセル・返金ポリシー本文を保存する（空/null で既定文面に戻す）。 */
+function set_tenant_cancel_policy(string $tenantId, ?string $text): void
+{
+    $text = ($text !== null && trim($text) !== '') ? $text : null;
+    $stmt = db()->prepare('UPDATE tenants SET cancel_policy = ? WHERE id = ?');
+    $stmt->execute([$text, $tenantId]);
+}
+
 function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
 {
     $stmt = db()->prepare('UPDATE tenants SET stripe_account_id = ? WHERE id = ?');
     $stmt->execute([$accountId, $tenantId]);
+}
+
+/**
+ * 主催者の Stripe 鍵を保存するファイルのパス。
+ * 既定は DB と同じディレクトリ（運用では DB ごと公開フォルダ外に置く前提）。
+ * STRIPE_KEY_DIR で明示指定も可能。鍵は DB には保存しない（旧来の方式）。
+ */
+function tenant_key_path(string $tenantId): string
+{
+    $dir = env('STRIPE_KEY_DIR', dirname(current_db_path()));
+    $safe = preg_replace('/[^a-zA-Z0-9_]/', '', $tenantId);
+    return rtrim($dir, '/') . '/stripe_' . $safe . '.key';
+}
+
+/**
+ * 主催者の Stripe 鍵を「公開フォルダ外のファイル」に保存する。null/空で削除。
+ * APP_KEY があれば暗号化（enc:）、無ければそのまま（raw:）保存する（ファイル自体が非公開前提）。
+ */
+function set_tenant_stripe_key(string $tenantId, ?string $plainKey): void
+{
+    $path = tenant_key_path($tenantId);
+    if ($plainKey === null || $plainKey === '') {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+        return;
+    }
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0700, true);
+    }
+    // 平文ディスク保存を避けるため、可能なら APP_KEY を用意して常に暗号化する。
+    ensure_app_key();
+    $payload = crypto_available() ? ('enc:' . app_encrypt($plainKey)) : ('raw:' . $plainKey);
+    file_put_contents($path, $payload, LOCK_EX);
+    @chmod($path, 0600);
+}
+
+/**
+ * 主催者の Stripe 鍵（平文）を返す。未登録/復号不可なら null。決済処理にのみ使用（画面表示はマスク）。
+ */
+function get_tenant_stripe_key(array $tenant): ?string
+{
+    $path = tenant_key_path((string) ($tenant['id'] ?? ''));
+    if (!is_file($path)) {
+        return null;
+    }
+    $data = (string) file_get_contents($path);
+    if (str_starts_with($data, 'enc:')) {
+        return app_decrypt(substr($data, 4));
+    }
+    if (str_starts_with($data, 'raw:')) {
+        return substr($data, 4);
+    }
+    return $data !== '' ? $data : null;
+}
+
+/** 主催者が Stripe 鍵を登録済みか。 */
+function tenant_has_stripe_key(array $tenant): bool
+{
+    return is_file(tenant_key_path((string) ($tenant['id'] ?? '')));
+}
+
+/* ------------------------- デモ（ポートフォリオ）モード ------------------------- */
+
+/** デモ用テナントの固定メール（実在しないドメインで通常のメール到達も無効）。 */
+const DEMO_TENANT_EMAIL = 'demo@demo.invalid';
+
+/** デモモードが有効か（.env の DEMO_MODE=1）。本番運用では 0 にして無効化する。 */
+function demo_mode_enabled(): bool
+{
+    return env('DEMO_MODE', '0') === '1';
+}
+
+/** 与えられたテナントがデモ用アカウントか。 */
+function is_demo_tenant(?array $tenant): bool
+{
+    return $tenant !== null
+        && strtolower((string) ($tenant['email'] ?? '')) === DEMO_TENANT_EMAIL;
+}
+
+/**
+ * デモ用ログイン。ログイン画面でメール・パスワードを空欄のまま送信したときに呼ぶ。
+ * デモ用テナントを用意（無ければ作成）し、サンプルイベントを毎回初期状態へリセットして
+ * セッションを張る。DEMO_MODE が無効なら何もせず false。
+ *
+ * 【安全性】デモは Stripe 鍵を持たない（＝外部送信・課金は発生しない）。書き込みは
+ * ローカルDBのイベントに限定され、他テナントのデータには一切アクセスできない
+ * （既存の所有者スコープ制御をそのまま利用）。
+ */
+function demo_login(): bool
+{
+    if (!demo_mode_enabled()) {
+        return false;
+    }
+    $tenant = find_tenant_by_email(DEMO_TENANT_EMAIL);
+    if ($tenant === null) {
+        // 通常ログイン経路では使われない乱数パスワードで作成（空欄デモログインのみで入れる）。
+        $id = create_tenant(DEMO_TENANT_EMAIL, bin2hex(random_bytes(24)), 'デモ主催者（サンプル）');
+        $tenant = find_tenant_by_id($id);
+    }
+    if ($tenant === null) {
+        return false;
+    }
+    demo_seed_events((string) $tenant['id']);
+    session_boot();
+    session_regenerate_id(true);
+    $_SESSION['tenant_id'] = $tenant['id'];
+    return true;
+}
+
+/**
+ * デモテナントのイベントをサンプル一式へリセットする（既存を全削除して作り直す）。
+ * デモは毎回まっさらな状態から体験できるようにする。
+ */
+function demo_seed_events(string $tenantId): void
+{
+    foreach (tenant_events($tenantId) as $ev) {
+        delete_event($tenantId, (string) $ev['id']);
+    }
+    $samples = [
+        [
+            'name' => '春の交流ランチ会',
+            'description' => "初参加歓迎のカジュアルなランチ会です。会場でお料理を楽しみながら交流しましょう。\n事前決済・当日支払いの両方に対応した例です。",
+            'date' => '2026-04-18 12:00', 'place' => '東京・渋谷 コミュニティキッチン',
+            'amount' => 3000, 'amount_onsite' => 3500, 'currency' => 'jpy',
+            'capacity' => 20, 'allow_prepay' => true, 'allow_onsite' => true,
+        ],
+        [
+            'name' => '初心者向け写真ワークショップ',
+            'description' => "スマホでもOK。構図と光の基礎を学ぶ2時間の実践ワークショップ。\n事前決済のみ・オンライン開催の例です。",
+            'date' => '2026-05-10 14:00', 'place' => 'オンライン（Zoom）',
+            'amount' => 1500, 'amount_onsite' => 0, 'currency' => 'jpy',
+            'capacity' => 30, 'allow_prepay' => true, 'allow_onsite' => false,
+        ],
+        [
+            'name' => '朝活もくもく会',
+            'description' => "各自の作業を持ち寄って集中する朝の作業会。\n当日支払いのみ・定員なしの例です。",
+            'date' => '2026-04-05 08:00', 'place' => '大阪・梅田 レンタルスペース',
+            'amount' => 0, 'amount_onsite' => 500, 'currency' => 'jpy',
+            'capacity' => 0, 'allow_prepay' => false, 'allow_onsite' => true,
+        ],
+    ];
+    foreach ($samples as $s) {
+        create_event($tenantId, $s);
+    }
 }
 
 function set_tenant_plan(string $tenantId, string $plan): void
@@ -138,8 +399,14 @@ function find_tenant_by_billing_customer(string $customerId): ?array
  */
 function login_tenant(string $email, string $password): bool
 {
+    // タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化する。
+    $dummyHash = '$2y$12$iOI7xMnDX6U9v5ZKJ/SC1O4K8KEa/DBdKX6/VaaIg3PcM5nyTymFq';
     $tenant = find_tenant_by_email($email);
-    if ($tenant === null || !password_verify($password, $tenant['password_hash'])) {
+    if ($tenant === null) {
+        password_verify($password, $dummyHash);
+        return false;
+    }
+    if (!password_verify($password, $tenant['password_hash'])) {
         return false;
     }
     session_boot();
@@ -182,6 +449,7 @@ function require_admin_tenant(): array
 {
     $tenant = require_tenant();
     if ((int) ($tenant['is_admin'] ?? 0) !== 1) {
+        audit_log('authz.admin_deny', ['tenant' => $tenant['id'], 'path' => $_SERVER['SCRIPT_NAME'] ?? '']);
         http_response_code(403);
         exit('この操作にはプラットフォーム管理者権限が必要です。');
     }
@@ -244,12 +512,10 @@ function update_tenant_display_name(string $tenantId, string $name): void
     $stmt->execute([$name !== '' ? $name : '主催者', $tenantId]);
 }
 
-/** パスワードを更新する（8文字以上）。 */
+/** パスワードを更新する（強度チェックあり）。 */
 function update_tenant_password(string $tenantId, string $newPassword): void
 {
-    if (strlen($newPassword) < 8) {
-        throw new \InvalidArgumentException('パスワードは8文字以上にしてください。');
-    }
+    assert_password_strength($newPassword);
     $stmt = db()->prepare('UPDATE tenants SET password_hash = ? WHERE id = ?');
     $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $tenantId]);
 }

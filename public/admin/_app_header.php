@@ -16,13 +16,15 @@ $current = basename($_SERVER['SCRIPT_NAME'] ?? '');
 
 /** ナビ項目（active 判定用に対象スクリプト名の配列を持つ）。 */
 $navItems = [
-    ['dashboard.php', '🏠', 'ダッシュボード', ['dashboard.php']],
-    ['events.php',    '📅', 'イベント管理',   ['events.php']],
-    ['index.php',     '👥', '参加者管理',     ['index.php']],
-    ['account.php',   '⚙️', 'アカウント設定', ['account.php']],
+    ['dashboard.php', '', 'ダッシュボード', ['dashboard.php']],
+    ['events.php',    '', 'イベント管理',   ['events.php']],
+    ['index.php',     '', '参加者管理',     ['index.php']],
+    ['stripe.php',    '', 'Stripe設定',    ['stripe.php', 'setup.php']],
+    ['policy_edit.php', '', 'キャンセルポリシー', ['policy_edit.php']],
+    ['account.php',   '', 'アカウント設定', ['account.php']],
 ];
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {
-    $navItems[] = ['invites.php', '✉️', '招待を発行', ['invites.php']];
+    $navItems[] = ['invites.php', '', '招待を発行', ['invites.php']];
 }
 ?>
 <!DOCTYPE html>
@@ -32,20 +34,21 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>イベント事前決済</title>
     <link rel="stylesheet" href="/assets/app.css">
+    <script src="/assets/app.js" defer></script>
 </head>
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand"><span class="logo">🎟️</span> イベント決済</div>
+        <div class="sidebar__brand">イベント決済</div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
                 <a href="<?= e($href) ?>" class="<?= in_array($current, $match, true) ? 'active' : '' ?>">
-                    <span class="ic"><?= $icon ?></span> <?= e($label) ?>
+                    <?= e($label) ?>
                 </a>
             <?php endforeach; ?>
             <div class="nav__sep"></div>
-            <a href="../o.php?t=<?= e(urlencode($tenant['id'])) ?>" target="_blank"><span class="ic">🔗</span> 公開ページを見る</a>
-            <a href="logout.php"><span class="ic">↩</span> ログアウト</a>
+            <a href="../o.php?t=<?= e(urlencode($tenant['id'])) ?>" target="_blank">公開ページを見る</a>
+            <a href="logout.php">ログアウト</a>
         </nav>
         <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
     </aside>
@@ -58,3 +61,15 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
             <?php if ($topActions !== ''): ?><div class="topbar__actions"><?= $topActions ?></div><?php endif; ?>
         </header>
         <main class="page">
+        <?php if (is_demo_tenant($tenant)): ?>
+            <div class="flash" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
+                <strong>デモモード（ポートフォリオ）:</strong>
+                これはサンプルデータの体験用アカウントです。決済は無効で、外部への送信は行われません。イベントは自由に編集できますが、内容は再ログイン時にリセットされます。
+            </div>
+        <?php endif; ?>
+        <?php foreach (security_warnings() as $__w): ?>
+            <div class="flash flash--ng">
+                <strong><?= $__w['level'] === 'critical' ? '🔴 重大なセキュリティ警告' : '⚠️ セキュリティ警告' ?>:</strong>
+                <?= e($__w['msg']) ?>
+            </div>
+        <?php endforeach; ?>

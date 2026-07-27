@@ -16,11 +16,12 @@ $eventName = '';
 $amountText = '';
 $email = '';
 
-// セッションは運営者自身の Stripe アカウント上にある（Connect 不使用）
+// セッションはイベント所有者の Stripe 上にある。所有者の画面登録鍵→Connect→プラットフォームで文脈確立。
 $event = $eventId !== '' ? find_event($eventId) : null;
-$account = null;
+$account = $event !== null ? stripe_resolve_event($event) : null;
 
-if ($sessionId !== '') {
+// 正規の遷移は「実在イベント＋Stripe文脈あり」。細工された値での 500 を避け、graceful に表示する。
+if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
     init_stripe();
     try {
         $session = \Stripe\Checkout\Session::retrieve($sessionId, stripe_opts($account));
@@ -42,7 +43,7 @@ if ($sessionId !== '') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>申込完了</title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .ok { color: #16a34a; font-size: 1.4rem; font-weight: 800; margin: 0 0 8px; }
         .ng { color: var(--dng); font-size: 1.3rem; font-weight: 800; margin: 0 0 8px; }
         dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 16px 0; }
@@ -51,7 +52,7 @@ if ($sessionId !== '') {
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <div class="card">
         <?php if ($paid): ?>
             <p class="ok">✅ お申し込みが完了しました</p>
@@ -60,13 +61,12 @@ if ($sessionId !== '') {
             <dl>
                 <?php if ($eventName !== ''): ?><dt>イベント</dt><dd><?= e($eventName) ?></dd><?php endif; ?>
                 <?php if ($amountText !== ''): ?><dt>お支払い額</dt><dd><?= e($amountText) ?></dd><?php endif; ?>
-                <?php if ($email !== ''): ?><dt>メール</dt><dd><?= e($email) ?></dd><?php endif; ?>
             </dl>
+            <?php if ($email !== ''): ?><p class="muted">確認メールを <?= e(mask_email_for_log($email)) ?> 宛にお送りします。</p><?php endif; ?>
         <?php else: ?>
             <p class="ng">お支払いを確認できませんでした</p>
             <p>恐れ入りますが、もう一度お試しいただくか、主催者までご連絡ください。</p>
         <?php endif; ?>
-        <p style="margin-top:20px;"><a href="index.php">← トップへ戻る</a></p>
     </div>
 </div>
 </body>

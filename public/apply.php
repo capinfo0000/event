@@ -20,8 +20,15 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-// 運営者の Stripe キーが設定済みか。未設定でもフォームは表示し、申込ボタン押下時（checkout.php）に案内する。
-$stripeReady = env('STRIPE_SECRET_KEY') !== null;
+// 濫用対策: 公開ページの連打（Stripe集計の増幅・偵察）を IP 単位で緩く制限する。
+if (!rate_limit_check('view_apply', 120, 300)) {
+    http_response_code(429);
+    exit('アクセスが多すぎます。しばらくしてから再度お開きください。');
+}
+
+// 運営者の Stripe が使えるか（画面登録鍵 or Connect/プラットフォーム）。未設定でもフォームは表示。
+$stripeReady = stripe_ready_for_event($event);
+$account = stripe_resolve_event($event); // 残席計算で使う Stripe 文脈を確立
 
 // 定員と残席（capacity>0 のとき）。取得に失敗しても申込は止めない。
 $capacity = (int) ($event['capacity'] ?? 0);
@@ -29,7 +36,7 @@ $remaining = null; // null = 定員管理なし／不明
 $isFull = false;
 if ($capacity > 0 && $stripeReady) {
     try {
-        $remaining = max(0, $capacity - event_headcount($event['id'], null));
+        $remaining = max(0, $capacity - event_headcount_cached($event['id'], $account));
         $isFull = ($remaining <= 0);
     } catch (\Throwable $e) {
         $remaining = null;
@@ -66,7 +73,8 @@ $maxParty = min($maxParty, 20);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
     <link rel="stylesheet" href="/assets/app.css">
-    <style>
+    <script src="/assets/app.js" defer></script>
+    <style nonce="<?= e(csp_nonce()) ?>">
         .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
         .pay-options input[type=radio] { width: auto; }
@@ -74,10 +82,10 @@ $maxParty = min($maxParty, 20);
 </head>
 <body>
 <div class="container">
-    <div class="brandbar"><span class="logo">🎟️</span> イベント参加申込</div>
+    <div class="brandbar">イベント参加申込</div>
     <h1><?= e($event['name'] ?? '') ?></h1>
     <div class="card">
-        <p class="muted">📅 <?= e($event['date'] ?? '') ?>　📍 <?= e($event['place'] ?? '') ?></p>
+        <p class="muted"><?= e($event['date'] ?? '') ?>　<?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
             <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
@@ -105,7 +113,7 @@ $maxParty = min($maxParty, 20);
         <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
 
         <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
-        <select id="party_size" name="party_size" required onchange="updateTotal()">
+        <select id="party_size" name="party_size" required>
             <?php for ($i = 1; $i <= $maxParty; $i++): ?>
                 <option value="<?= $i ?>"><?= $i ?> 名</option>
             <?php endfor; ?>
@@ -118,13 +126,13 @@ $maxParty = min($maxParty, 20);
         <div class="pay-options">
             <?php if ($allowPrepay): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
-                    <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> style="width:auto;">
                     事前決済（今すぐカード等で前払い・<?= e(format_amount($prepayUnit, $currency)) ?>/名）
                 </label>
             <?php endif; ?>
             <?php if ($allowOnsite): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
-                    <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> onchange="updateTotal()" style="width:auto;">
+                    <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> style="width:auto;">
                     当日支払い（会場で集金・<?= e(format_amount($onsiteUnit, $currency)) ?>/名）
                 </label>
             <?php endif; ?>
@@ -132,20 +140,24 @@ $maxParty = min($maxParty, 20);
 
         <p class="total">お支払い合計：<span id="total"><?= e(format_amount($defaultUnit, $currency)) ?></span> <span id="total-note" class="hint" style="margin:0;"></span></p>
 
+        <?= captcha_widget_html() ?>
         <?php $blockedInit = (!$stripeReady && $defaultMethod === 'prepay'); ?>
         <button type="submit" class="btn btn--block btn--lg" id="submitBtn" <?= $blockedInit ? 'disabled' : '' ?>><?= $defaultMethod === 'onsite' ? 'この内容で申し込む（当日支払い）→' : '事前決済する →' ?></button>
         <?php if (!$stripeReady): ?>
             <p class="notice" id="prepayBlockNote" style="<?= $blockedInit ? '' : 'display:none;' ?>">⚠️ 現在この主催者は支払い口座の設定が完了していないため、<strong>事前決済（オンライン前払い）</strong>は利用できません。<?= $allowOnsite ? '「当日支払い」を選んでお申し込みください。' : '準備が整うまでお待ちください。' ?></p>
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
-        <p class="hint">キャンセル時の返金は<a href="policy.php">キャンセルポリシー</a>をご確認ください。</p>
+        <p class="hint">キャンセル時の返金は<a href="policy.php?event_id=<?= e($event['id']) ?>" target="_blank">キャンセルポリシー</a>をご確認ください。</p>
+        <?php if ($allowPrepay): ?>
+            <p class="hint"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済（カード）の安全性について</button></p>
+        <?php endif; ?>
     </form>
     <?php endif; ?>
-
-    <p class="muted"><a href="index.php">← トップへ戻る</a></p>
 </div>
 
-    <script>
+<?php require __DIR__ . '/_prepay_info_modal.php'; ?>
+
+    <script nonce="<?= e(csp_nonce()) ?>">
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
         const PREPAY_UNIT = <?= $prepayUnit ?>;
         const ONSITE_UNIT = <?= $onsiteUnit ?>;
@@ -190,7 +202,15 @@ $maxParty = min($maxParty, 20);
                 blockNote.style.display = blocked ? '' : 'none';
             }
         }
-        updateTotal();
+        // インライン属性の代わりにここでイベントを束ねる（CSP厳格化対応）
+        document.addEventListener('DOMContentLoaded', function () {
+            const ps = document.getElementById('party_size');
+            if (ps) { ps.addEventListener('change', updateTotal); }
+            document.querySelectorAll('input[name="payment_type"]').forEach(function (r) {
+                r.addEventListener('change', updateTotal);
+            });
+            updateTotal();
+        });
     </script>
 </body>
 </html>

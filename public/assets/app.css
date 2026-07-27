@@ -186,3 +186,39 @@ tbody tr:hover { background: #fafbfc; }
   .topbar { padding: 14px 18px; }
   .page { padding: 18px; }
 }
+
+/* ---------- モーダル（ポップアップ） ---------- */
+.modal { display: none; position: fixed; inset: 0; z-index: 1000;
+         background: rgba(15, 23, 42, .55); padding: 24px; overflow: auto; }
+.modal.is-open { display: block; }
+.modal__box { position: relative; background: #fff; border-radius: 14px; max-width: 560px; width: 100%;
+              margin: 32px auto; padding: 22px 26px; box-shadow: 0 18px 50px rgba(0,0,0,.35); }
+.modal__title { font-size: 1.1rem; font-weight: 800; margin: 0 0 6px; padding-right: 28px; }
+.modal__lead { color: var(--muted); font-size: .85rem; margin: 0 0 8px; }
+.modal__close { position: absolute; top: 12px; right: 16px; cursor: pointer; border: none;
+                background: none; font-size: 1.5rem; line-height: 1; color: #94a3b8; }
+.modal__box ol, .modal__box ul { line-height: 1.9; padding-left: 1.3em; }
+.modal__box li { margin: 4px 0; }
+.modal__actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ステップ式ガイド */
+.guide__row { display: flex; gap: 12px; margin: 16px 0 0; }
+.guide__num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+              color: #fff; font-weight: 700; font-size: .82rem; display: flex; align-items: center; justify-content: center; }
+.guide__body { flex: 1; min-width: 0; }
+.guide__body .gt { font-weight: 700; margin: 2px 0 4px; }
+.guide__body p { margin: 3px 0; font-size: .9rem; }
+.guide__body .muted { font-size: .82rem; }
+.tpl { border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; margin: 6px 0; font-size: .88rem; }
+.tpl--on { border-color: var(--accent); background: #eff6ff; }
+.tpl small { display: block; color: var(--muted); font-size: .78rem; }
+.perm { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 8px 0; }
+.perm__head { background: #f3f4f6; padding: 5px 12px; font-weight: 700; font-size: .8rem; }
+.perm__row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+             padding: 7px 12px; border-top: 1px solid #eef2f7; font-size: .86rem; }
+.perm__pills { display: flex; gap: 4px; flex: none; }
+.pill { border: 1px solid var(--border); border-radius: 6px; padding: 2px 9px; font-size: .76rem; color: var(--muted); background: #fff; }
+.pill--on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.mockfield { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.mockfield input { flex: 1; margin: 0; }
+.mockfield .btn { white-space: nowrap; }

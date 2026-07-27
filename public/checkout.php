@@ -17,6 +17,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit('POST のみ許可されています。');
 }
 
+// 濫用対策: 未認証の申込（当日申込はメール送信・Stripe顧客作成を伴う）は
+// 同一IPからの回数制限＋CAPTCHA で抑止する。メール爆撃・偽顧客大量投入・定員枠潰しを防ぐ。
+if (!rate_limit_check('apply', 20, 3600)) {
+    http_response_code(429);
+    exit('申込の試行が多すぎます。しばらく時間をおいて再度お試しください。');
+}
+if (!captcha_verify($_POST['cf-turnstile-response'] ?? null)) {
+    http_response_code(400);
+    exit('認証（CAPTCHA）に失敗しました。前の画面に戻ってもう一度お試しください。');
+}
+
 $eventId = (string)($_POST['event_id'] ?? '');
 $event = find_event($eventId);
 
@@ -25,8 +36,8 @@ if ($event === null) {
     exit('指定されたイベントが見つかりません。');
 }
 
-// 決済は運営者自身の Stripe アカウントで行う（Connect 不使用）。$account は使わず常に自アカウント。
-$account = null;
+// 決済はイベント所有者の Stripe で行う。所有者の画面登録鍵→Connect→プラットフォームの順で文脈確立。
+$account = stripe_resolve_event($event);
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
 $name  = trim((string)($_POST['name'] ?? ''));
@@ -73,8 +84,8 @@ if ($paymentType === 'onsite' && !$allowOnsite) {
     exit('このイベントでは当日支払いを受け付けていません。');
 }
 
-// 決済（事前・当日とも）は運営者の Stripe を使う。キー未設定なら受付不可。
-if (env('STRIPE_SECRET_KEY') === null) {
+// 決済（事前・当日とも）は運営者の Stripe を使う。鍵未設定なら受付不可。
+if (!stripe_ready_for_event($event)) {
     http_response_code(503);
     exit('現在このイベントは決済の準備が完了していません。主催者へお問い合わせください。');
 }

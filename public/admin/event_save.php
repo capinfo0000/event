@@ -86,6 +86,14 @@ try {
         update_event($tenant['id'], $id, $data);
         back_to_events('イベントを更新しました。', 'ok');
     } else {
+        // 濫用対策: 短時間の大量作成による DB 肥大化（DoS）を IP 単位で抑止（作成のみ）。
+        if (!rate_limit_check('event_create', 30, 3600)) {
+            back_to_events('短時間に多くのイベントを作成しています。時間をおいてから再度お試しください。', 'ng');
+        }
+        // デモは共有アカウントのため、保有イベント数に上限を設けて肥大化を防ぐ。
+        if (is_demo_tenant($tenant) && tenant_event_count($tenant['id']) >= 12) {
+            back_to_events('デモではイベント数の上限に達しました。既存のイベントを削除してからお試しください。', 'ng');
+        }
         create_event($tenant['id'], $data);
         back_to_events('イベントを登録しました。', 'ok');
     }

@@ -15,12 +15,15 @@ $eventId = (string) ($_GET['event_id'] ?? '');
 $event = $eventId !== '' ? find_event($eventId) : null;
 
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
+    audit_log('authz.deny', ['action' => 'csv.export', 'tenant' => $tenant['id'], 'event' => $eventId]);
     http_response_code(404);
     exit('イベントが見つかりません。');
 }
 
 try {
-    $participants = fetch_event_participants($eventId, null);
+    $account = stripe_resolve_tenant($tenant);
+    $participants = fetch_event_participants($eventId, $account);
+    audit_log('csv.export', ['tenant' => $tenant['id'], 'event' => $eventId, 'count' => count($participants)]);
 } catch (\Throwable $ex) {
     http_response_code(502);
     error_log('CSV 用名簿取得失敗: ' . $ex->getMessage());
@@ -55,19 +58,20 @@ foreach ($participants as $p) {
         $idRef = $p['payment_intent'];
     }
 
+    // 参加者由来の文字列（氏名・メール・電話・備考）は数式インジェクション対策で無害化する。
     fputcsv($out, [
         date('Y-m-d H:i', $p['created']),
-        $p['name'],
-        $p['email'],
-        $p['phone'],
+        csv_cell($p['name']),
+        csv_cell($p['email']),
+        csv_cell($p['phone']),
         (int) $p['party_size'] . '名',
         $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),
         $status,
         !empty($p['attended']) ? '出席済み' : '',
-        $p['note'],
-        $idRef,
+        csv_cell($p['note']),
+        csv_cell($idRef),
     ]);
 }
 

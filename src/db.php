@@ -14,6 +14,12 @@ declare(strict_types=1);
 /**
  * PDO(SQLite) のシングルトン。初回アクセス時にスキーマを作成する。
  */
+/** 使用する SQLite ファイルのパス（DB_PATH 指定が無ければ data/app.sqlite）。 */
+function current_db_path(): string
+{
+    return env('DB_PATH', APP_ROOT . '/data/app.sqlite');
+}
+
 function db(): \PDO
 {
     static $pdo = null;
@@ -25,7 +31,21 @@ function db(): \PDO
     if (!is_dir($dir)) {
         mkdir($dir, 0700, true);
     }
-    $path = env('DB_PATH', $dir . '/app.sqlite');
+    // 保険的防御: data/ が万一公開領域に置かれても Web から DB を直接DLできないよう deny を置く。
+    $htaccess = $dir . '/.htaccess';
+    if (!is_file($htaccess)) {
+        @file_put_contents(
+            $htaccess,
+            "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n"
+            . "<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n"
+        );
+    }
+    $path = current_db_path();
+    // DB_PATH に指定したディレクトリ（例: 公開フォルダ外の private/）が無ければ作成する。
+    $pathDir = dirname($path);
+    if ($pathDir !== '' && !is_dir($pathDir)) {
+        @mkdir($pathDir, 0700, true);
+    }
 
     $pdo = new \PDO('sqlite:' . $path, null, null, [
         \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
@@ -61,6 +81,8 @@ function db_migrate(\PDO $pdo): void
     // 既存DB（列が無い）への後方互換マイグレーション
     db_add_column_if_missing($pdo, 'tenants', 'plan', "TEXT NOT NULL DEFAULT 'free'");
     db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
+    db_add_column_if_missing($pdo, 'tenants', 'stripe_secret_enc', 'TEXT');  // 主催者が画面登録した Stripe 秘密鍵（AES-256-GCM 暗号化）
+    db_add_column_if_missing($pdo, 'tenants', 'cancel_policy', 'TEXT');      // 主催者ごとのキャンセル・返金ポリシー本文（未設定なら既定文面）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (
@@ -112,6 +134,27 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_attempts_id ON login_attempts(identifier, created_at);');
+
+    // 汎用レート制限（未認証エンドポイントの濫用対策）。action 単位・identifier(IP等)単位で回数を数える。
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS rate_events (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            action     TEXT NOT NULL,   -- 'signup' / 'forgot' / 'apply' など
+            identifier TEXT NOT NULL,   -- 通常は送信元IP
+            created_at INTEGER NOT NULL
+        );
+    SQL);
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_rate_events ON rate_events(action, identifier, created_at);');
+
+    // 残席（headcount）の短時間キャッシュ。公開ページからの Stripe 全件取得の連打を防ぐ。
+    // ※あくまで「表示用」。定員の最終判定（checkout）はキャッシュを使わず都度算定する。
+    $pdo->exec(<<<'SQL'
+        CREATE TABLE IF NOT EXISTS headcount_cache (
+            event_id   TEXT PRIMARY KEY,
+            headcount  INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+    SQL);
 }
 
 /**

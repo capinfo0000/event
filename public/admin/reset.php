@@ -19,12 +19,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $new = (string) ($_POST['new_password'] ?? '');
     if ($valid === null) {
         $error = 'リンクが無効か、有効期限が切れています。お手数ですが再度お申し込みください。';
-    } elseif (strlen($new) < 8) {
-        $error = 'パスワードは8文字以上にしてください。';
-    } elseif (consume_password_reset($token, $new)) {
-        $done = true;
     } else {
-        $error = 'リンクが無効か、有効期限が切れています。';
+        try {
+            if (consume_password_reset($token, $new)) {
+                $done = true;
+            } else {
+                $error = 'リンクが無効か、有効期限が切れています。';
+            }
+        } catch (\InvalidArgumentException $e) {
+            $error = $e->getMessage(); // パスワード強度不足など
+        }
     }
 }
 

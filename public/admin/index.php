@@ -14,8 +14,8 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
-// 名簿は運営者自身の Stripe アカウントから取得する（Connect 不使用 → 常に自アカウント）。
-$account = null;
+// 名簿は運営者の Stripe から取得する。画面登録鍵→Connect→プラットフォームの順で文脈確立。
+$account = stripe_resolve_tenant($tenant);
 
 $events = tenant_events($tenant['id']);
 $selectedId = (string) ($_GET['event_id'] ?? ($events[0]['id'] ?? ''));
@@ -41,8 +41,8 @@ $onsiteDue = 0;   // 当日支払い予定（未収）合計
 $attendedCount = 0; // 出席確認済みの申込数（頭数ではなく行数）
 $headcount = 0;     // 参加予定の頭数（返金済みを除く party_size 合計）
 
-if ($selectedEvent !== null && env('STRIPE_SECRET_KEY') === null) {
-    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。.env の STRIPE_SECRET_KEY を設定してください。';
+if ($selectedEvent !== null && !stripe_ready_for_tenant($tenant)) {
+    $fetchError = 'Stripe キーが未設定のため名簿を取得できません。「Stripe設定」から鍵を登録してください。';
 } elseif ($selectedEvent !== null) {
     try {
         $participants = fetch_event_participants($selectedId, $account);
@@ -79,7 +79,7 @@ $pageTitle = '参加者管理';
 $pageSub = '名簿はあなたの Stripe アカウントから取得しています（参加者DBは持ちません）';
 require __DIR__ . '/_app_header.php';
 ?>
-<style>
+<style nonce="<?= e(csp_nonce()) ?>">
     .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 0 0 18px; }
     .bar select { width: auto; }
     .refund-form { display: flex; gap: 6px; align-items: center; }
@@ -95,7 +95,7 @@ require __DIR__ . '/_app_header.php';
 <?php else: ?>
 <form method="get" class="bar">
     <label style="margin:0; font-weight:600;">イベント：</label>
-    <select name="event_id" onchange="this.form.submit()">
+    <select name="event_id" class="js-autosubmit">
         <?php foreach ($events as $ev): ?>
             <option value="<?= e($ev['id']) ?>" <?= $ev['id'] === $selectedId ? 'selected' : '' ?>>
                 <?= e($ev['name'] ?? $ev['id']) ?>
@@ -112,7 +112,7 @@ require __DIR__ . '/_app_header.php';
 
 <?php if ($selectedEvent !== null): ?>
     <p class="muted">
-        📅 <?= e($selectedEvent['date'] ?? '') ?>　📍 <?= e($selectedEvent['place'] ?? '') ?>
+        <?= e($selectedEvent['date'] ?? '') ?>　<?= e($selectedEvent['place'] ?? '') ?>
         <?php if (!empty($selectedEvent['capacity'])): ?>　／ 定員目安: <?= (int) $selectedEvent['capacity'] ?> 名<?php endif; ?>
     </p>
 <?php endif; ?>
@@ -166,7 +166,7 @@ require __DIR__ . '/_app_header.php';
                             <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
                             <td<?= $p['note'] !== '' ? ' title="' . e('備考: ' . $p['note']) . '"' : '' ?>>
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
-                                <?php if ($p['note'] !== ''): ?><span class="muted" title="<?= e($p['note']) ?>">📝</span><?php endif; ?>
+                                <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
                             </td>
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>
@@ -209,7 +209,7 @@ require __DIR__ . '/_app_header.php';
                                             <?php endif; ?>
                                         </form>
                                         <form method="post" action="onsite_cancel.php"
-                                              onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？');">
+                                              data-confirm="「<?= e($p['name']) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？">
                                             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                             <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                             <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
@@ -220,7 +220,7 @@ require __DIR__ . '/_app_header.php';
                                     <span class="muted">—</span>
                                 <?php else: ?>
                                     <form method="post" action="refund.php" class="refund-form"
-                                          onsubmit="return confirm('「<?= e(addslashes($p['name'])) ?>」さんへ返金します。よろしいですか？');">
+                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（Stripe の決済手数料は返金されません）">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
@@ -241,6 +241,7 @@ require __DIR__ . '/_app_header.php';
             </table>
         </div>
         <p class="muted" style="margin-top:10px;">返金欄を空欄で実行すると全額返金（＝キャンセル）になります。</p>
+        <p class="muted" style="margin-top:4px;">⚠️ 返金しても、Stripe の決済手数料は返金されません（手数料は主催者の負担となります）。全額返金でも手数料分は戻りません。</p>
     <?php endif; ?>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>

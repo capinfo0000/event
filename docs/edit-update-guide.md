@@ -82,5 +82,5 @@ php85cli composer.phar install --no-dev -o
 ---
 
 ## 関連ドキュメント
-- `docs/デプロイ手順-coreserver.md` — 初回デプロイの全手順
+- `docs/deploy-coreserver.md` — 初回デプロイの全手順
 - `README.md` — アプリの構成・セットアップ

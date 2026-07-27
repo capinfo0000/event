@@ -32,9 +32,16 @@ $event = $eventId !== '' ? find_event($eventId) : null;
 if ($event === null || $event['tenant_id'] !== $tenant['id']) {
     back_to_admin($eventId, '対象イベントが見つかりません。', 'ng');
 }
-$account = null; // 運営者自身の Stripe アカウント（Connect 不使用）
-if ($customerId === '' || env('STRIPE_SECRET_KEY') === null) {
+$account = stripe_resolve_tenant($tenant); // 画面登録鍵→Connect→プラットフォームの順で文脈確立
+if ($customerId === '' || !stripe_ready_for_tenant($tenant)) {
     back_to_admin($eventId, '取消対象が不正です。', 'ng');
+}
+
+// IDOR対策: 指定 customer_id が「このイベントの当日支払い参加者」であることを Stripe 側で検証する。
+$target = find_event_participant_by_customer($eventId, $account, $customerId);
+if ($target === null || ($target['payment_type'] ?? '') !== 'onsite') {
+    audit_log('authz.deny', ['action' => 'onsite_cancel', 'tenant' => $tenant['id'], 'event' => $eventId]);
+    back_to_admin($eventId, '取消対象の参加者が見つかりません。', 'ng');
 }
 
 init_stripe();
