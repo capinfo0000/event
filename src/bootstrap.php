@@ -102,12 +102,16 @@ function send_baseline_security_headers(): void
     $nonce = "'nonce-" . csp_nonce() . "'";
     // script はインラインを禁止し、自ホスト＋nonce のみ許可（XSS耐性）。
     // style は <style nonce> と style属性の両方を許可するため style-src-attr 'unsafe-inline' を併用。
+    // 事前決済は checkout.php から Stripe Checkout（checkout.stripe.com）へサーバーリダイレクトする。
+    // ブラウザ(Chrome/Safari)は form-action をリダイレクト先にも適用するため、Stripe を許可しないと
+    // 「事前決済ボタンを押しても遷移しない（CSP でブロック）」が起きる。form-action に Stripe を追加。
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
         . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
         . "script-src 'self' $nonce" . $captchaHost . "; "
         . "connect-src 'self'" . $captchaHost . "; "
         . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
-        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; "
+        . "form-action 'self' https://checkout.stripe.com https://*.stripe.com");
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: same-origin');

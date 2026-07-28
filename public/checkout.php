@@ -213,7 +213,8 @@ if ($paymentType === 'onsite') {
         'party_size' => $partySize,
         'total' => $onsiteTotal,
     ]);
-    header('Location: ' . base_url() . '/onsite.php?' . $q, true, 303);
+    // 同一オリジンのルート相対で遷移（APP_BASE_URL の設定差や form-action の影響を受けない）。
+    header('Location: /onsite.php?' . $q, true, 303);
     exit;
 }
 
