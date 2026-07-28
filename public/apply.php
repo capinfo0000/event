@@ -106,7 +106,7 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
             <?php if ($hasTiers): ?>
-                <?php foreach ($tiers as $ti => $t): ?><?= $ti > 0 ? '　／　' : '' ?><?= e($t['label']) ?>：<strong><?= e(format_amount((int) $t['amount'], $currency)) ?></strong><?php endforeach; ?>
+                <?php foreach ($tiers as $ti => $t): ?><?= $ti > 0 ? '　／　' : '' ?><?= e($t['label']) ?>：<strong>事前 <?= e(format_amount((int) $t['amount'], $currency)) ?></strong><?php if ($allowOnsite): ?>／当日 <strong><?= e(format_amount((int) $t['amount_onsite'], $currency)) ?></strong><?php endif; ?><?php endforeach; ?>
             <?php else: ?>
                 <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
                 <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
@@ -143,7 +143,7 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
                 <?php foreach ($tiers as $ti => $t): ?>
                     <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                         <input type="radio" name="tier" value="<?= e($t['label']) ?>" <?= $ti === 0 ? 'checked' : '' ?> style="width:auto;" required>
-                        <?= e($t['label']) ?>（<?= e(format_amount((int) $t['amount'], $currency)) ?>）
+                        <?= e($t['label']) ?><span class="tier-amt" data-prepay="<?= (int) $t['amount'] ?>" data-onsite="<?= (int) $t['amount_onsite'] ?>"></span>
                     </label>
                 <?php endforeach; ?>
             </div>
@@ -178,13 +178,13 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
             <?php if ($allowPrepay): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                     <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> style="width:auto;">
-                    事前決済（今すぐカード等で前払い・<?= e(format_amount($prepayUnit, $currency)) ?>/名）
+                    事前決済
                 </label>
             <?php endif; ?>
             <?php if ($allowOnsite): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                     <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> style="width:auto;">
-                    当日支払い（会場で集金・<?= e(format_amount($onsiteUnit, $currency)) ?>/名）
+                    当日支払い
                 </label>
             <?php endif; ?>
         </div>
@@ -215,10 +215,17 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
         const CURRENCY = <?= json_encode(strtolower((string) $currency)) ?>;
         const STRIPE_READY = <?= $stripeReady ? 'true' : 'false' ?>;
         const HAS_TIERS = <?= $hasTiers ? 'true' : 'false' ?>;
-        const TIERS = <?= json_encode(array_column($tiers, 'amount', 'label'), JSON_UNESCAPED_UNICODE) ?>; // {区分名: 金額}
-        function selectedTierUnit() {
+        // {区分名: {prepay:事前額, onsite:当日額}}
+        const TIERS = <?= json_encode(array_reduce($tiers, function ($acc, $t) {
+            $acc[$t['label']] = ['prepay' => (int) $t['amount'], 'onsite' => (int) $t['amount_onsite']];
+            return $acc;
+        }, []), JSON_UNESCAPED_UNICODE) ?>;
+        function selectedTierUnit(method) {
             const el = document.querySelector('input[name="tier"]:checked');
-            return el ? (TIERS[el.value] || 0) : 0;
+            if (!el) return 0;
+            const t = TIERS[el.value];
+            if (!t) return 0;
+            return method === 'onsite' ? t.onsite : t.prepay;
         }
         function formatAmount(total) {
             if (CURRENCY === 'jpy') {
@@ -236,7 +243,12 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
             const method = selectedMethod();
             let unit, qty = 1;
             if (HAS_TIERS) {
-                unit = selectedTierUnit(); // 区分制は 1名・選んだ区分の金額（事前/当日で同額）
+                unit = selectedTierUnit(method); // 1名・選んだ性別×支払い方法の金額
+                // 各性別ラジオ横に、選択中の支払い方法での金額を表示
+                document.querySelectorAll('.tier-amt').forEach(function (s) {
+                    const amt = method === 'onsite' ? s.getAttribute('data-onsite') : s.getAttribute('data-prepay');
+                    s.textContent = '（' + formatAmount(parseInt(amt, 10) || 0) + '）';
+                });
             } else {
                 const ps = document.getElementById('party_size');
                 if (!ps) return;

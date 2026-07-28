@@ -214,8 +214,9 @@ function event_has_custom_fields(array $event): bool
 }
 
 /**
- * price_tiers（JSON）を安全に配列 [ ['label'=>string,'amount'=>int], ... ] へ復元する。
- * 不正・空なら空配列（＝単一料金の従来動作）。
+ * price_tiers（JSON）を安全に配列へ復元する。
+ * 各区分は ['label'=>string, 'amount'=>int(事前), 'amount_onsite'=>int(当日)]。
+ * 旧形式（amount_onsite なし）は当日=事前として補完。不正・空なら空配列（＝単一料金の従来動作）。
  */
 function decode_price_tiers(?string $json): array
 {
@@ -235,7 +236,9 @@ function decode_price_tiers(?string $json): array
         if ($label === '') {
             continue;
         }
-        $out[] = ['label' => mb_substr($label, 0, 40), 'amount' => max(0, (int) ($t['amount'] ?? 0))];
+        $prepay = max(0, (int) ($t['amount'] ?? 0));
+        $onsite = array_key_exists('amount_onsite', $t) ? max(0, (int) $t['amount_onsite']) : $prepay;
+        $out[] = ['label' => mb_substr($label, 0, 40), 'amount' => $prepay, 'amount_onsite' => $onsite];
     }
     return $out;
 }
@@ -246,12 +249,25 @@ function event_has_tiers(array $event): bool
     return !empty($event['tiers']);
 }
 
-/** 指定ラベルの区分金額を返す（サーバー側の定義から確定＝改ざん防止）。無ければ null。 */
-function event_tier_amount(array $event, string $label): ?int
+/** 指定ラベルの区分（label/amount/amount_onsite）を返す。無ければ null。 */
+function event_tier(array $event, string $label): ?array
 {
     foreach (($event['tiers'] ?? []) as $t) {
         if ($t['label'] === $label) {
-            return (int) $t['amount'];
+            return $t;
+        }
+    }
+    return null;
+}
+
+/**
+ * 指定ラベル・支払い方法の金額を返す（サーバー側の定義から確定＝改ざん防止）。無ければ null。
+ */
+function event_tier_amount(array $event, string $label, string $paymentType = 'prepay'): ?int
+{
+    foreach (($event['tiers'] ?? []) as $t) {
+        if ($t['label'] === $label) {
+            return $paymentType === 'onsite' ? (int) $t['amount_onsite'] : (int) $t['amount'];
         }
     }
     return null;
@@ -491,7 +507,22 @@ function event_headcount_cached(string $eventId, ?string $account, int $ttl = 60
  */
 function base_url(): string
 {
-    return rtrim(env('APP_BASE_URL', 'http://localhost:8000'), '/');
+    // 明示設定を最優先（本番はこれを設定するのが推奨）。
+    $configured = env('APP_BASE_URL');
+    if ($configured !== null && trim($configured) !== '') {
+        return rtrim($configured, '/');
+    }
+    // 未設定時はリクエストから推定する。APP_BASE_URL の設定漏れで success/cancel が
+    // http://localhost に落ち、決済後に「接続拒否」になるのを防ぐ。
+    $https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    // ヘッダ由来の host は許可文字のみ通す（不正な戻り先URL生成を防ぐ）。
+    if (!preg_match('/^[A-Za-z0-9.\-:]+$/', $host)) {
+        $host = 'localhost';
+    }
+    return ($https ? 'https' : 'http') . '://' . $host;
 }
 
 /**

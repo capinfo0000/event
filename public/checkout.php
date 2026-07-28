@@ -133,13 +133,14 @@ $onsiteUnit = (isset($event['amount_onsite']) && $event['amount_onsite'] !== '')
 $tierLabel = '';
 if (event_has_tiers($event)) {
     $tierLabel = trim((string)($_POST['tier'] ?? ''));
-    $tierAmount = event_tier_amount($event, $tierLabel);
-    if ($tierAmount === null) {
+    $tier = event_tier($event, $tierLabel);
+    if ($tier === null) {
         http_response_code(400);
         exit('区分の選択が正しくありません。前の画面に戻って選び直してください。');
     }
-    $prepayUnit = $tierAmount;
-    $onsiteUnit = $tierAmount;
+    // 選択区分（例: 男性/女性）ごとに、事前決済・当日支払いそれぞれの金額を採用する。
+    $prepayUnit = (int) $tier['amount'];
+    $onsiteUnit = (int) $tier['amount_onsite'];
     $partySize = 1;
 }
 

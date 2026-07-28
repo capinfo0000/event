@@ -27,6 +27,19 @@ $form = $editing ?? [
     'tiers' => [], 'custom_fields' => [],
 ];
 
+// 料金タイプ判定（区分があれば「男女別」、無ければ「一律」）。男性/女性の既存額を拾う。
+$formTiers = $form['tiers'] ?? [];
+$isGenderPricing = !empty($formTiers);
+$gMale = null;
+$gFemale = null;
+foreach ($formTiers as $t) {
+    if ($t['label'] === '男性') {
+        $gMale = $t;
+    } elseif ($t['label'] === '女性') {
+        $gFemale = $t;
+    }
+}
+
 $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
 $token = csrf_token();
@@ -65,14 +78,34 @@ require __DIR__ . '/_app_header.php';
             </div>
         </div>
 
-        <div class="row">
-            <div>
-                <label>事前決済の参加費（1名・円） <span class="req">必須</span></label>
-                <input type="number" name="amount" required min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
+        <label style="margin-top:6px;">料金タイプ <span class="req">必須</span></label>
+        <div style="display:flex; gap:20px; margin-top:4px;">
+            <label style="font-weight:400; margin:0;"><input type="radio" name="pricing_mode" value="flat" <?= $isGenderPricing ? '' : 'checked' ?> class="js-pricing-mode" style="width:auto;"> 一律（全員同じ料金）</label>
+            <label style="font-weight:400; margin:0;"><input type="radio" name="pricing_mode" value="gender" <?= $isGenderPricing ? 'checked' : '' ?> class="js-pricing-mode" style="width:auto;"> 男女別（性別で料金を変える）</label>
+        </div>
+
+        <div id="flatPricing" style="<?= $isGenderPricing ? 'display:none;' : '' ?>">
+            <div class="row">
+                <div>
+                    <label>事前決済の参加費（1名・円）</label>
+                    <input type="number" name="amount" min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
+                </div>
+                <div>
+                    <label>当日支払いの参加費（1名）<span class="hint">空欄なら事前と同額</span></label>
+                    <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
+                </div>
             </div>
-            <div>
-                <label>当日支払いの参加費（1名）<span class="hint">空欄なら事前と同額</span></label>
-                <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
+        </div>
+
+        <div id="genderPricing" style="<?= $isGenderPricing ? '' : 'display:none;' ?>">
+            <p class="hint" style="margin:6px 0;">性別ごとに、事前決済・当日支払いの金額を設定します（1申込＝1名）。当日を空欄にすると事前と同額になります。</p>
+            <div class="row">
+                <div><label>男性・事前決済（円）</label><input type="number" name="male_prepay" min="0" step="1" value="<?= $gMale ? e((string) $gMale['amount']) : '' ?>" placeholder="5000"></div>
+                <div><label>男性・当日支払い（円）</label><input type="number" name="male_onsite" min="0" step="1" value="<?= $gMale ? e((string) $gMale['amount_onsite']) : '' ?>" placeholder="5000"></div>
+            </div>
+            <div class="row">
+                <div><label>女性・事前決済（円）</label><input type="number" name="female_prepay" min="0" step="1" value="<?= $gFemale ? e((string) $gFemale['amount']) : '' ?>" placeholder="3000"></div>
+                <div><label>女性・当日支払い（円）</label><input type="number" name="female_onsite" min="0" step="1" value="<?= $gFemale ? e((string) $gFemale['amount_onsite']) : '' ?>" placeholder="3000"></div>
             </div>
         </div>
 
@@ -92,19 +125,6 @@ require __DIR__ . '/_app_header.php';
             <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_prepay" value="1" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?> style="width:auto;"> 事前決済（クレジットカードで前払い）</label>
             <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
         </div>
-
-        <label style="margin-top:18px;">料金区分（男性／女性など・任意）</label>
-        <p class="hint" style="margin-top:0;">区分を1つ以上登録すると、申込画面は「区分を選ぶ」形になり、<strong>選んだ区分の金額で決済</strong>します（1申込＝1名）。空欄のままなら上の「参加費」を使う通常の申込です。金額は上の参加費より優先されます。</p>
-        <div id="tierList">
-            <?php foreach (($form['tiers'] ?? []) as $t): ?>
-                <div class="tier-row" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
-                    <input type="text" name="tier_label[]" maxlength="40" placeholder="例: 男性" value="<?= e((string) $t['label']) ?>" style="flex:2;">
-                    <input type="number" name="tier_amount[]" min="0" step="1" placeholder="金額(円)" value="<?= e((string) $t['amount']) ?>" style="flex:1;">
-                    <button type="button" class="btn btn--ghost tier-del">削除</button>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <p><button type="button" class="btn btn--ghost" id="tierAdd">＋ 区分を追加</button></p>
 
         <label style="margin-top:18px;">追加の入力項目（名前・年齢など・任意）</label>
         <p class="hint" style="margin-top:0;">1つ以上登録すると、申込画面は「メールアドレス」「性別（料金区分を設定した場合）」＋<strong>ここで定義した項目だけ</strong>になります（氏名・電話・人数・備考などの標準項目は表示されません）。空欄のままなら従来の標準項目を使います。</p>
@@ -153,7 +173,7 @@ require __DIR__ . '/_app_header.php';
                             <td>
                                 <?php if (!empty($ev['tiers'])): ?>
                                     <?php foreach ($ev['tiers'] as $t): ?>
-                                        <?= e($t['label']) ?> <?= e(format_amount((int) $t['amount'], $ev['currency'] ?? 'jpy')) ?><br>
+                                        <span class="muted"><?= e($t['label']) ?></span> 事前<?= e(format_amount((int) $t['amount'], $ev['currency'] ?? 'jpy')) ?><?php if (!empty($ev['allow_onsite'])): ?>/当日<?= e(format_amount((int) $t['amount_onsite'], $ev['currency'] ?? 'jpy')) ?><?php endif; ?><br>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
@@ -181,30 +201,19 @@ require __DIR__ . '/_app_header.php';
 </div>
 <script nonce="<?= e(csp_nonce()) ?>">
 (function () {
-    var list = document.getElementById('tierList');
-    var add = document.getElementById('tierAdd');
-    if (!list || !add) { return; }
-    function wireDel(btn) {
-        btn.addEventListener('click', function () {
-            var row = btn.closest('.tier-row');
-            if (row) { row.remove(); }
-        });
+    // 料金タイプ（一律/男女別）で入力欄を出し分ける
+    var flat = document.getElementById('flatPricing');
+    var gender = document.getElementById('genderPricing');
+    var radios = document.querySelectorAll('.js-pricing-mode');
+    if (!flat || !gender || !radios.length) { return; }
+    function apply() {
+        var sel = document.querySelector('.js-pricing-mode:checked');
+        var mode = sel ? sel.value : 'flat';
+        flat.style.display = (mode === 'gender') ? 'none' : '';
+        gender.style.display = (mode === 'gender') ? '' : 'none';
     }
-    add.addEventListener('click', function () {
-        var row = document.createElement('div');
-        row.className = 'tier-row';
-        row.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:center;';
-        var l = document.createElement('input');
-        l.type = 'text'; l.name = 'tier_label[]'; l.maxLength = 40; l.placeholder = '例: 女性'; l.style.flex = '2';
-        var a = document.createElement('input');
-        a.type = 'number'; a.name = 'tier_amount[]'; a.min = '0'; a.step = '1'; a.placeholder = '金額(円)'; a.style.flex = '1';
-        var b = document.createElement('button');
-        b.type = 'button'; b.className = 'btn btn--ghost tier-del'; b.textContent = '削除';
-        row.appendChild(l); row.appendChild(a); row.appendChild(b);
-        list.appendChild(row);
-        wireDel(b);
-    });
-    document.querySelectorAll('#tierList .tier-del').forEach(wireDel);
+    radios.forEach(function (r) { r.addEventListener('change', apply); });
+    apply();
 })();
 (function () {
     var list = document.getElementById('cfList');

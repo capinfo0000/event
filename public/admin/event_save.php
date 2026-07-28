@@ -43,25 +43,35 @@ $capacity = trim((string) ($_POST['capacity'] ?? ''));
 $allowPrepay = !empty($_POST['allow_prepay']);
 $allowOnsite = !empty($_POST['allow_onsite']);
 
-// 料金区分（男性/女性/学生 等）。ラベルと金額を対で受け取り、ラベルが空でない行だけ採用。
-$tierLabels  = (array) ($_POST['tier_label'] ?? []);
-$tierAmounts = (array) ($_POST['tier_amount'] ?? []);
-$tiers = [];
-foreach ($tierLabels as $i => $rawLabel) {
-    $label = trim((string) $rawLabel);
-    $amtRaw = trim((string) ($tierAmounts[$i] ?? ''));
-    if ($label === '') {
-        continue; // 空行はスキップ
+// 料金タイプ: flat（一律）/ gender（男女別）。
+$pricingMode = ((string) ($_POST['pricing_mode'] ?? 'flat')) === 'gender' ? 'gender' : 'flat';
+$priceTiersJson = '';
+
+/** 男女別の1性別ぶんの金額を検証して返す（当日空欄は事前と同額）。 */
+$parseGender = static function (string $label, string $prepayKey, string $onsiteKey) use ($id): array {
+    $prepayRaw = trim((string) ($_POST[$prepayKey] ?? ''));
+    $onsiteRaw = trim((string) ($_POST[$onsiteKey] ?? ''));
+    if (!ctype_digit($prepayRaw)) {
+        back_to_events($label . 'の事前決済の金額は0以上の整数で入力してください。', 'ng', $id);
     }
-    if (!ctype_digit($amtRaw)) {
-        back_to_events('料金区分「' . mb_substr($label, 0, 40) . '」の金額は0以上の整数で入力してください。', 'ng', $id);
+    if ($onsiteRaw !== '' && !ctype_digit($onsiteRaw)) {
+        back_to_events($label . 'の当日支払いの金額は0以上の整数で入力してください。', 'ng', $id);
     }
-    $tiers[] = ['label' => mb_substr($label, 0, 40), 'amount' => (int) $amtRaw];
-    if (count($tiers) >= 10) {
-        break; // 上限10区分
-    }
+    $prepay = (int) $prepayRaw;
+    $onsite = $onsiteRaw !== '' ? (int) $onsiteRaw : $prepay;
+    return ['label' => $label, 'amount' => $prepay, 'amount_onsite' => $onsite];
+};
+
+if ($pricingMode === 'gender') {
+    $tiers = [
+        $parseGender('男性', 'male_prepay', 'male_onsite'),
+        $parseGender('女性', 'female_prepay', 'female_onsite'),
+    ];
+    $priceTiersJson = json_encode($tiers, JSON_UNESCAPED_UNICODE);
+    // 男女別のときは単一料金は使わないが、NOT NULL 列のため 0 を入れておく。
+    $amount = '0';
+    $amountOnsite = '';
 }
-$priceTiersJson = $tiers !== [] ? json_encode($tiers, JSON_UNESCAPED_UNICODE) : null;
 
 // 追加の入力項目（名前・年齢など）。ラベル・種別・必須をそれぞれ対で受け取る。
 $cfLabels = (array) ($_POST['cf_label'] ?? []);
