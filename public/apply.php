@@ -73,6 +73,15 @@ if ($hasTiers) {
     $defaultUnit = (int) $tiers[0]['amount']; // 初期表示は先頭区分
     $maxParty = 1;
 }
+
+// 主催者が定義したカスタム入力項目。設定があれば固定の標準項目（氏名/電話/人数/備考）は出さず、
+// メール（固定）＋性別（＝料金区分・設定時）＋定義した項目のみにする。1申込=1名。
+$customFields = $event['custom_fields'] ?? [];
+$hasCustom = !empty($customFields);
+if ($hasCustom) {
+    $maxParty = 1;
+}
+$cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // textarea は別扱い
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -115,17 +124,21 @@ if ($hasTiers) {
     <form action="checkout.php" method="post" class="card">
         <input type="hidden" name="event_id" value="<?= e($event['id']) ?>">
 
+        <?php if (!$hasCustom): ?>
         <label for="name">お名前 <span class="req">必須</span></label>
         <input type="text" id="name" name="name" required maxlength="100" autocomplete="name" placeholder="山田 太郎">
+        <?php endif; ?>
 
         <label for="email">メールアドレス <span class="req">必須</span></label>
         <input type="email" id="email" name="email" required maxlength="200" autocomplete="email" placeholder="taro@example.com">
 
+        <?php if (!$hasCustom): ?>
         <label for="phone">電話番号</label>
         <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
+        <?php endif; ?>
 
         <?php if ($hasTiers): ?>
-            <label>区分 <span class="req">必須</span></label>
+            <label>性別 <span class="req">必須</span></label>
             <div class="pay-options">
                 <?php foreach ($tiers as $ti => $t): ?>
                     <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
@@ -134,6 +147,8 @@ if ($hasTiers) {
                     </label>
                 <?php endforeach; ?>
             </div>
+            <input type="hidden" name="party_size" value="1">
+        <?php elseif ($hasCustom): ?>
             <input type="hidden" name="party_size" value="1">
         <?php else: ?>
             <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
@@ -144,8 +159,19 @@ if ($hasTiers) {
             </select>
         <?php endif; ?>
 
+        <?php if ($hasCustom): ?>
+            <?php foreach ($customFields as $ci => $f): ?>
+                <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <?php if (!empty($f['required'])): ?><span class="req">必須</span><?php endif; ?></label>
+                <?php if (($f['type'] ?? 'text') === 'textarea'): ?>
+                    <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" <?= !empty($f['required']) ? 'required' : '' ?>></textarea>
+                <?php else: ?>
+                    <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" <?= !empty($f['required']) ? 'required' : '' ?>>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        <?php else: ?>
         <label for="note">備考（アレルギー・ご要望など）</label>
         <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
+        <?php endif; ?>
 
         <label>お支払い方法 <span class="req">必須</span></label>
         <div class="pay-options">

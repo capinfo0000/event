@@ -164,8 +164,49 @@ function event_normalize(array $row): array
         'allow_onsite'      => (int) ($row['allow_onsite'] ?? 0) === 1,
         'stripe_account_id' => $row['stripe_account_id'] ?? null,
         'tiers'             => decode_price_tiers($row['price_tiers'] ?? null),
+        'custom_fields'     => decode_custom_fields($row['custom_fields'] ?? null),
         'created_at'        => (int) ($row['created_at'] ?? 0),
     ];
+}
+
+/**
+ * custom_fields（JSON）を安全に配列 [ ['label'=>string,'type'=>string,'required'=>bool], ... ] へ復元。
+ * type は text/number/tel/textarea のみ許可。不正・空なら空配列（＝従来の標準項目を使う）。
+ */
+function decode_custom_fields(?string $json): array
+{
+    if ($json === null || trim($json) === '') {
+        return [];
+    }
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $f) {
+        if (!is_array($f)) {
+            continue;
+        }
+        $label = trim((string) ($f['label'] ?? ''));
+        if ($label === '') {
+            continue;
+        }
+        $type = (string) ($f['type'] ?? 'text');
+        if (!in_array($type, ['text', 'number', 'tel', 'textarea'], true)) {
+            $type = 'text';
+        }
+        $out[] = ['label' => mb_substr($label, 0, 40), 'type' => $type, 'required' => !empty($f['required'])];
+        if (count($out) >= 20) {
+            break;
+        }
+    }
+    return $out;
+}
+
+/** イベントに主催者定義のカスタム入力項目があるか。 */
+function event_has_custom_fields(array $event): bool
+{
+    return !empty($event['custom_fields']);
 }
 
 /**
@@ -259,15 +300,15 @@ function create_event(string $tenantId, array $d): string
 {
     $id = generate_event_id();
     $stmt = db()->prepare(
-        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, price_tiers, created_at)
-         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:tiers,:ts)'
+        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, price_tiers, custom_fields, created_at)
+         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:tiers,:cf,:ts)'
     );
     $stmt->execute([
         ':id' => $id, ':tenant' => $tenantId,
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
-        ':tiers' => $d['price_tiers'] ?? null, ':ts' => time(),
+        ':tiers' => $d['price_tiers'] ?? null, ':cf' => $d['custom_fields'] ?? null, ':ts' => time(),
     ]);
     return $id;
 }
@@ -280,14 +321,14 @@ function update_event(string $tenantId, string $id, array $d): bool
     $stmt = db()->prepare(
         'UPDATE events SET name=:name, description=:desc, date=:date, place=:place,
                 amount=:amount, amount_onsite=:onsite, currency=:cur, capacity=:cap,
-                allow_prepay=:ap, allow_onsite=:ao, price_tiers=:tiers
+                allow_prepay=:ap, allow_onsite=:ao, price_tiers=:tiers, custom_fields=:cf
           WHERE id=:id AND tenant_id=:tenant'
     );
     $stmt->execute([
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
-        ':tiers' => $d['price_tiers'] ?? null,
+        ':tiers' => $d['price_tiers'] ?? null, ':cf' => $d['custom_fields'] ?? null,
         ':id' => $id, ':tenant' => $tenantId,
     ]);
     return $stmt->rowCount() > 0;
@@ -877,6 +918,24 @@ function stripe_opts(?string $account): array
  * @param string|null $account テナントの Stripe 接続アカウント（acct_...）。null なら自アカウント
  * @return array<int, array<string, mixed>>
  */
+/**
+ * Stripe metadata の cf0,cf1,... （"ラベル: 値" 形式）を順に配列で取り出す。
+ * @return array<int,string>
+ */
+function extract_custom_meta($meta): array
+{
+    $out = [];
+    if ($meta) {
+        for ($i = 0; $i < 20; $i++) {
+            $v = $meta['cf' . $i] ?? null;
+            if ($v !== null && $v !== '') {
+                $out[] = (string) $v;
+            }
+        }
+    }
+    return $out;
+}
+
 function fetch_event_participants(string $eventId, ?string $account = null): array
 {
     init_stripe();
@@ -942,6 +1001,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'phone'           => $phone,
             'party_size'      => $partySize,
             'category'        => (string) ($meta['participant_category'] ?? ''),
+            'custom'          => extract_custom_meta($meta),
             'note'            => $note,
             'amount'          => (int) ($session->amount_total ?? 0),
             'currency'        => (string) ($session->currency ?? 'jpy'),
@@ -974,6 +1034,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'phone'           => $meta['phone'] ?? ($customer->phone ?? ''),
             'party_size'      => max(1, (int) ($meta['party_size'] ?? 1)),
             'category'        => (string) ($meta['participant_category'] ?? ''),
+            'custom'          => extract_custom_meta($meta),
             'note'            => $meta['note'] ?? '',
             'amount'          => (int) ($meta['onsite_total'] ?? 0),
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),

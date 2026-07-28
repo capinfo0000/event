@@ -40,15 +40,46 @@ if ($event === null) {
 $account = stripe_resolve_event($event);
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
-$name  = trim((string)($_POST['name'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
 $phone = trim((string)($_POST['phone'] ?? ''));
 $note  = trim((string)($_POST['note'] ?? ''));
 $partySize = (int)($_POST['party_size'] ?? 1);
 
-if ($name === '' || $email === '') {
+// 主催者が定義したカスタム入力項目がある場合は、標準項目（氏名/電話/備考）ではなく
+// 定義された項目を受け取る。メールは常に必須（領収書・確認メールに使用）。
+$customDefs = $event['custom_fields'] ?? [];
+$hasCustom = !empty($customDefs);
+$customMeta = [];  // Stripe metadata 用（cf0,cf1,... = "ラベル: 値"）
+$name = '';
+if ($hasCustom) {
+    $cf = (array)($_POST['cf'] ?? []);
+    foreach ($customDefs as $i => $def) {
+        $val = trim((string)($cf[$i] ?? ''));
+        if (!empty($def['required']) && $val === '') {
+            http_response_code(400);
+            exit('「' . $def['label'] . '」は必須です。前の画面に戻って入力してください。');
+        }
+        $val = mb_substr($val, 0, 200);
+        $customMeta['cf' . $i] = mb_substr($def['label'] . ': ' . $val, 0, 490);
+        // 氏名に相当する項目があれば Stripe 顧客名に採用（名簿表示用）
+        if ($name === '' && $val !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $def['label'])) {
+            $name = mb_substr($val, 0, 100);
+        }
+    }
+    $partySize = 1;
+    $phone = '';
+    $note = '';
+} else {
+    $name = trim((string)($_POST['name'] ?? ''));
+    if ($name === '') {
+        http_response_code(400);
+        exit('お名前は必須です。フォームに戻って入力してください。');
+    }
+}
+
+if ($email === '') {
     http_response_code(400);
-    exit('お名前とメールアドレスは必須です。フォームに戻って入力してください。');
+    exit('メールアドレスは必須です。フォームに戻って入力してください。');
 }
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
@@ -146,7 +177,7 @@ if ($paymentType === 'onsite') {
             'name' => $metaName,
             'email' => $email,
             'phone' => $metaPhone,
-            'metadata' => [
+            'metadata' => array_merge([
                 'event_id' => $event['id'],
                 'event_name' => $event['name'] ?? '',
                 'participant_name' => $metaName,
@@ -158,7 +189,7 @@ if ($paymentType === 'onsite') {
                 'onsite_total' => (string)$onsiteTotal,
                 'currency' => $currency,
                 'participant_category' => $tierLabel,
-            ],
+            ], $customMeta),
         ], $opts);
     } catch (\Throwable $e) {
         http_response_code(502);
@@ -205,7 +236,7 @@ try {
         'customer_creation' => 'always',
         'customer_email' => $email,
         // 集めた情報は Stripe の決済データに metadata として保管（当サーバーのDBは持たない）
-        'metadata' => [
+        'metadata' => array_merge([
             'event_id' => $event['id'],
             'event_name' => $event['name'] ?? '',
             'participant_name' => $metaName,
@@ -214,16 +245,16 @@ try {
             'note' => $metaNote,
             'payment_type' => 'prepay',
             'participant_category' => $tierLabel,
-        ],
+        ], $customMeta),
         'payment_intent_data' => [
-            'metadata' => [
+            'metadata' => array_merge([
                 'event_id' => $event['id'],
                 'event_name' => $event['name'] ?? '',
                 'participant_name' => $metaName,
                 'phone' => $metaPhone,
                 'party_size' => (string)$partySize,
                 'participant_category' => $tierLabel,
-            ],
+            ], $customMeta),
         ],
         // キャンセルポリシーを決済画面のボタン直上に明示（前払い＝後から取り立て不要にする要）
         'custom_text' => [

@@ -168,6 +168,9 @@ require __DIR__ . '/_app_header.php';
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
                                 <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
                                 <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
+                                <?php if (!empty($p['custom'])): ?>
+                                    <div class="muted" style="font-size:.78rem; margin-top:2px;"><?php foreach ($p['custom'] as $cv): ?><?= e($cv) ?><br><?php endforeach; ?></div>
+                                <?php endif; ?>
                             </td>
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>

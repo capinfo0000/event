@@ -63,6 +63,31 @@ foreach ($tierLabels as $i => $rawLabel) {
 }
 $priceTiersJson = $tiers !== [] ? json_encode($tiers, JSON_UNESCAPED_UNICODE) : null;
 
+// 追加の入力項目（名前・年齢など）。ラベル・種別・必須をそれぞれ対で受け取る。
+$cfLabels = (array) ($_POST['cf_label'] ?? []);
+$cfTypes  = (array) ($_POST['cf_type'] ?? []);
+$cfReqs   = (array) ($_POST['cf_required'] ?? []);
+$customFields = [];
+foreach ($cfLabels as $i => $rawLabel) {
+    $label = trim((string) $rawLabel);
+    if ($label === '') {
+        continue; // 空ラベルの行はスキップ
+    }
+    $type = (string) ($cfTypes[$i] ?? 'text');
+    if (!in_array($type, ['text', 'number', 'tel', 'textarea'], true)) {
+        $type = 'text';
+    }
+    $customFields[] = [
+        'label'    => mb_substr($label, 0, 40),
+        'type'     => $type,
+        'required' => ((string) ($cfReqs[$i] ?? '0')) === '1',
+    ];
+    if (count($customFields) >= 20) {
+        break; // 上限20項目
+    }
+}
+$customFieldsJson = $customFields !== [] ? json_encode($customFields, JSON_UNESCAPED_UNICODE) : null;
+
 // 入力チェック
 if ($name === '' || $date === '' || $place === '') {
     back_to_events('イベント名・日時・場所は必須です。', 'ng', $id);
@@ -95,6 +120,7 @@ $data = [
     'allow_prepay'  => $allowPrepay,
     'allow_onsite'  => $allowOnsite,
     'price_tiers'   => $priceTiersJson,
+    'custom_fields' => $customFieldsJson,
 ];
 
 try {
