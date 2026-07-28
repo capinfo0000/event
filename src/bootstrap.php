@@ -163,8 +163,53 @@ function event_normalize(array $row): array
         'allow_prepay'      => (int) ($row['allow_prepay'] ?? 1) === 1,
         'allow_onsite'      => (int) ($row['allow_onsite'] ?? 0) === 1,
         'stripe_account_id' => $row['stripe_account_id'] ?? null,
+        'tiers'             => decode_price_tiers($row['price_tiers'] ?? null),
         'created_at'        => (int) ($row['created_at'] ?? 0),
     ];
+}
+
+/**
+ * price_tiers（JSON）を安全に配列 [ ['label'=>string,'amount'=>int], ... ] へ復元する。
+ * 不正・空なら空配列（＝単一料金の従来動作）。
+ */
+function decode_price_tiers(?string $json): array
+{
+    if ($json === null || trim($json) === '') {
+        return [];
+    }
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $t) {
+        if (!is_array($t)) {
+            continue;
+        }
+        $label = trim((string) ($t['label'] ?? ''));
+        if ($label === '') {
+            continue;
+        }
+        $out[] = ['label' => mb_substr($label, 0, 40), 'amount' => max(0, (int) ($t['amount'] ?? 0))];
+    }
+    return $out;
+}
+
+/** イベントに料金区分（男性/女性等）が設定されているか。 */
+function event_has_tiers(array $event): bool
+{
+    return !empty($event['tiers']);
+}
+
+/** 指定ラベルの区分金額を返す（サーバー側の定義から確定＝改ざん防止）。無ければ null。 */
+function event_tier_amount(array $event, string $label): ?int
+{
+    foreach (($event['tiers'] ?? []) as $t) {
+        if ($t['label'] === $label) {
+            return (int) $t['amount'];
+        }
+    }
+    return null;
 }
 
 /**
@@ -214,14 +259,15 @@ function create_event(string $tenantId, array $d): string
 {
     $id = generate_event_id();
     $stmt = db()->prepare(
-        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, created_at)
-         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:ts)'
+        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, price_tiers, created_at)
+         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:tiers,:ts)'
     );
     $stmt->execute([
         ':id' => $id, ':tenant' => $tenantId,
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
-        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0, ':ts' => time(),
+        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
+        ':tiers' => $d['price_tiers'] ?? null, ':ts' => time(),
     ]);
     return $id;
 }
@@ -234,13 +280,14 @@ function update_event(string $tenantId, string $id, array $d): bool
     $stmt = db()->prepare(
         'UPDATE events SET name=:name, description=:desc, date=:date, place=:place,
                 amount=:amount, amount_onsite=:onsite, currency=:cur, capacity=:cap,
-                allow_prepay=:ap, allow_onsite=:ao
+                allow_prepay=:ap, allow_onsite=:ao, price_tiers=:tiers
           WHERE id=:id AND tenant_id=:tenant'
     );
     $stmt->execute([
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
+        ':tiers' => $d['price_tiers'] ?? null,
         ':id' => $id, ':tenant' => $tenantId,
     ]);
     return $stmt->rowCount() > 0;
@@ -894,6 +941,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'email'           => $session->customer_details->email ?? '',
             'phone'           => $phone,
             'party_size'      => $partySize,
+            'category'        => (string) ($meta['participant_category'] ?? ''),
             'note'            => $note,
             'amount'          => (int) ($session->amount_total ?? 0),
             'currency'        => (string) ($session->currency ?? 'jpy'),
@@ -925,6 +973,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'email'           => $customer->email ?? '',
             'phone'           => $meta['phone'] ?? ($customer->phone ?? ''),
             'party_size'      => max(1, (int) ($meta['party_size'] ?? 1)),
+            'category'        => (string) ($meta['participant_category'] ?? ''),
             'note'            => $meta['note'] ?? '',
             'amount'          => (int) ($meta['onsite_total'] ?? 0),
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),

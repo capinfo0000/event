@@ -97,6 +97,21 @@ $onsiteUnit = (isset($event['amount_onsite']) && $event['amount_onsite'] !== '')
     ? (int)$event['amount_onsite']
     : $prepayUnit;
 
+// 料金区分（男性/女性等）が設定されたイベントは、選択区分の金額をサーバー側の定義から確定する。
+// これにより金額の改ざんを防ぐ。区分制は 1申込 = 1名。
+$tierLabel = '';
+if (event_has_tiers($event)) {
+    $tierLabel = trim((string)($_POST['tier'] ?? ''));
+    $tierAmount = event_tier_amount($event, $tierLabel);
+    if ($tierAmount === null) {
+        http_response_code(400);
+        exit('区分の選択が正しくありません。前の画面に戻って選び直してください。');
+    }
+    $prepayUnit = $tierAmount;
+    $onsiteUnit = $tierAmount;
+    $partySize = 1;
+}
+
 // 長すぎる入力は Stripe metadata 制限（値は最大500文字）に合わせて切り詰める
 $metaName = mb_substr($name, 0, 100);
 $metaPhone = mb_substr($phone, 0, 30);
@@ -142,6 +157,7 @@ if ($paymentType === 'onsite') {
                 'onsite_unit' => (string)$onsiteUnit,
                 'onsite_total' => (string)$onsiteTotal,
                 'currency' => $currency,
+                'participant_category' => $tierLabel,
             ],
         ], $opts);
     } catch (\Throwable $e) {
@@ -155,6 +171,7 @@ if ($paymentType === 'onsite') {
         . "下記のお申し込みを受け付けました（当日支払い）。\n\n"
         . 'イベント：' . ($event['name'] ?? '') . "\n"
         . '日時・場所：' . trim(($event['date'] ?? '') . '　' . ($event['place'] ?? '')) . "\n"
+        . ($tierLabel !== '' ? '区分：' . $tierLabel . "\n" : '')
         . '参加人数：' . $partySize . " 名\n"
         . '当日お支払い額：' . format_amount($onsiteTotal, $currency) . "\n\n"
         . "当日、会場で上記金額をお支払いください。今回はまだお支払いは発生していません。\n";
@@ -178,7 +195,7 @@ try {
                 'currency' => $currency,
                 'unit_amount' => $prepayUnit,
                 'product_data' => [
-                    'name' => $event['name'] ?? 'イベント参加費',
+                    'name' => ($event['name'] ?? 'イベント参加費') . ($tierLabel !== '' ? '（' . $tierLabel . '）' : ''),
                     'description' => trim(($event['date'] ?? '') . ' / ' . ($event['place'] ?? '')),
                 ],
             ],
@@ -196,6 +213,7 @@ try {
             'party_size' => (string)$partySize,
             'note' => $metaNote,
             'payment_type' => 'prepay',
+            'participant_category' => $tierLabel,
         ],
         'payment_intent_data' => [
             'metadata' => [
@@ -204,6 +222,7 @@ try {
                 'participant_name' => $metaName,
                 'phone' => $metaPhone,
                 'party_size' => (string)$partySize,
+                'participant_category' => $tierLabel,
             ],
         ],
         // キャンセルポリシーを決済画面のボタン直上に明示（前払い＝後から取り立て不要にする要）

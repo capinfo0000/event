@@ -65,6 +65,14 @@ if ($maxParty < 1) {
     $maxParty = 10;
 }
 $maxParty = min($maxParty, 20);
+
+// 料金区分（男性/女性等）。設定があれば「区分を1つ選ぶ・1申込=1名」の申込に切り替える。
+$tiers = $event['tiers'] ?? [];
+$hasTiers = !empty($tiers);
+if ($hasTiers) {
+    $defaultUnit = (int) $tiers[0]['amount']; // 初期表示は先頭区分
+    $maxParty = 1;
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -88,9 +96,13 @@ $maxParty = min($maxParty, 20);
         <p class="muted"><?= e($event['date'] ?? '') ?>　<?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
-            <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
-            <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
-            <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+            <?php if ($hasTiers): ?>
+                <?php foreach ($tiers as $ti => $t): ?><?= $ti > 0 ? '　／　' : '' ?><?= e($t['label']) ?>：<strong><?= e(format_amount((int) $t['amount'], $currency)) ?></strong><?php endforeach; ?>
+            <?php else: ?>
+                <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+                <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
+                <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+            <?php endif; ?>
         </p>
         <?php if ($capacity > 0 && $remaining !== null): ?>
             <p class="muted">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
@@ -112,12 +124,25 @@ $maxParty = min($maxParty, 20);
         <label for="phone">電話番号</label>
         <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
 
-        <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
-        <select id="party_size" name="party_size" required>
-            <?php for ($i = 1; $i <= $maxParty; $i++): ?>
-                <option value="<?= $i ?>"><?= $i ?> 名</option>
-            <?php endfor; ?>
-        </select>
+        <?php if ($hasTiers): ?>
+            <label>区分 <span class="req">必須</span></label>
+            <div class="pay-options">
+                <?php foreach ($tiers as $ti => $t): ?>
+                    <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
+                        <input type="radio" name="tier" value="<?= e($t['label']) ?>" <?= $ti === 0 ? 'checked' : '' ?> style="width:auto;" required>
+                        <?= e($t['label']) ?>（<?= e(format_amount((int) $t['amount'], $currency)) ?>）
+                    </label>
+                <?php endforeach; ?>
+            </div>
+            <input type="hidden" name="party_size" value="1">
+        <?php else: ?>
+            <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
+            <select id="party_size" name="party_size" required>
+                <?php for ($i = 1; $i <= $maxParty; $i++): ?>
+                    <option value="<?= $i ?>"><?= $i ?> 名</option>
+                <?php endfor; ?>
+            </select>
+        <?php endif; ?>
 
         <label for="note">備考（アレルギー・ご要望など）</label>
         <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
@@ -163,6 +188,12 @@ $maxParty = min($maxParty, 20);
         const ONSITE_UNIT = <?= $onsiteUnit ?>;
         const CURRENCY = <?= json_encode(strtolower((string) $currency)) ?>;
         const STRIPE_READY = <?= $stripeReady ? 'true' : 'false' ?>;
+        const HAS_TIERS = <?= $hasTiers ? 'true' : 'false' ?>;
+        const TIERS = <?= json_encode(array_column($tiers, 'amount', 'label'), JSON_UNESCAPED_UNICODE) ?>; // {区分名: 金額}
+        function selectedTierUnit() {
+            const el = document.querySelector('input[name="tier"]:checked');
+            return el ? (TIERS[el.value] || 0) : 0;
+        }
         function formatAmount(total) {
             if (CURRENCY === 'jpy') {
                 return '¥' + total.toLocaleString('ja-JP');
@@ -174,12 +205,19 @@ $maxParty = min($maxParty, 20);
             return el ? el.value : 'prepay';
         }
         function updateTotal() {
-            const ps = document.getElementById('party_size');
-            if (!ps) return; // 満員などでフォーム非表示のとき
-            const qty = parseInt(ps.value, 10) || 1;
+            const totalEl = document.getElementById('total');
+            if (!totalEl) return; // 満員などでフォーム非表示のとき
             const method = selectedMethod();
-            const unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
-            document.getElementById('total').textContent = formatAmount(unit * qty);
+            let unit, qty = 1;
+            if (HAS_TIERS) {
+                unit = selectedTierUnit(); // 区分制は 1名・選んだ区分の金額（事前/当日で同額）
+            } else {
+                const ps = document.getElementById('party_size');
+                if (!ps) return;
+                qty = parseInt(ps.value, 10) || 1;
+                unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
+            }
+            totalEl.textContent = formatAmount(unit * qty);
 
             const btn = document.getElementById('submitBtn');
             const note = document.getElementById('methodNote');
@@ -207,6 +245,9 @@ $maxParty = min($maxParty, 20);
             const ps = document.getElementById('party_size');
             if (ps) { ps.addEventListener('change', updateTotal); }
             document.querySelectorAll('input[name="payment_type"]').forEach(function (r) {
+                r.addEventListener('change', updateTotal);
+            });
+            document.querySelectorAll('input[name="tier"]').forEach(function (r) {
                 r.addEventListener('change', updateTotal);
             });
             updateTotal();

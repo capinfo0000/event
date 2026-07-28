@@ -38,7 +38,7 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM（Excel 文字化け対策）
 
-fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払方法', '支払額', '返金額', '状態', '出席', '備考', 'ID']);
+fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '区分', '支払方法', '支払額', '返金額', '状態', '出席', '備考', 'ID']);
 
 foreach ($participants as $p) {
     $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
@@ -65,6 +65,7 @@ foreach ($participants as $p) {
         csv_cell($p['email']),
         csv_cell($p['phone']),
         (int) $p['party_size'] . '名',
+        csv_cell($p['category'] ?? ''),
         $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),

@@ -24,6 +24,7 @@ $form = $editing ?? [
     'id' => '', 'name' => '', 'description' => '', 'date' => '',
     'place' => '', 'amount' => '', 'currency' => 'jpy', 'capacity' => '',
     'amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false,
+    'tiers' => [],
 ];
 
 $flash = (string) ($_GET['msg'] ?? '');
@@ -92,6 +93,19 @@ require __DIR__ . '/_app_header.php';
             <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
         </div>
 
+        <label style="margin-top:18px;">料金区分（男性／女性など・任意）</label>
+        <p class="hint" style="margin-top:0;">区分を1つ以上登録すると、申込画面は「区分を選ぶ」形になり、<strong>選んだ区分の金額で決済</strong>します（1申込＝1名）。空欄のままなら上の「参加費」を使う通常の申込です。金額は上の参加費より優先されます。</p>
+        <div id="tierList">
+            <?php foreach (($form['tiers'] ?? []) as $t): ?>
+                <div class="tier-row" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+                    <input type="text" name="tier_label[]" maxlength="40" placeholder="例: 男性" value="<?= e((string) $t['label']) ?>" style="flex:2;">
+                    <input type="number" name="tier_amount[]" min="0" step="1" placeholder="金額(円)" value="<?= e((string) $t['amount']) ?>" style="flex:1;">
+                    <button type="button" class="btn btn--ghost tier-del">削除</button>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <p><button type="button" class="btn btn--ghost" id="tierAdd">＋ 区分を追加</button></p>
+
         <p style="margin-top:18px;">
             <button type="submit" class="btn"><?= $editing ? '更新する' : '登録する' ?></button>
             <?php if ($editing): ?><a class="btn btn--ghost" href="events.php">新規登録に切り替え</a><?php endif; ?>
@@ -115,8 +129,14 @@ require __DIR__ . '/_app_header.php';
                             <td class="muted"><?= e($ev['date'] ?? '') ?></td>
                             <td class="muted"><?= e($ev['place'] ?? '') ?></td>
                             <td>
-                                事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
-                                <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
+                                <?php if (!empty($ev['tiers'])): ?>
+                                    <?php foreach ($ev['tiers'] as $t): ?>
+                                        <?= e($t['label']) ?> <?= e(format_amount((int) $t['amount'], $ev['currency'] ?? 'jpy')) ?><br>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
+                                    <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
+                                <?php endif; ?>
                             </td>
                             <td><input type="text" class="js-select" readonly value="<?= e($applyUrl) ?>" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
                             <td>
@@ -137,4 +157,32 @@ require __DIR__ . '/_app_header.php';
         </div>
     <?php endif; ?>
 </div>
+<script nonce="<?= e(csp_nonce()) ?>">
+(function () {
+    var list = document.getElementById('tierList');
+    var add = document.getElementById('tierAdd');
+    if (!list || !add) { return; }
+    function wireDel(btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('.tier-row');
+            if (row) { row.remove(); }
+        });
+    }
+    add.addEventListener('click', function () {
+        var row = document.createElement('div');
+        row.className = 'tier-row';
+        row.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:center;';
+        var l = document.createElement('input');
+        l.type = 'text'; l.name = 'tier_label[]'; l.maxLength = 40; l.placeholder = '例: 女性'; l.style.flex = '2';
+        var a = document.createElement('input');
+        a.type = 'number'; a.name = 'tier_amount[]'; a.min = '0'; a.step = '1'; a.placeholder = '金額(円)'; a.style.flex = '1';
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn btn--ghost tier-del'; b.textContent = '削除';
+        row.appendChild(l); row.appendChild(a); row.appendChild(b);
+        list.appendChild(row);
+        wireDel(b);
+    });
+    document.querySelectorAll('#tierList .tier-del').forEach(wireDel);
+})();
+</script>
 <?php require __DIR__ . '/_app_footer.php'; ?>

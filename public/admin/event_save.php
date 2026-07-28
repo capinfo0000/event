@@ -43,6 +43,26 @@ $capacity = trim((string) ($_POST['capacity'] ?? ''));
 $allowPrepay = !empty($_POST['allow_prepay']);
 $allowOnsite = !empty($_POST['allow_onsite']);
 
+// 料金区分（男性/女性/学生 等）。ラベルと金額を対で受け取り、ラベルが空でない行だけ採用。
+$tierLabels  = (array) ($_POST['tier_label'] ?? []);
+$tierAmounts = (array) ($_POST['tier_amount'] ?? []);
+$tiers = [];
+foreach ($tierLabels as $i => $rawLabel) {
+    $label = trim((string) $rawLabel);
+    $amtRaw = trim((string) ($tierAmounts[$i] ?? ''));
+    if ($label === '') {
+        continue; // 空行はスキップ
+    }
+    if (!ctype_digit($amtRaw)) {
+        back_to_events('料金区分「' . mb_substr($label, 0, 40) . '」の金額は0以上の整数で入力してください。', 'ng', $id);
+    }
+    $tiers[] = ['label' => mb_substr($label, 0, 40), 'amount' => (int) $amtRaw];
+    if (count($tiers) >= 10) {
+        break; // 上限10区分
+    }
+}
+$priceTiersJson = $tiers !== [] ? json_encode($tiers, JSON_UNESCAPED_UNICODE) : null;
+
 // 入力チェック
 if ($name === '' || $date === '' || $place === '') {
     back_to_events('イベント名・日時・場所は必須です。', 'ng', $id);
@@ -74,6 +94,7 @@ $data = [
     'capacity'      => ($capacity !== '' && ctype_digit($capacity)) ? (int) $capacity : 0,
     'allow_prepay'  => $allowPrepay,
     'allow_onsite'  => $allowOnsite,
+    'price_tiers'   => $priceTiersJson,
 ];
 
 try {

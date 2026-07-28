@@ -166,6 +166,7 @@ require __DIR__ . '/_app_header.php';
                             <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
                             <td<?= $p['note'] !== '' ? ' title="' . e('備考: ' . $p['note']) . '"' : '' ?>>
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
+                                <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
                                 <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
                             </td>
                             <td><?= e($p['email']) ?></td>

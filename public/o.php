@@ -65,9 +65,13 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
                 <p class="muted"><?= e($ev['date']) ?>　<?= e($ev['place']) ?></p>
                 <p><?= e($ev['description']) ?></p>
                 <p class="ev-price">
-                    <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
-                    <?php if ($ev['allow_prepay'] && $ev['allow_onsite']): ?> ／ <?php endif; ?>
-                    <?php if ($ev['allow_onsite']): ?><span class="muted" style="font-size:.9rem;">当日 <?= e(format_amount($ev['amount_onsite'], $ev['currency'])) ?></span><?php endif; ?>
+                    <?php if (!empty($ev['tiers'])): ?>
+                        <?php foreach ($ev['tiers'] as $ti => $t): ?><?= $ti > 0 ? ' ／ ' : '' ?><?= e($t['label']) ?> <?= e(format_amount((int) $t['amount'], $ev['currency'])) ?><?php endforeach; ?>
+                    <?php else: ?>
+                        <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
+                        <?php if ($ev['allow_prepay'] && $ev['allow_onsite']): ?> ／ <?php endif; ?>
+                        <?php if ($ev['allow_onsite']): ?><span class="muted" style="font-size:.9rem;">当日 <?= e(format_amount($ev['amount_onsite'], $ev['currency'])) ?></span><?php endif; ?>
+                    <?php endif; ?>
                 </p>
                 <?php if ($cap > 0 && $remaining !== null): ?>
                     <p class="muted">定員 <?= $cap ?> 名　<?= $full ? '<span class="full">満員</span>' : '残り ' . $remaining . ' 名' ?></p>
