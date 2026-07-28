@@ -115,9 +115,9 @@ function db_migrate(\PDO $pdo): void
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);');
     // 料金区分（男性/女性/学生等）を JSON 配列 [{label,amount}] で保存。空なら単一料金（従来動作）。
-    db_add_column_if_missing($pdo, 'events', 'price_tiers', 'TEXT');
+    db_add_column_if_missing($pdo, 'events', 'price_tiers', "TEXT NOT NULL DEFAULT ''");
     // 追加の入力項目（名前・年齢等）を主催者が定義。JSON 配列 [{label,type,required}]。空なら従来の標準項目。
-    db_add_column_if_missing($pdo, 'events', 'custom_fields', 'TEXT');
+    db_add_column_if_missing($pdo, 'events', 'custom_fields', "TEXT NOT NULL DEFAULT ''");
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS password_resets (

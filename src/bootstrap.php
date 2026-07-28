@@ -312,7 +312,8 @@ function create_event(string $tenantId, array $d): string
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
-        ':tiers' => $d['price_tiers'] ?? null, ':cf' => $d['custom_fields'] ?? null, ':ts' => time(),
+        // 未設定は NULL ではなく空文字で保存（列が NOT NULL でも通す。読み取りでは [] 扱い）。
+        ':tiers' => $d['price_tiers'] ?? '', ':cf' => $d['custom_fields'] ?? '', ':ts' => time(),
     ]);
     return $id;
 }
@@ -332,7 +333,7 @@ function update_event(string $tenantId, string $id, array $d): bool
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
-        ':tiers' => $d['price_tiers'] ?? null, ':cf' => $d['custom_fields'] ?? null,
+        ':tiers' => $d['price_tiers'] ?? '', ':cf' => $d['custom_fields'] ?? '',
         ':id' => $id, ':tenant' => $tenantId,
     ]);
     return $stmt->rowCount() > 0;
