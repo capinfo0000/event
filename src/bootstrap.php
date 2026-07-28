@@ -507,10 +507,16 @@ function event_headcount_cached(string $eventId, ?string $account, int $ttl = 60
  */
 function base_url(): string
 {
-    // 明示設定を最優先（本番はこれを設定するのが推奨）。
+    // 明示設定を優先（本番はこれを設定するのが推奨）。
+    // ただし localhost 系の値は本番では無効とみなし、リクエストから推定する
+    // （.env の既定 http://localhost:8000 が残っていて申込リンクや戻り先が localhost に
+    //   なるのを防ぐ）。
     $configured = env('APP_BASE_URL');
     if ($configured !== null && trim($configured) !== '') {
-        return rtrim($configured, '/');
+        $c = rtrim(trim($configured), '/');
+        if (!preg_match('#^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$#i', $c)) {
+            return $c;
+        }
     }
     // 未設定時はリクエストから推定する。APP_BASE_URL の設定漏れで success/cancel が
     // http://localhost に落ち、決済後に「接続拒否」になるのを防ぐ。

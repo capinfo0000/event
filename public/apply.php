@@ -143,7 +143,7 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
                 <?php foreach ($tiers as $ti => $t): ?>
                     <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                         <input type="radio" name="tier" value="<?= e($t['label']) ?>" <?= $ti === 0 ? 'checked' : '' ?> style="width:auto;" required>
-                        <?= e($t['label']) ?><span class="tier-amt" data-prepay="<?= (int) $t['amount'] ?>" data-onsite="<?= (int) $t['amount_onsite'] ?>"></span>
+                        <?= e($t['label']) ?>
                     </label>
                 <?php endforeach; ?>
             </div>
@@ -244,11 +244,6 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
             let unit, qty = 1;
             if (HAS_TIERS) {
                 unit = selectedTierUnit(method); // 1名・選んだ性別×支払い方法の金額
-                // 各性別ラジオ横に、選択中の支払い方法での金額を表示
-                document.querySelectorAll('.tier-amt').forEach(function (s) {
-                    const amt = method === 'onsite' ? s.getAttribute('data-onsite') : s.getAttribute('data-prepay');
-                    s.textContent = '（' + formatAmount(parseInt(amt, 10) || 0) + '）';
-                });
             } else {
                 const ps = document.getElementById('party_size');
                 if (!ps) return;
