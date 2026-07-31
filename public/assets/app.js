@@ -49,5 +49,17 @@
     document.querySelectorAll('.modal[data-auto-open]').forEach(function (m) {
       m.classList.add('is-open');
     });
+
+    // テキストエリアは入力量に応じて高さを自動で伸ばす（文章が長くなると欄も長くなる）
+    document.querySelectorAll('textarea').forEach(function (t) {
+      function grow() {
+        t.style.height = 'auto';
+        t.style.height = (t.scrollHeight + 2) + 'px';
+      }
+      t.style.overflowY = 'hidden';
+      t.addEventListener('input', grow);
+      // 初期表示（既存値がある場合）にも反映
+      grow();
+    });
   });
 })();
