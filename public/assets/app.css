@@ -185,6 +185,12 @@ tbody tr:hover { background: #fafbfc; }
 .chip input { width: auto; margin: 0; }
 .chip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+/* 自由項目の行 */
+.cf-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.cf-row input[type="text"] { flex: 2 1 140px; min-width: 0; }
+.cf-row select { flex: 1 1 90px; min-width: 0; }
+.cf-row .btn { flex: 0 0 auto; padding: 8px 12px; }
+
 @media (max-width: 720px) {
   .app { flex-direction: column; }
   .sidebar { width: 100%; flex: none; height: auto; position: sticky; top: 0; z-index: 20;
@@ -198,6 +204,9 @@ tbody tr:hover { background: #fafbfc; }
   /* 横並びの入力（事前/当日の金額など）はスマホで縦積みにして枠の重なりを防ぐ */
   .row { flex-direction: column; gap: 0; }
   .row > div { min-width: 0; width: 100%; }
+  /* 自由項目の行もスマホでは縦積みに（枠の重なり防止） */
+  .cf-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .cf-row .btn { align-self: flex-start; }
 }
 
 /* ---------- モーダル（ポップアップ） ---------- */

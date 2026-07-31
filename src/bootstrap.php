@@ -230,7 +230,7 @@ function known_field_catalog(): array
     ];
 }
 
-/** ラベルから既知フィールドの slot（pre/post）を返す。未知は 'pre'（性別・メールより前）。 */
+/** ラベルから既知フィールドの slot（pre/post）を返す。未知（自由項目）は 'post'（メール・紹介者の後）。 */
 function field_slot_for_label(string $label): string
 {
     foreach (known_field_catalog() as $def) {
@@ -238,7 +238,7 @@ function field_slot_for_label(string $label): string
             return $def['slot'];
         }
     }
-    return 'pre';
+    return 'post';
 }
 
 /**

@@ -127,12 +127,13 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
         <?php
         // 表示順（固定）: 氏名 → 氏名フリガナ → 年齢 →（性別）→ メール → 紹介者。
         // 選択された項目（$customFields）を pre / post に振り分けて描画する。1申込＝1名。
-        $renderField = static function (int $ci, array $f) use ($cfInputType): void { ?>
-            <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <span class="req">必須</span></label>
+        $renderField = static function (int $ci, array $f) use ($cfInputType): void {
+            $req = !empty($f['required']); ?>
+            <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <?php if ($req): ?><span class="req">必須</span><?php endif; ?></label>
             <?php if (($f['type'] ?? 'text') === 'textarea'): ?>
-                <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" required></textarea>
+                <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" <?= $req ? 'required' : '' ?>></textarea>
             <?php else: ?>
-                <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" required>
+                <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" <?= $req ? 'required' : '' ?>>
             <?php endif; ?>
         <?php }; ?>
 
