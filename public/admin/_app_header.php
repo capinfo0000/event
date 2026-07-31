@@ -24,7 +24,7 @@ $navItems = [
     ['account.php',   '', 'アカウント設定', ['account.php']],
 ];
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {
-    $navItems[] = ['invites.php', '', '招待を発行', ['invites.php']];
+    $navItems[] = ['invites.php', '', 'アカウント発行', ['invites.php']];
 }
 ?>
 <!DOCTYPE html>
