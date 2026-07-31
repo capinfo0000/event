@@ -28,21 +28,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = 'デモの準備に失敗しました。時間をおいて再度お試しください。';
         }
+    // バースト抑制：IP 単位で短時間の試行回数を制限（成功・失敗を問わずカウント）。
+    } elseif (!rate_limit_check('login', 15, 300)) {
+        audit_log('login.blocked', ['email' => mask_email_for_log($email)]);
+        $error = 'ログイン試行が集中しています。数分おいてから再度お試しください。';
     // 総当たり対策：メール単位（標的型）と IP 単位（メール横断スプレー）の両方で失敗回数を制限。
     } elseif (recent_failed_logins($email) >= 5 || recent_failed_logins_by_ip(client_ip()) >= 20) {
         audit_log('login.blocked', ['email' => mask_email_for_log($email)]);
         $error = '試行回数が多すぎます。しばらく時間をおいてからお試しください。';
     } elseif (!captcha_verify($_POST['cf-turnstile-response'] ?? null, true)) {
         $error = '認証（CAPTCHA）に失敗しました。もう一度お試しください。';
-    } elseif (login_tenant($email, $password)) {
-        clear_failed_logins($email);
-        audit_log('login.ok', ['email' => mask_email_for_log($email)]);
-        header('Location: dashboard.php');
-        exit;
     } else {
-        record_failed_login($email);
-        audit_log('login.fail', ['email' => mask_email_for_log($email)]);
-        $error = 'メールアドレスまたはパスワードが違います。';
+        $authed = tenant_check_password($email, $password);
+        if ($authed === null) {
+            record_failed_login($email);
+            audit_log('login.fail', ['email' => mask_email_for_log($email)]);
+            $error = 'メールアドレスまたはパスワードが違います。';
+        } else {
+            clear_failed_logins($email);
+            if (tenant_totp_enabled($authed)) {
+                // 2段階認証あり：この時点ではログインを確定せず、コード入力へ進む。
+                session_boot();
+                $_SESSION['2fa_pending'] = $authed['id'];
+                $_SESSION['2fa_time'] = time();
+                $_SESSION['2fa_ua'] = session_ua_hash();
+                header('Location: twofa.php');
+                exit;
+            }
+            complete_tenant_login($authed);
+            audit_log('login.ok', ['email' => mask_email_for_log($email)]);
+            header('Location: dashboard.php');
+            exit;
+        }
     }
 }
 

@@ -35,8 +35,14 @@ function session_boot(): void
     ]);
     session_start();
 
-    // ログイン中セッションのアイドルタイムアウト（最終操作から一定時間で強制ログアウト）
     if (!empty($_SESSION['tenant_id'])) {
+        // セッション固定化・窃取対策: ログイン時の User-Agent と不一致なら破棄
+        if (($_SESSION['ua'] ?? '') !== '' && !hash_equals((string) $_SESSION['ua'], session_ua_hash())) {
+            $_SESSION = [];
+            session_destroy();
+            return;
+        }
+        // アイドルタイムアウト（最終操作から一定時間で強制ログアウト）
         $now = time();
         $last = (int) ($_SESSION['last_activity'] ?? $now);
         if ($now - $last > SESSION_IDLE_TIMEOUT) {
@@ -46,6 +52,12 @@ function session_boot(): void
         }
         $_SESSION['last_activity'] = $now;
     }
+}
+
+/** セッション束縛用の User-Agent ハッシュ。 */
+function session_ua_hash(): string
+{
+    return hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
 }
 
 /* ------------------- ログイン試行の制限（総当たり対策） ------------------- */
@@ -397,21 +409,77 @@ function find_tenant_by_billing_customer(string $customerId): ?array
 /**
  * メール＋パスワードでログイン。成功でセッションに保存し true。
  */
-function login_tenant(string $email, string $password): bool
+/**
+ * メール＋パスワードを検証し、一致したらテナント行を返す（セッションは張らない）。
+ * タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化。
+ */
+function tenant_check_password(string $email, string $password): ?array
 {
-    // タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化する。
     $dummyHash = '$2y$12$iOI7xMnDX6U9v5ZKJ/SC1O4K8KEa/DBdKX6/VaaIg3PcM5nyTymFq';
     $tenant = find_tenant_by_email($email);
     if ($tenant === null) {
         password_verify($password, $dummyHash);
-        return false;
+        return null;
     }
     if (!password_verify($password, $tenant['password_hash'])) {
-        return false;
+        return null;
     }
+    return $tenant;
+}
+
+/** 認証成立後にログインセッションを確立する（ID再生成・UA束縛）。 */
+function complete_tenant_login(array $tenant): void
+{
     session_boot();
     session_regenerate_id(true);
     $_SESSION['tenant_id'] = $tenant['id'];
+    $_SESSION['ua'] = session_ua_hash();
+    $_SESSION['last_activity'] = time();
+    unset($_SESSION['2fa_pending'], $_SESSION['2fa_time']);
+}
+
+/** 2段階認証が有効なテナントか。 */
+function tenant_totp_enabled(array $tenant): bool
+{
+    return (int) ($tenant['totp_enabled'] ?? 0) === 1 && !empty($tenant['totp_secret']);
+}
+
+/** テナントの TOTP 秘密鍵（base32・復号済み）。無ければ null。 */
+function tenant_totp_secret(array $tenant): ?string
+{
+    $enc = (string) ($tenant['totp_secret'] ?? '');
+    if ($enc === '') {
+        return null;
+    }
+    $plain = app_decrypt($enc);
+    return ($plain === null || $plain === '') ? null : $plain;
+}
+
+/** TOTP 秘密鍵と有効フラグを保存（秘密鍵は APP_KEY で暗号化。$secretB32=null で解除）。 */
+function set_tenant_totp(string $tenantId, ?string $secretB32, bool $enabled): void
+{
+    ensure_app_key();
+    $enc = ($secretB32 !== null && $secretB32 !== '') ? app_encrypt($secretB32) : null;
+    $stmt = db()->prepare('UPDATE tenants SET totp_secret = ?, totp_enabled = ? WHERE id = ?');
+    $stmt->execute([$enc, $enabled ? 1 : 0, $tenantId]);
+}
+
+/** 初回パスワード変更の強制フラグを設定/解除。 */
+function set_tenant_must_change_password(string $tenantId, bool $flag): void
+{
+    db()->prepare('UPDATE tenants SET must_change_password = ? WHERE id = ?')->execute([$flag ? 1 : 0, $tenantId]);
+}
+
+/**
+ * 旧来の1段階ログイン（signup 直後の自動ログイン等・2FA非対象の経路で使用）。
+ */
+function login_tenant(string $email, string $password): bool
+{
+    $tenant = tenant_check_password($email, $password);
+    if ($tenant === null) {
+        return false;
+    }
+    complete_tenant_login($tenant);
     return true;
 }
 
@@ -440,6 +508,14 @@ function require_tenant(): array
     if ($tenant === null) {
         header('Location: login.php');
         exit;
+    }
+    // 初回パスワード変更が必須の間は、変更ページ以外へ進ませない。
+    if ((int) ($tenant['must_change_password'] ?? 0) === 1) {
+        $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if (!in_array($script, ['password_change.php', 'logout.php'], true)) {
+            header('Location: password_change.php');
+            exit;
+        }
     }
     return $tenant;
 }

@@ -22,6 +22,7 @@ require __DIR__ . '/tenant.php';
 require __DIR__ . '/mail.php';
 require __DIR__ . '/captcha.php';
 require __DIR__ . '/crypto.php';
+require __DIR__ . '/totp.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。

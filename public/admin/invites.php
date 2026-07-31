@@ -41,7 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim((string) ($_POST['display_name'] ?? ''));
         $pw = gen_temp_password(12);
         try {
-            create_tenant($email, $pw, $name);
+            $newId = create_tenant($email, $pw, $name);
+            set_tenant_must_change_password($newId, true); // 初回ログイン時にパスワード変更を強制
             audit_log('admin.create_account', ['by' => $admin['id'], 'email' => mask_email_for_log($email)]);
             $createdEmail = $email;
             $createdPassword = $pw; // この画面でのみ一度だけ表示（保存はハッシュのみ）

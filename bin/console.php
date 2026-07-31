@@ -52,6 +52,16 @@ switch ($cmd) {
         echo "{$email} を管理者にしました。招待発行（/admin/invites.php）が使えます。\n";
         break;
 
+    case 'disable-2fa':
+        $email = $argv[2] ?? '';
+        $t = $email !== '' ? find_tenant_by_email($email) : null;
+        if ($t === null) {
+            exit("テナントが見つかりません: {$email}\n");
+        }
+        set_tenant_totp($t['id'], null, false);
+        echo "{$email} の2段階認証を解除しました（認証アプリ紛失時の復旧用）。\n";
+        break;
+
     case 'make-invite':
         $adminEmail = $argv[2] ?? '';
         $admin = $adminEmail !== '' ? find_tenant_by_email($adminEmail) : null;
@@ -88,5 +98,5 @@ switch ($cmd) {
         break;
 
     default:
-        echo "コマンド: init | create-admin | make-admin | make-invite | list-tenants | set-plan\n";
+        echo "コマンド: init | create-admin | make-admin | make-invite | disable-2fa | list-tenants | set-plan\n";
 }

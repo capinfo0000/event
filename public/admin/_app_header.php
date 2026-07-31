@@ -22,6 +22,7 @@ $navItems = [
     ['stripe.php',    '', 'Stripe設定',    ['stripe.php', 'setup.php']],
     ['policy_edit.php', '', 'キャンセルポリシー', ['policy_edit.php']],
     ['account.php',   '', 'アカウント設定', ['account.php']],
+    ['twofa_setup.php', '', '2段階認証', ['twofa_setup.php']],
 ];
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     $navItems[] = ['invites.php', '', 'アカウント発行', ['invites.php']];
