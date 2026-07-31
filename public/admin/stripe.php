@@ -45,6 +45,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 手動登録は無効化し、ダッシュボードの「Stripe を接続」（OAuth）へ誘導する。
         $msg = 'この環境は Stripe 接続（Connect）必須モードです。秘密鍵の手動登録はできません。ダッシュボードの「Stripe を接続する」から連携してください（サーバーは秘密鍵を保存しません）。';
         $msgType = 'ng';
+    } elseif ($action === 'save' && trim((string) ($_POST['stripe_key'] ?? '')) !== '' && !request_is_https()) {
+        // 平文送信防止: 鍵の登録は HTTPS でのみ受け付ける。
+        $msg = 'セキュリティのため、APIキーの登録は HTTPS 接続でのみ行えます。https:// のURLで開き直してください（SSL が有効か管理者にご確認ください）。';
+        $msgType = 'ng';
     } elseif ($action === 'save') {
         $key = trim((string) ($_POST['stripe_key'] ?? ''));
         if ($key === '') {

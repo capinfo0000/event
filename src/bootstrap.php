@@ -57,6 +57,25 @@ function load_env(string $path): void
 
 load_env(APP_ROOT . '/.env');
 
+// 本番ではエラー詳細を画面に出さない。スタックトレースには復号済みの Stripe 鍵などが
+// 引数として載りうるため、画面表示は汎用メッセージのみ・詳細はサーバーログへ。
+// ローカル開発では .env に APP_DEBUG=1 を置けば従来どおり詳細表示。
+if (getenv('APP_DEBUG') === '1') {
+    ini_set('display_errors', '1');
+    error_reporting(E_ALL);
+} elseif (PHP_SAPI !== 'cli') {
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    error_reporting(E_ALL);
+    set_exception_handler(static function (\Throwable $e): void {
+        error_log('Uncaught: ' . $e->getMessage());
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
+        echo 'エラーが発生しました。時間をおいて再度お試しください。';
+    });
+}
+
 /**
  * このリクエスト用の CSP nonce（1リクエストにつき1つ）。
  * インライン <script>/<style> に nonce 属性として付け、'unsafe-inline' なしで許可する。
