@@ -73,27 +73,13 @@ if ($pricingMode === 'gender') {
     $amountOnsite = '';
 }
 
-// 追加の入力項目（名前・年齢など）。ラベル・種別・必須をそれぞれ対で受け取る。
-$cfLabels = (array) ($_POST['cf_label'] ?? []);
-$cfTypes  = (array) ($_POST['cf_type'] ?? []);
-$cfReqs   = (array) ($_POST['cf_required'] ?? []);
+// 入力項目（タグ選択式）。選ばれたキーだけを、カタログの並び順（氏名→フリガナ→年齢→紹介者）で
+// 保存する。選択された項目は必須。性別・メールは固定なのでここには含めない。
+$selectedKeys = (array) ($_POST['fields'] ?? []);
 $customFields = [];
-foreach ($cfLabels as $i => $rawLabel) {
-    $label = trim((string) $rawLabel);
-    if ($label === '') {
-        continue; // 空ラベルの行はスキップ
-    }
-    $type = (string) ($cfTypes[$i] ?? 'text');
-    if (!in_array($type, ['text', 'number', 'tel', 'textarea'], true)) {
-        $type = 'text';
-    }
-    $customFields[] = [
-        'label'    => mb_substr($label, 0, 40),
-        'type'     => $type,
-        'required' => ((string) ($cfReqs[$i] ?? '0')) === '1',
-    ];
-    if (count($customFields) >= 20) {
-        break; // 上限20項目
+foreach (known_field_catalog() as $key => $def) {
+    if (in_array($key, $selectedKeys, true)) {
+        $customFields[] = ['label' => $def['label'], 'type' => $def['type'], 'required' => true];
     }
 }
 $customFieldsJson = $customFields !== [] ? json_encode($customFields, JSON_UNESCAPED_UNICODE) : null;

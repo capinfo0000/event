@@ -124,18 +124,19 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
     <form action="checkout.php" method="post" class="card">
         <input type="hidden" name="event_id" value="<?= e($event['id']) ?>">
 
-        <?php if (!$hasCustom): ?>
-        <label for="name">お名前 <span class="req">必須</span></label>
-        <input type="text" id="name" name="name" required maxlength="100" autocomplete="name" placeholder="山田 太郎">
-        <?php endif; ?>
+        <?php
+        // 表示順（固定）: 氏名 → 氏名フリガナ → 年齢 →（性別）→ メール → 紹介者。
+        // 選択された項目（$customFields）を pre / post に振り分けて描画する。1申込＝1名。
+        $renderField = static function (int $ci, array $f) use ($cfInputType): void { ?>
+            <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <span class="req">必須</span></label>
+            <?php if (($f['type'] ?? 'text') === 'textarea'): ?>
+                <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" required></textarea>
+            <?php else: ?>
+                <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" required>
+            <?php endif; ?>
+        <?php }; ?>
 
-        <label for="email">メールアドレス <span class="req">必須</span></label>
-        <input type="email" id="email" name="email" required maxlength="200" autocomplete="email" placeholder="taro@example.com">
-
-        <?php if (!$hasCustom): ?>
-        <label for="phone">電話番号</label>
-        <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
-        <?php endif; ?>
+        <?php foreach ($customFields as $ci => $f): if (field_slot_for_label($f['label']) === 'pre') { $renderField($ci, $f); } endforeach; ?>
 
         <?php if ($hasTiers): ?>
             <label>性別 <span class="req">必須</span></label>
@@ -147,31 +148,14 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
                     </label>
                 <?php endforeach; ?>
             </div>
-            <input type="hidden" name="party_size" value="1">
-        <?php elseif ($hasCustom): ?>
-            <input type="hidden" name="party_size" value="1">
-        <?php else: ?>
-            <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
-            <select id="party_size" name="party_size" required>
-                <?php for ($i = 1; $i <= $maxParty; $i++): ?>
-                    <option value="<?= $i ?>"><?= $i ?> 名</option>
-                <?php endfor; ?>
-            </select>
         <?php endif; ?>
 
-        <?php if ($hasCustom): ?>
-            <?php foreach ($customFields as $ci => $f): ?>
-                <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <?php if (!empty($f['required'])): ?><span class="req">必須</span><?php endif; ?></label>
-                <?php if (($f['type'] ?? 'text') === 'textarea'): ?>
-                    <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" <?= !empty($f['required']) ? 'required' : '' ?>></textarea>
-                <?php else: ?>
-                    <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" <?= !empty($f['required']) ? 'required' : '' ?>>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        <?php else: ?>
-        <label for="note">備考（アレルギー・ご要望など）</label>
-        <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
-        <?php endif; ?>
+        <label for="email">メールアドレス <span class="req">必須</span></label>
+        <input type="email" id="email" name="email" required maxlength="200" autocomplete="email" placeholder="taro@example.com">
+
+        <?php foreach ($customFields as $ci => $f): if (field_slot_for_label($f['label']) === 'post') { $renderField($ci, $f); } endforeach; ?>
+
+        <input type="hidden" name="party_size" value="1">
 
         <label>お支払い方法 <span class="req">必須</span></label>
         <div class="pay-options">
@@ -245,10 +229,7 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
             if (HAS_TIERS) {
                 unit = selectedTierUnit(method); // 1名・選んだ性別×支払い方法の金額
             } else {
-                const ps = document.getElementById('party_size');
-                if (!ps) return;
-                qty = parseInt(ps.value, 10) || 1;
-                unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
+                unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT; // 一律・1名
             }
             totalEl.textContent = formatAmount(unit * qty);
 

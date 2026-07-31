@@ -214,6 +214,34 @@ function event_has_custom_fields(array $event): bool
 }
 
 /**
+ * 申込フォームで選べる「タグ（入力項目）」のカタログ。
+ * 表示順は 氏名 → 氏名フリガナ → 年齢 →（性別・メール＝固定）→ 紹介者。
+ * slot: 'pre' は性別・メールより前、'post' は後に表示する。
+ *
+ * @return array<string, array{label:string, type:string, slot:string}>
+ */
+function known_field_catalog(): array
+{
+    return [
+        'name'     => ['label' => '氏名',         'type' => 'text',   'slot' => 'pre'],
+        'kana'     => ['label' => '氏名フリガナ', 'type' => 'text',   'slot' => 'pre'],
+        'age'      => ['label' => '年齢',         'type' => 'number', 'slot' => 'pre'],
+        'referrer' => ['label' => '紹介者',       'type' => 'text',   'slot' => 'post'],
+    ];
+}
+
+/** ラベルから既知フィールドの slot（pre/post）を返す。未知は 'pre'（性別・メールより前）。 */
+function field_slot_for_label(string $label): string
+{
+    foreach (known_field_catalog() as $def) {
+        if ($def['label'] === $label) {
+            return $def['slot'];
+        }
+    }
+    return 'pre';
+}
+
+/**
  * price_tiers（JSON）を安全に配列へ復元する。
  * 各区分は ['label'=>string, 'amount'=>int(事前), 'amount_onsite'=>int(当日)]。
  * 旧形式（amount_onsite なし）は当日=事前として補完。不正・空なら空配列（＝単一料金の従来動作）。

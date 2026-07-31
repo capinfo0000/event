@@ -175,16 +175,29 @@ tbody tr:hover { background: #fafbfc; }
 .total { font-size: 1.35rem; font-weight: 800; color: var(--accent); margin: 16px 0; }
 
 /* ---------- レスポンシブ ---------- */
+/* ---------- 入力項目タグ（チップ） ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fff; font-weight: 600; font-size: .88rem; cursor: pointer; user-select: none;
+}
+.chip input { width: auto; margin: 0; }
+.chip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+
 @media (max-width: 720px) {
   .app { flex-direction: column; }
-  .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: row;
-             align-items: center; overflow-x: auto; }
+  .sidebar { width: 100%; flex: none; height: auto; position: sticky; top: 0; z-index: 20;
+             flex-direction: row; align-items: center; overflow-x: auto; }
   .sidebar__brand { padding: 14px 16px; white-space: nowrap; }
   .nav { flex-direction: row; flex: 1; overflow-x: auto; padding: 8px; }
   .nav a { white-space: nowrap; }
   .nav .nav__sep, .sidebar__foot { display: none; }
   .topbar { padding: 14px 18px; }
   .page { padding: 18px; }
+  /* 横並びの入力（事前/当日の金額など）はスマホで縦積みにして枠の重なりを防ぐ */
+  .row { flex-direction: column; gap: 0; }
+  .row > div { min-width: 0; width: 100%; }
 }
 
 /* ---------- モーダル（ポップアップ） ---------- */

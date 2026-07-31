@@ -47,33 +47,26 @@ $partySize = (int)($_POST['party_size'] ?? 1);
 
 // 主催者が定義したカスタム入力項目がある場合は、標準項目（氏名/電話/備考）ではなく
 // 定義された項目を受け取る。メールは常に必須（領収書・確認メールに使用）。
+// 入力項目（タグ選択式）は cf[] で届く。選択された項目は必須。メールは常に必須。
+// 標準の氏名/電話/人数/備考は廃止（1申込=1名）。氏名相当の項目があれば顧客名に採用する。
 $customDefs = $event['custom_fields'] ?? [];
-$hasCustom = !empty($customDefs);
 $customMeta = [];  // Stripe metadata 用（cf0,cf1,... = "ラベル: 値"）
 $name = '';
-if ($hasCustom) {
-    $cf = (array)($_POST['cf'] ?? []);
-    foreach ($customDefs as $i => $def) {
-        $val = trim((string)($cf[$i] ?? ''));
-        if (!empty($def['required']) && $val === '') {
-            http_response_code(400);
-            exit('「' . $def['label'] . '」は必須です。前の画面に戻って入力してください。');
-        }
-        $val = mb_substr($val, 0, 200);
-        $customMeta['cf' . $i] = mb_substr($def['label'] . ': ' . $val, 0, 490);
-        // 氏名に相当する項目があれば Stripe 顧客名に採用（名簿表示用）
-        if ($name === '' && $val !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $def['label'])) {
-            $name = mb_substr($val, 0, 100);
-        }
-    }
-    $partySize = 1;
-    $phone = '';
-    $note = '';
-} else {
-    $name = trim((string)($_POST['name'] ?? ''));
-    if ($name === '') {
+$partySize = 1;
+$phone = '';
+$note = '';
+$cf = (array)($_POST['cf'] ?? []);
+foreach ($customDefs as $i => $def) {
+    $val = trim((string)($cf[$i] ?? ''));
+    if (!empty($def['required']) && $val === '') {
         http_response_code(400);
-        exit('お名前は必須です。フォームに戻って入力してください。');
+        exit('「' . $def['label'] . '」は必須です。前の画面に戻って入力してください。');
+    }
+    $val = mb_substr($val, 0, 200);
+    $customMeta['cf' . $i] = mb_substr($def['label'] . ': ' . $val, 0, 490);
+    // 氏名に相当する項目があれば Stripe 顧客名に採用（名簿表示用）
+    if ($name === '' && $val !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $def['label'])) {
+        $name = mb_substr($val, 0, 100);
     }
 }
 

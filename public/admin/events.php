@@ -126,27 +126,17 @@ require __DIR__ . '/_app_header.php';
             <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
         </div>
 
-        <label style="margin-top:18px;">追加の入力項目（名前・年齢など・任意）</label>
-        <p class="hint" style="margin-top:0;">1つ以上登録すると、申込画面は「メールアドレス」「性別（料金区分を設定した場合）」＋<strong>ここで定義した項目だけ</strong>になります（氏名・電話・人数・備考などの標準項目は表示されません）。空欄のままなら従来の標準項目を使います。</p>
-        <?php $cfTypeLabels = ['text' => '文字', 'number' => '数値', 'tel' => '電話番号', 'textarea' => '長文']; ?>
-        <div id="cfList">
-            <?php foreach (($form['custom_fields'] ?? []) as $f): ?>
-                <div class="cf-row" style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
-                    <input type="text" name="cf_label[]" maxlength="40" placeholder="例: 年齢" value="<?= e((string) $f['label']) ?>" style="flex:2;">
-                    <select name="cf_type[]" style="flex:1;">
-                        <?php foreach ($cfTypeLabels as $tv => $tl): ?>
-                            <option value="<?= e($tv) ?>" <?= ($f['type'] ?? 'text') === $tv ? 'selected' : '' ?>><?= e($tl) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <select name="cf_required[]" style="flex:1;">
-                        <option value="1" <?= !empty($f['required']) ? 'selected' : '' ?>>必須</option>
-                        <option value="0" <?= empty($f['required']) ? 'selected' : '' ?>>任意</option>
-                    </select>
-                    <button type="button" class="btn btn--ghost cf-del">削除</button>
-                </div>
+        <label style="margin-top:18px;">入力項目（タグで選択）</label>
+        <p class="hint" style="margin-top:0;">申込フォームに追加する項目をタグで選びます。表示順は <strong>氏名 → 氏名フリガナ → 年齢 →（性別）→ メールアドレス → 紹介者</strong> に固定。<strong>メールアドレスは常に必須</strong>、<strong>性別は「男女別」料金のとき</strong>に表示されます。選んだ項目は必須になります。全部外すと「性別・メール」のみになります。</p>
+        <?php $selectedLabels = array_column($form['custom_fields'] ?? [], 'label'); ?>
+        <div class="chips">
+            <?php foreach (known_field_catalog() as $key => $def): ?>
+                <label class="chip">
+                    <input type="checkbox" name="fields[]" value="<?= e($key) ?>" <?= in_array($def['label'], $selectedLabels, true) ? 'checked' : '' ?>>
+                    <?= e($def['label']) ?>
+                </label>
             <?php endforeach; ?>
         </div>
-        <p><button type="button" class="btn btn--ghost" id="cfAdd">＋ 入力項目を追加</button></p>
 
         <p style="margin-top:18px;">
             <button type="submit" class="btn"><?= $editing ? '更新する' : '登録する' ?></button>
@@ -214,40 +204,6 @@ require __DIR__ . '/_app_header.php';
     }
     radios.forEach(function (r) { r.addEventListener('change', apply); });
     apply();
-})();
-(function () {
-    var list = document.getElementById('cfList');
-    var add = document.getElementById('cfAdd');
-    if (!list || !add) { return; }
-    function wireDel(btn) {
-        btn.addEventListener('click', function () {
-            var row = btn.closest('.cf-row');
-            if (row) { row.remove(); }
-        });
-    }
-    add.addEventListener('click', function () {
-        var row = document.createElement('div');
-        row.className = 'cf-row';
-        row.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; align-items:center;';
-        var l = document.createElement('input');
-        l.type = 'text'; l.name = 'cf_label[]'; l.maxLength = 40; l.placeholder = '例: 年齢'; l.style.flex = '2';
-        var ty = document.createElement('select');
-        ty.name = 'cf_type[]'; ty.style.flex = '1';
-        [['text', '文字'], ['number', '数値'], ['tel', '電話番号'], ['textarea', '長文']].forEach(function (o) {
-            var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; ty.appendChild(op);
-        });
-        var rq = document.createElement('select');
-        rq.name = 'cf_required[]'; rq.style.flex = '1';
-        [['1', '必須'], ['0', '任意']].forEach(function (o) {
-            var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; rq.appendChild(op);
-        });
-        var b = document.createElement('button');
-        b.type = 'button'; b.className = 'btn btn--ghost cf-del'; b.textContent = '削除';
-        row.appendChild(l); row.appendChild(ty); row.appendChild(rq); row.appendChild(b);
-        list.appendChild(row);
-        wireDel(b);
-    });
-    document.querySelectorAll('#cfList .cf-del').forEach(wireDel);
 })();
 </script>
 <?php require __DIR__ . '/_app_footer.php'; ?>
