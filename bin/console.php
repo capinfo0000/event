@@ -6,6 +6,7 @@
  * 使い方:
  *   php bin/console.php init                       … DB を作成（スキーマ初期化）
  *   php bin/console.php create-admin <email> <pw>  … プラットフォーム管理者を作成
+ *   php bin/console.php make-admin <email>         … 既存アカウントを管理者に昇格
  *   php bin/console.php make-invite <admin-email>  … 招待コードを発行して表示
  *   php bin/console.php list-tenants               … テナント一覧
  *   php bin/console.php set-plan <email> <plan>    … プラン変更（free/p5/p10/unlimited）
@@ -39,6 +40,16 @@ switch ($cmd) {
         } catch (\Throwable $e) {
             exit('失敗: ' . $e->getMessage() . "\n");
         }
+        break;
+
+    case 'make-admin':
+        $email = $argv[2] ?? '';
+        $t = $email !== '' ? find_tenant_by_email($email) : null;
+        if ($t === null) {
+            exit("テナントが見つかりません: {$email}\n");
+        }
+        db()->prepare('UPDATE tenants SET is_admin = 1 WHERE id = ?')->execute([$t['id']]);
+        echo "{$email} を管理者にしました。招待発行（/admin/invites.php）が使えます。\n";
         break;
 
     case 'make-invite':
@@ -77,5 +88,5 @@ switch ($cmd) {
         break;
 
     default:
-        echo "コマンド: init | create-admin | make-invite | list-tenants\n";
+        echo "コマンド: init | create-admin | make-admin | make-invite | list-tenants | set-plan\n";
 }

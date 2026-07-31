@@ -77,5 +77,5 @@ require __DIR__ . '/_auth_header.php';
 </div>
 <?php endif; ?>
 <p class="muted"><a href="forgot.php">パスワードを忘れた場合</a></p>
-<p class="muted">アカウントをお持ちでない方は <a href="signup.php">新規登録</a>（無料）</p>
+<p class="muted">アカウント登録は招待制です。登録には管理者が発行した招待リンクが必要です。</p>
 <?php require __DIR__ . '/_auth_footer.php'; ?>
