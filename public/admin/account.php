@@ -32,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 update_tenant_password($tenant['id'], $new);
                 set_tenant_must_change_password($tenant['id'], false); // 変更済みなら強制フラグを解除
                 audit_log('account.password_change', ['tenant' => $tenant['id']]);
+                notify_security_event($tenant, 'パスワードの変更');
                 $msg = 'パスワードを変更しました。';
             } catch (\Throwable $e) {
                 $msg = $e->getMessage();

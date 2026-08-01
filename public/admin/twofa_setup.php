@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_tenant_totp($tenant['id'], $secret, true);
             unset($_SESSION['totp_setup_secret']);
             audit_log('twofa.enable', ['tenant' => $tenant['id']]);
+            notify_security_event($tenant, '2段階認証の有効化');
             $tenant = find_tenant_by_id($tenant['id']);
             $enabled = true;
             $msg = '2段階認証を有効にしました。次回ログインからコードの入力が必要です。';
@@ -47,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             set_tenant_totp($tenant['id'], null, false);
             audit_log('twofa.disable', ['tenant' => $tenant['id']]);
+            notify_security_event($tenant, '2段階認証の解除');
             $tenant = find_tenant_by_id($tenant['id']);
             $enabled = false;
             $msg = '2段階認証を解除しました。';

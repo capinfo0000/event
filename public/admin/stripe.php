@@ -55,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // 空で保存＝削除
             set_tenant_stripe_key($tenant['id'], null);
             audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
+            notify_security_event($tenant, 'Stripe APIキーの削除');
             $msg = 'Stripe 鍵を削除しました。';
             $tenant = find_tenant_by_id($tenant['id']);
         } elseif (!preg_match('/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/', $key)) {
@@ -77,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'fp' => substr($key, -4), // 末尾4桁（Stripeの鍵一覧と突合するための識別。秘密ではない）
                     'verify' => $okTest ? 'ok' : 'ng',
                 ]);
+                notify_security_event($tenant, 'Stripe APIキーの登録／変更');
                 $msg = 'Stripe 鍵を保存しました。' . $detail;
                 $msgType = $okTest ? 'ok' : 'ng';
                 $tenant = find_tenant_by_id($tenant['id']);
@@ -99,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'clear') {
         set_tenant_stripe_key($tenant['id'], null);
         audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
+        notify_security_event($tenant, 'Stripe APIキーの削除');
         $msg = '保存した鍵を削除しました。';
         $tenant = find_tenant_by_id($tenant['id']);
     }

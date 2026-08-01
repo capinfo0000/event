@@ -48,6 +48,27 @@ function send_mail(string $to, string $subject, string $body): bool
 }
 
 /**
+ * 重要なセキュリティ操作（鍵変更・2FA解除・パスワード変更等）を本人へ通知する（ベストエフォート）。
+ * 乗っ取り時に本人が気づけるようにするのが目的。秘密（鍵・コード）は本文に含めない。
+ */
+function notify_security_event(array $tenant, string $eventLabel): void
+{
+    $to = (string) ($tenant['email'] ?? '');
+    if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return;
+    }
+    $body = "アカウントで次のセキュリティ操作が行われました。\n\n"
+        . '操作: ' . $eventLabel . "\n"
+        . '日時: ' . date('Y-m-d H:i') . "\n"
+        . 'アクセス元IP: ' . client_ip() . "\n\n"
+        . "この操作に心当たりがない場合は、ただちに以下を行ってください:\n"
+        . " 1) パスワードを変更する\n"
+        . " 2) Stripe の APIキーを失効(Roll)し、登録し直す\n"
+        . " 3) 2段階認証を有効にする\n";
+    send_mail($to, '【セキュリティ通知】アカウント操作のお知らせ', $body);
+}
+
+/**
  * ログ用に件名から具体名（イベント名など）を伏せる。
  * 「【…】<イベント名>（…）」の <イベント名> 部分を … に置換。該当が無ければそのまま。
  */
