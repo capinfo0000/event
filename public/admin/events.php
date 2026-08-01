@@ -127,7 +127,6 @@ require __DIR__ . '/_app_header.php';
         </div>
 
         <label style="margin-top:18px;">入力項目（タグで選択）</label>
-        <p class="hint" style="margin-top:0;">申込フォームに追加する項目をタグで選びます。表示順は <strong>氏名 → 氏名フリガナ → 年齢 →（性別）→ メールアドレス → 紹介者</strong> に固定。<strong>メールアドレスは常に必須</strong>、<strong>性別は「男女別」料金のとき</strong>に表示されます。選んだ項目は必須になります。全部外すと「性別・メール」のみになります。</p>
         <?php
         $selectedLabels = array_column($form['custom_fields'] ?? [], 'label');
         $knownLabels = array_column(known_field_catalog(), 'label');
