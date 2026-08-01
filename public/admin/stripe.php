@@ -60,12 +60,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!preg_match('/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/', $key)) {
             $msg = '鍵の形式が正しくありません（sk_… または rk_… で始まる文字列）。';
             $msgType = 'ng';
+        } elseif (file_web_downloadable(tenant_key_path($tenant['id'])) === true) {
+            // 鍵の保存先が Web から直接DL可能なら、保存せず中止（公開領域に鍵を置かせない）。
+            $msg = '鍵の保存先が Web から直接ダウンロードできる状態のため、安全のため保存を中止しました。'
+                . '.env の STRIPE_KEY_DIR を公開フォルダの外（例: /home/アカウント/private）に設定してください。';
+            $msgType = 'ng';
         } else {
             // 形式OKなら保存。接続テストは結果通知のみ（失敗してもネットワーク要因がありうるため保存は維持）。
             try {
                 set_tenant_stripe_key($tenant['id'], $key);
                 [$okTest, $detail] = stripe_test_key($key);
-                audit_log('stripe.key.save', ['tenant' => $tenant['id'], 'mode' => str_contains($key, '_live_') ? 'live' : 'test', 'verify' => $okTest ? 'ok' : 'ng']);
+                audit_log('stripe.key.save', [
+                    'tenant' => $tenant['id'],
+                    'mode' => str_contains($key, '_live_') ? 'live' : 'test',
+                    'type' => str_starts_with($key, 'rk_') ? 'restricted' : 'full',
+                    'fp' => substr($key, -4), // 末尾4桁（Stripeの鍵一覧と突合するための識別。秘密ではない）
+                    'verify' => $okTest ? 'ok' : 'ng',
+                ]);
                 $msg = 'Stripe 鍵を保存しました。' . $detail;
                 $msgType = $okTest ? 'ok' : 'ng';
                 $tenant = find_tenant_by_id($tenant['id']);
@@ -97,14 +108,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $hasKey = tenant_has_stripe_key($tenant);
 $masked = '';
 $modeLabel = '';
+$typeLabel = '';
+$isLive = false;
+$isFull = false;
+$registeredAt = null;
+$advisories = []; // 万一の漏えいに備えた注意（被害を小さく・追跡しやすくするため）
 if ($hasKey) {
     $plain = (string) get_tenant_stripe_key($tenant);
     if ($plain !== '') {
         $masked = (strlen($plain) > 12 ? substr($plain, 0, 8) . '••••••••' . substr($plain, -4) : '（登録済み）');
-        $modeLabel = str_contains($plain, '_live_') ? '本番キー（live）' : (str_contains($plain, '_test_') ? 'テストキー（test）' : '');
+        $isLive = str_contains($plain, '_live_');
+        $isFull = str_starts_with($plain, 'sk_');
+        $modeLabel = $isLive ? '本番キー（live）' : (str_contains($plain, '_test_') ? 'テストキー（test）' : '不明');
+        $typeLabel = str_starts_with($plain, 'rk_') ? '制限付きキー（rk・推奨）' : 'フルアクセスキー（sk）';
+        $mtime = @filemtime(tenant_key_path($tenant['id']));
+        $registeredAt = $mtime !== false ? $mtime : null;
+        if ($isFull && $isLive) {
+            $advisories[] = '本番の「フルアクセスキー（sk_live）」が登録されています。万一漏えいした際の被害を小さくするため、権限を絞った「制限付きキー（rk_live）」への差し替えを強く推奨します（下のガイド参照）。';
+        } elseif ($isFull) {
+            $advisories[] = 'フルアクセスキー（sk）です。本番運用では権限を絞った「制限付きキー（rk）」を推奨します。';
+        }
     } else {
         $masked = '（登録済み・復号不可：APP_KEY を確認）';
     }
+}
+if ($hasKey && app_key_on_disk()) {
+    $advisories[] = '暗号化キー（APP_KEY）が .env に保存されています。より安全にするには、APP_KEY を .env ではなくサーバーの「実環境変数」に設定してください（鍵ファイルと .env を同時に盗まれても復号されなくなります）。';
 }
 
 $token = csrf_token();
@@ -187,7 +216,15 @@ require __DIR__ . '/_app_header.php';
 <div class="card">
     <div class="card__title">現在の状態</div>
     <?php if ($hasKey): ?>
-        <p>✅ 設定済み：<code><?= e($masked) ?></code><?= $modeLabel !== '' ? '　' . e($modeLabel) : '' ?></p>
+        <p>✅ 設定済み：<code><?= e($masked) ?></code></p>
+        <dl style="display:grid; grid-template-columns:max-content 1fr; gap:6px 16px; margin:8px 0 14px; font-size:.9rem;">
+            <dt class="muted">モード</dt><dd><?= e($modeLabel) ?><?= $isLive ? '　※実際に課金されます' : '' ?></dd>
+            <dt class="muted">種別</dt><dd><?= e($typeLabel) ?></dd>
+            <?php if ($registeredAt !== null): ?><dt class="muted">登録日時</dt><dd><?= e(date('Y-m-d H:i', $registeredAt)) ?></dd><?php endif; ?>
+        </dl>
+        <?php foreach ($advisories as $a): ?>
+            <div class="flash flash--ng" style="margin:8px 0;">⚠️ <?= e($a) ?></div>
+        <?php endforeach; ?>
         <form method="post" style="display:inline-block; margin-right:8px;">
             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
             <input type="hidden" name="action" value="test">
@@ -201,6 +238,20 @@ require __DIR__ . '/_app_header.php';
     <?php else: ?>
         <p class="muted">まだ登録されていません。</p>
     <?php endif; ?>
+</div>
+
+<div class="card">
+    <div class="card__title">万一この鍵が漏えいした場合の影響範囲</div>
+    <p class="muted" style="margin-top:0;">被害の範囲・対象・すべきことを把握しておくためのご案内です。</p>
+    <p><strong>影響が及ぶ対象</strong>：<u>あなた（この主催者）自身の Stripe アカウントのみ</u>。他の主催者や当サービス全体、他アカウントの参加者データには影響しません（鍵は主催者ごとに分離）。</p>
+    <p><strong>漏えい時にされうること</strong>（鍵の権限次第）：</p>
+    <ul class="muted" style="line-height:1.9;">
+        <li>あなたのイベント参加者の<strong>名簿（氏名・メール・電話）や決済情報の閲覧</strong></li>
+        <li>あなたの Stripe 上での<strong>返金・顧客作成</strong>等の操作<?= $isLive ? '（本番キーのため実際の返金・課金が可能）' : '（テストキーのため実際の金銭は動きません）' ?></li>
+        <li><strong>制限付きキー(rk_)</strong>なら上記は付与した権限の範囲に限定されます（＝被害を小さくできる）</li>
+    </ul>
+    <p><strong>及ばない範囲</strong>：カード番号そのもの（Stripe が保持・当サービスも鍵所有者も見られない）、他主催者のデータ、当サービスの管理権限。</p>
+    <p><strong>漏えいが疑われたら</strong>：① Stripe ダッシュボード →「開発者」→「APIキー」で該当キー（末尾4桁で照合）を<strong>失効(Roll)</strong> → ② 本画面で新しいキーに差し替え → ③ 監査ログ（logs/audit.log）で <code>stripe.key.*</code>・<code>refund</code>・<code>csv.export</code> 等の記録を確認。</p>
 </div>
 <!-- 制限付きキー（rk_）の作り方モーダル -->
 <div class="modal" id="rkGuide" role="dialog" aria-modal="true">
