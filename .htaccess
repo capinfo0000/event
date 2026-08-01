@@ -10,6 +10,15 @@
 #    なり配信されないため、以下の Rewrite は無害（何も起きない）。
 <IfModule mod_rewrite.c>
     RewriteEngine On
+
+    # --- HTTPS 強制（http でのアクセスは https へ 301 転送。平文送信を防ぐ） ---
+    # localhost / 127.* は開発用に除外してリダイレクトループを防ぐ。
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteCond %{HTTP_HOST} !=localhost
+    RewriteCond %{HTTP_HOST} !^127\.
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
     # 既に public/ 宛ての内部URLは二重付与しない
     RewriteCond %{REQUEST_URI} !^/public/
     # 実ファイル/ディレクトリでも public/ 側を優先（src/ 等は public/ 配下に無いので404=隠蔽）
