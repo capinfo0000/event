@@ -163,7 +163,8 @@ require __DIR__ . '/_app_header.php';
         <li><strong>Checkout Sessions</strong>: Checkout Sessions … 書き込み</li>
         <li>上記以外はすべて「なし」でOK。作成したキー（<code>rk_test_…</code>／本番は <code>rk_live_…</code>）を下に貼り付け。</li>
     </ul>
-    <p class="hint">※ 標準のフルアクセスキー（<code>sk_…</code>）でも動きますが、非推奨です（漏えい時の被害が大きい）。</p>
+    <p class="hint">※ 上記の権限には <strong>「Payouts（送金）」「External accounts（入金先口座）」を含めません</strong>。そのため万一この rk_ が漏れても、<strong>別口座への送金や入金先の変更はできません</strong>（できるのは付与した範囲＝名簿の取得・返金などに限定）。</p>
+    <p class="hint">※ 標準のフルアクセスキー（<code>sk_…</code>）でも動きますが、非推奨です（漏えい時の被害が大きく、送金・口座操作の権限まで含まれます）。</p>
     <p>
         <button type="button" class="btn" data-modal-open="rkGuide">制限付きキー（rk_）の作り方</button>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
