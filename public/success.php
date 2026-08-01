@@ -42,7 +42,7 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>申込完了</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/app.css?v=3">
     <style nonce="<?= e(csp_nonce()) ?>">
         .ok { color: #16a34a; font-size: 1.4rem; font-weight: 800; margin: 0 0 8px; }
         .ng { color: var(--dng); font-size: 1.3rem; font-weight: 800; margin: 0 0 8px; }

@@ -10,8 +10,8 @@ $title = $title ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($title) ?></title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .legal { line-height: 1.9; }
         .legal h2 { font-size: 1.05rem; margin-top: 24px; }

@@ -35,8 +35,8 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($tenant['display_name']) ?> のイベント</title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .ev-price { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
         .full { color: var(--dng); font-weight: 700; }

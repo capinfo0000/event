@@ -135,10 +135,10 @@ require __DIR__ . '/_app_header.php';
         $freeFields = array_values(array_filter(($form['custom_fields'] ?? []), static fn ($f) => !in_array($f['label'], $knownLabels, true)));
         $cfTypeLabels = ['text' => '文字', 'number' => '数値', 'tel' => '電話番号', 'textarea' => '長文'];
         ?>
-        <div class="chips">
+        <div class="chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">
             <?php foreach (known_field_catalog() as $key => $def): ?>
-                <label class="chip">
-                    <input type="checkbox" name="fields[]" value="<?= e($key) ?>" <?= in_array($def['label'], $selectedLabels, true) ? 'checked' : '' ?>>
+                <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                    <input type="checkbox" name="fields[]" value="<?= e($key) ?>" style="width:auto; margin:0;" <?= in_array($def['label'], $selectedLabels, true) ? 'checked' : '' ?>>
                     <?= e($def['label']) ?>
                 </label>
             <?php endforeach; ?>
@@ -197,10 +197,12 @@ require __DIR__ . '/_app_header.php';
                                     <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
                                 <?php endif; ?>
                             </td>
-                            <td style="min-width:200px; max-width:320px;">
-                                <button type="button" class="js-copy copy-link" data-copy="<?= e($applyUrl) ?>" title="タップでコピー">
+                            <td style="min-width:220px; max-width:340px;">
+                                <button type="button" class="js-copy copy-link" data-copy="<?= e($applyUrl) ?>" title="タップでコピー"
+                                        style="display:block; width:100%; text-align:left; font-family:inherit; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.78rem; color:var(--text); cursor:pointer; word-break:break-all; line-height:1.5;">
+                                    <span style="color:var(--accent); font-weight:700;">📋 タップでコピー</span><br>
                                     <?= e($applyUrl) ?>
-                                    <span class="copy-fb"></span>
+                                    <span class="copy-fb" style="display:block; color:#16a34a; font-weight:700; font-size:.74rem; min-height:1em; margin-top:2px;"></span>
                                 </button>
                             </td>
                             <td>

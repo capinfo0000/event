@@ -34,8 +34,8 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>イベント事前決済</title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
 </head>
 <body>
 <div class="app">

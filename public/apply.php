@@ -89,8 +89,8 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }

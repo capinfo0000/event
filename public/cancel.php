@@ -18,7 +18,7 @@ $event = $eventId !== '' ? find_event($eventId) : null;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>お支払いは完了していません</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/app.css?v=3">
 </head>
 <body>
 <div class="container">

@@ -16,7 +16,7 @@ require dirname(__DIR__) . '/src/bootstrap.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>イベント事前決済サービス</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/app.css?v=3">
 </head>
 <body>
 <div class="container">
