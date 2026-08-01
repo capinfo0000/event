@@ -133,9 +133,15 @@ require __DIR__ . '/_app_header.php';
         </div>
 
         <label>受け付ける支払い方法</label>
-        <div style="display:flex; gap:20px; margin-top:4px;">
-            <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_prepay" value="1" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?> style="width:auto;"> 事前決済（クレジットカードで前払い）</label>
-            <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
+        <div class="chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">
+            <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" name="allow_prepay" value="1" style="width:auto; margin:0;" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?>>
+                事前決済（クレジットカードで前払い）
+            </label>
+            <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" name="allow_onsite" value="1" style="width:auto; margin:0;" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?>>
+                当日支払い（現地で集金）
+            </label>
         </div>
 
         <label style="margin-top:18px;">入力項目（タグで選択）</label>
