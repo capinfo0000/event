@@ -150,30 +150,31 @@ require __DIR__ . '/_app_header.php';
 
 <div class="card">
     <div class="card__title">APIキーの取得・登録</div>
+    <div class="flash flash--ok" style="margin-bottom:12px;">
+        ✅ <strong>推奨：制限付きキー（rk_）を登録してください。</strong>
+        必要な権限だけに絞ったキーなので、万一漏えいしても被害を最小化できます（できることが権限内に限定）。
+        フルアクセスキー（sk_）は簡単ですが、漏れると被害が大きくなります。
+    </div>
     <p><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済について</button></p>
-    <p>Stripe にログイン →「開発者」→「APIキー」を開く（下のボタン）。</p>
+    <p><strong>おすすめの手順</strong>：Stripe →「開発者」→「APIキー」→「制限付きキーを作成」で、次の権限だけを付与：</p>
     <ul class="muted" style="line-height:1.9;">
-        <li>まずは標準のシークレットキー（<code>sk_test_…</code>）を使うのが簡単です。本番は <code>sk_live_…</code> に差し替え。</li>
-        <li><strong>制限付きキー（Restricted key）</strong>を使う場合は、次の権限だけを設定してください：
-            <ul>
-                <li><strong>Core</strong>: Charges and Refunds … 書き込み ／ Customers … 書き込み ／ Payment Intents … 読み取り</li>
-                <li><strong>Accounts</strong>: Accounts（Basic Business Contact Information）… 読み取り</li>
-                <li><strong>Checkout Sessions</strong>: Checkout Sessions … 書き込み</li>
-            </ul>
-            上記以外はすべて「なし」でOK。
-        </li>
+        <li><strong>Core</strong>: Charges and Refunds … 書き込み ／ Customers … 書き込み ／ Payment Intents … 読み取り</li>
+        <li><strong>Accounts</strong>: Accounts（Basic Business Contact Information）… 読み取り</li>
+        <li><strong>Checkout Sessions</strong>: Checkout Sessions … 書き込み</li>
+        <li>上記以外はすべて「なし」でOK。作成したキー（<code>rk_test_…</code>／本番は <code>rk_live_…</code>）を下に貼り付け。</li>
     </ul>
+    <p class="hint">※ 標準のフルアクセスキー（<code>sk_…</code>）でも動きますが、非推奨です（漏えい時の被害が大きい）。</p>
     <p>
+        <button type="button" class="btn" data-modal-open="rkGuide">制限付きキー（rk_）の作り方</button>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">本番用APIキーを開く</a>
-        <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキー（rk_）の作り方</button>
     </p>
 
     <form method="post" style="margin-top:18px;">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="action" value="save">
-        <label>Stripe 秘密鍵（<code>sk_…</code> または 制限付き <code>rk_…</code>）</label>
-        <input type="password" name="stripe_key" autocomplete="off" placeholder="sk_test_xxxxx">
+        <label>Stripe キー（推奨: 制限付き <code>rk_…</code> ／ 可: <code>sk_…</code>）</label>
+        <input type="password" name="stripe_key" autocomplete="off" placeholder="rk_test_xxxxx（推奨）">
         <p class="hint">※ 入力した鍵は安全に保管され、画面には再表示されません。空のまま保存すると登録を解除します。</p>
         <p style="margin-top:14px;">
             <button type="submit" class="btn">保存する</button>
