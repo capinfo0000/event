@@ -116,7 +116,19 @@ require __DIR__ . '/_app_header.php';
             </div>
             <div>
                 <label>定員目安（申込人数の上限にも使用）</label>
-                <input type="number" name="capacity" min="0" step="1" value="<?= e((string) $form['capacity']) ?>" placeholder="20">
+                <?php
+                $capCur = (int) ($form['capacity'] ?? 0);
+                $capOptions = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500];
+                if ($capCur > 0 && !in_array($capCur, $capOptions, true)) {
+                    $capOptions[] = $capCur; // 既存の任意値も選択肢に含める
+                    sort($capOptions);
+                }
+                ?>
+                <select name="capacity">
+                    <?php foreach ($capOptions as $c): ?>
+                        <option value="<?= $c ?>" <?= $capCur === $c ? 'selected' : '' ?>><?= $c === 0 ? '制限なし' : $c . ' 名' ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
         </div>
 
