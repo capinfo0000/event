@@ -197,7 +197,12 @@ require __DIR__ . '/_app_header.php';
                                     <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
                                 <?php endif; ?>
                             </td>
-                            <td><input type="text" class="js-select" readonly value="<?= e($applyUrl) ?>" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
+                            <td style="min-width:200px; max-width:320px;">
+                                <button type="button" class="js-copy copy-link" data-copy="<?= e($applyUrl) ?>" title="タップでコピー">
+                                    <?= e($applyUrl) ?>
+                                    <span class="copy-fb"></span>
+                                </button>
+                            </td>
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center;">
                                     <a class="btn btn--ghost" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>

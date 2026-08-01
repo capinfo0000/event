@@ -11,6 +11,26 @@
     document.querySelectorAll('.js-select').forEach(function (el) {
       el.addEventListener('click', function () { el.select(); });
     });
+    // タップでクリップボードにコピー（data-copy の値）。全文は要素側で折り返し表示。
+    document.querySelectorAll('.js-copy').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var text = el.getAttribute('data-copy') || el.textContent || '';
+        function feedback() {
+          var fb = el.querySelector('.copy-fb');
+          if (fb) { fb.textContent = '✓ コピーしました'; setTimeout(function () { fb.textContent = ''; }, 1600); }
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(feedback, feedback);
+        } else {
+          var ta = document.createElement('textarea');
+          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+          feedback();
+        }
+      });
+    });
     // 変更で所属フォームを送信（イベント切替の select 等）
     document.querySelectorAll('.js-autosubmit').forEach(function (el) {
       el.addEventListener('change', function () { if (el.form) { el.form.submit(); } });

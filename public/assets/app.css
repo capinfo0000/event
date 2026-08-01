@@ -175,6 +175,16 @@ tbody tr:hover { background: #fafbfc; }
 .total { font-size: 1.35rem; font-weight: 800; color: var(--accent); margin: 16px 0; }
 
 /* ---------- レスポンシブ ---------- */
+/* ---------- コピー用リンク（タップでコピー・全文折り返し） ---------- */
+.copy-link {
+  display: block; width: 100%; text-align: left; font-family: inherit;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: .8rem; color: var(--text); cursor: pointer;
+  word-break: break-all; line-height: 1.5;
+}
+.copy-link:hover { border-color: var(--accent); }
+.copy-link .copy-fb { display: block; color: #16a34a; font-weight: 700; font-size: .74rem; min-height: 1em; margin-top: 2px; }
+
 /* ---------- 入力項目タグ（チップ） ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .chip {
