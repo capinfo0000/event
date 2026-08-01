@@ -52,6 +52,67 @@ switch ($cmd) {
         echo "{$email} を管理者にしました。招待発行（/admin/invites.php）が使えます。\n";
         break;
 
+    case 'revoke-sessions':
+        // 全ログインセッションを失効（乗っ取り・セッション窃取が疑われる時の緊急対応）。
+        $dir = dirname(current_db_path()) . '/sessions';
+        $n = 0;
+        if (is_dir($dir)) {
+            foreach (glob($dir . '/sess_*') ?: [] as $f) {
+                if (@unlink($f)) {
+                    $n++;
+                }
+            }
+        }
+        echo "全ログインセッションを失効しました（{$n} 件削除）。全ユーザーが再ログインになります。\n";
+        break;
+
+    case 'rotate-app-key':
+        // APP_KEY（暗号化鍵）をローテーション。現行キーで全秘密を復号→新キーで再暗号化。
+        // APP_KEY 流出やサーバー侵害が疑われる時の対応。実行前に data/ のバックアップ推奨。
+        if (!crypto_available()) {
+            exit("現在の APP_KEY が未設定/不正です。先に正しい APP_KEY を用意してください。\n");
+        }
+        $rows = db()->query('SELECT * FROM tenants')->fetchAll();
+        $plainKeys = [];
+        $plainTotp = [];
+        foreach ($rows as $t) {
+            $k = get_tenant_stripe_key($t);
+            if ($k !== null) {
+                $plainKeys[$t['id']] = $k;
+            }
+            $s = tenant_totp_secret($t);
+            if ($s !== null) {
+                $plainTotp[$t['id']] = $s;
+            }
+        }
+        $new = base64_encode(random_bytes(32));
+        $envPath = APP_ROOT . '/.env';
+        $lines = is_file($envPath) ? (file($envPath, FILE_IGNORE_NEW_LINES) ?: []) : [];
+        $found = false;
+        foreach ($lines as $i => $l) {
+            if (preg_match('/^\s*APP_KEY\s*=/', $l)) {
+                $lines[$i] = 'APP_KEY=' . $new;
+                $found = true;
+            }
+        }
+        if (!$found) {
+            $lines[] = 'APP_KEY=' . $new;
+        }
+        @file_put_contents($envPath, implode("\n", $lines) . "\n", LOCK_EX);
+        @chmod($envPath, 0600);
+        putenv('APP_KEY=' . $new);
+        $_ENV['APP_KEY'] = $new;
+        foreach ($plainKeys as $id => $k) {
+            set_tenant_stripe_key($id, $k);
+        }
+        foreach ($plainTotp as $id => $s) {
+            set_tenant_totp($id, $s, true);
+        }
+        echo 'APP_KEY をローテーションしました。Stripe鍵 ' . count($plainKeys) . ' 件・2FA ' . count($plainTotp) . " 件を再暗号化。\n";
+        echo "新 APP_KEY: {$new}\n";
+        echo "※ APP_KEY を実環境変数で運用している場合は、環境変数を上記の値に更新してください（.env にも書き込み済み）。\n";
+        break;
+
     case 'disable-2fa':
         $email = $argv[2] ?? '';
         $t = $email !== '' ? find_tenant_by_email($email) : null;
@@ -98,5 +159,5 @@ switch ($cmd) {
         break;
 
     default:
-        echo "コマンド: init | create-admin | make-admin | make-invite | disable-2fa | list-tenants | set-plan\n";
+        echo "コマンド: init | create-admin | make-admin | make-invite | disable-2fa | revoke-sessions | rotate-app-key | list-tenants | set-plan\n";
 }
