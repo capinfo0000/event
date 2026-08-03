@@ -28,10 +28,9 @@ require dirname(__DIR__) . '/src/bootstrap.php';
         <div class="card__title">主催者の方へ</div>
         <p>イベントの作成・参加者管理・返金は主催者ページから行えます。</p>
         <p>
-            <a class="btn" href="admin/signup.php">無料で新規登録</a>
-            <a href="admin/login.php" style="margin-left:10px;">ログイン</a>
+            <a class="btn" href="admin/login.php">ログイン</a>
         </p>
-        <p class="muted">メールアドレスとパスワードだけで、すぐに始められます。</p>
+        <p class="muted">アカウント登録は招待制です。ご利用には管理者が発行するアカウント／招待が必要です。</p>
     </div>
 
     <p class="muted" style="margin-top:24px; border-top:1px solid var(--border); padding-top:14px;">
