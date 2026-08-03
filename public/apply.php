@@ -82,6 +82,11 @@ if ($hasCustom) {
     $maxParty = 1;
 }
 $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // textarea は別扱い
+
+// キャンセルポリシーは申込ページ内のモーダルで表示（別ページへ遷移させない）。
+$policyOwner = find_tenant_by_id((string) ($event['tenant_id'] ?? ''));
+$customPolicy = ($policyOwner !== null && trim((string) ($policyOwner['cancel_policy'] ?? '')) !== '')
+    ? (string) $policyOwner['cancel_policy'] : null;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -183,7 +188,7 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
             <p class="notice" id="prepayBlockNote" style="<?= $blockedInit ? '' : 'display:none;' ?>">⚠️ 現在この主催者は支払い口座の設定が完了していないため、<strong>事前決済（オンライン前払い）</strong>は利用できません。<?= $allowOnsite ? '「当日支払い」を選んでお申し込みください。' : '準備が整うまでお待ちください。' ?></p>
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
-        <p class="hint">キャンセル時の返金は<a href="policy.php?event_id=<?= e($event['id']) ?>" target="_blank">キャンセルポリシー</a>をご確認ください。</p>
+        <p class="hint">キャンセル時の返金は<button type="button" class="btn btn--ghost" data-modal-open="policyInfo" style="padding:3px 10px; font-size:.82rem; vertical-align:baseline;">キャンセルポリシー</button>をご確認ください。</p>
         <?php if ($allowPrepay): ?>
             <p class="hint"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済（カード）の安全性について</button></p>
         <?php endif; ?>
@@ -192,6 +197,31 @@ $cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // text
 </div>
 
 <?php require __DIR__ . '/_prepay_info_modal.php'; ?>
+
+<div class="modal" id="policyInfo" role="dialog" aria-modal="true">
+    <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">キャンセル・返金ポリシー</div>
+        <?php if ($customPolicy !== null): ?>
+            <p><?= nl2br(e($customPolicy)) ?></p>
+        <?php else: ?>
+            <p>本イベントは<strong>事前決済（前払い）</strong>制です。お支払い後のキャンセルについては、以下の返金規定を適用します。</p>
+            <div class="table-wrap" style="margin:12px 0;">
+                <table>
+                    <thead><tr><th>キャンセル時期</th><th>返金額</th></tr></thead>
+                    <tbody>
+                        <tr><td>開催 8 日前まで</td><td>全額返金（決済手数料を除く）</td></tr>
+                        <tr><td>開催 7〜2 日前</td><td>50% 返金</td></tr>
+                        <tr><td>開催前日・当日／無連絡不参加</td><td>返金なし</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted" style="font-size:.85rem;">※ 返金は Stripe を通じて、お支払いに使用されたカードへ行います。決済手数料は返金されません。<br>※ 主催者都合での中止（荒天等）の場合は全額返金します。</p>
+        <?php endif; ?>
+        <p class="muted" style="font-size:.85rem;">カード情報の入力・処理は決済代行 Stripe 上で行われ、主催者は決済情報を受け取りません。</p>
+        <div class="modal__actions"><button type="button" class="btn" data-modal-close>閉じる</button></div>
+    </div>
+</div>
 
     <script nonce="<?= e(csp_nonce()) ?>">
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）

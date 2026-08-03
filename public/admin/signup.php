@@ -16,6 +16,12 @@ $error = '';
 $code = trim((string) ($_GET['invite'] ?? ($_POST['invite'] ?? '')));
 $invite = $code !== '' ? find_valid_invite($code) : null;
 
+// 有効な招待が無ければ登録画面の存在を見せず、ログインへ転送する。
+if ($invite === null) {
+    header('Location: login.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify($_POST['csrf_token'] ?? null);
     $email = (string) ($_POST['email'] ?? '');
