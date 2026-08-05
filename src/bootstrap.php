@@ -1137,6 +1137,27 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     }
 
     // 申込日時の新しい順
+    // 重複排除: 同じイベントで「当日払い(未課金)」→ 後から「事前決済(支払い済み)」に切り替えた場合、
+    // 同一メールなら事前決済を正として当日払いの行を落とす（名簿・定員の二重計上を防ぐ）。
+    $paidEmails = [];
+    foreach ($participants as $p) {
+        if (($p['payment_type'] ?? '') === 'prepay') {
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            if ($em !== '') {
+                $paidEmails[$em] = true;
+            }
+        }
+    }
+    if ($paidEmails !== []) {
+        $participants = array_values(array_filter($participants, static function ($p) use ($paidEmails) {
+            if (($p['payment_type'] ?? '') !== 'onsite') {
+                return true;
+            }
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            return $em === '' || !isset($paidEmails[$em]); // 事前決済済みの同一メールの当日払いは非表示
+        }));
+    }
+
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 
     return $participants;
@@ -1160,6 +1181,41 @@ function find_event_participant_by_customer(string $eventId, ?string $account, s
         }
     }
     return null;
+}
+
+/**
+ * 事前決済に切り替えた参加者の「以前の当日払い申込(未課金Customer)」を削除して掃除する。
+ * 同一イベント・同一メールの payment_type=onsite の顧客を対象。削除件数を返す。
+ * 名簿の重複表示は fetch 側でも排除しているが、これで Stripe 上の残骸も消す。
+ */
+function delete_onsite_customer_by_email(string $eventId, ?string $account, string $email): int
+{
+    $email = strtolower(trim($email));
+    if ($eventId === '' || $email === '') {
+        return 0;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    $deleted = 0;
+    foreach (\Stripe\Customer::all(['limit' => 100], $opts)->autoPagingIterator() as $customer) {
+        $meta = $customer->metadata ?? null;
+        if (($meta['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if (($meta['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        if (strtolower(trim((string) ($customer->email ?? ''))) !== $email) {
+            continue;
+        }
+        try {
+            \Stripe\Customer::delete($customer->id, [], $opts);
+            $deleted++;
+        } catch (\Throwable $e) {
+            error_log('当日払い顧客の削除失敗: ' . $e->getMessage());
+        }
+    }
+    return $deleted;
 }
 
 /**

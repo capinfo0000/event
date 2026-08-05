@@ -31,6 +31,15 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
         if ($session->amount_total !== null) {
             $amountText = format_amount((int)$session->amount_total, (string)$session->currency);
         }
+        // 当日払い→事前決済に切り替えた場合の掃除: 同一イベント・同一メールの
+        // 以前の当日払い申込（未課金Customer）を削除し、名簿の重複を残さない。
+        if ($paid && $email !== '') {
+            try {
+                delete_onsite_customer_by_email($eventId, $account, $email);
+            } catch (\Throwable $e) {
+                error_log('当日払い掃除失敗: ' . $e->getMessage());
+            }
+        }
     } catch (\Stripe\Exception\ApiErrorException $e) {
         error_log('Session 取得失敗: ' . $e->getMessage());
     }
