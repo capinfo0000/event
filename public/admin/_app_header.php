@@ -33,14 +33,14 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>イベント事前決済</title>
+    <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>決済くん</title>
     <link rel="stylesheet" href="/assets/app.css?v=3">
     <script src="/assets/app.js?v=3" defer></script>
 </head>
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand">イベント決済</div>
+        <div class="sidebar__brand">決済くん</div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
                 <a href="<?= e($href) ?>" class="<?= in_array($current, $match, true) ? 'active' : '' ?>">

@@ -89,7 +89,7 @@ function totp_verify(string $secretB32, string $code, int $window = 1): bool
 }
 
 /** 認証アプリ登録用の otpauth:// URI。 */
-function totp_uri(string $secretB32, string $account, string $issuer = 'イベント決済'): string
+function totp_uri(string $secretB32, string $account, string $issuer = '決済くん'): string
 {
     return 'otpauth://totp/' . rawurlencode($issuer . ':' . $account)
         . '?secret=' . $secretB32

@@ -8,10 +8,10 @@ declare(strict_types=1);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>主催者 - イベント事前決済</title>
+    <title>主催者 - 決済くん</title>
     <link rel="stylesheet" href="/assets/app.css?v=3">
     <script src="/assets/app.js?v=3" defer></script>
 </head>
 <body>
 <div class="container container--narrow">
-    <div class="brandbar">イベント決済</div>
+    <div class="brandbar">決済くん</div>
