@@ -101,7 +101,7 @@ if ($event !== null && $_SERVER['REQUEST_METHOD'] === 'POST') {
     <?php else: ?>
         <div class="card">
             <div class="card__title">キャンセルのご連絡</div>
-            <p class="muted" style="margin-top:0;">「<?= e((string) ($event['name'] ?? '')) ?>」のキャンセルをご希望の方は、お申し込み時の<strong>メールアドレスと氏名</strong>をご入力ください。名簿と照合します。</p>
+            <p class="muted" style="margin-top:0;">お申し込み時の<strong>氏名とメールアドレス</strong>をご入力ください。</p>
             <?php if ($error !== ''): ?><p class="err"><?= e($error) ?></p><?php endif; ?>
             <form method="post">
                 <input type="hidden" name="event_id" value="<?= e($eventId) ?>">
