@@ -36,21 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // 各項目のプレビュー先（公開ページ）。自分のテナントIDを付けて自分の文面を表示。
 $tt = urlencode($tenant['id']);
 
-$cancelSample = "本イベントは事前決済（前払い）制です。お支払い後のキャンセルは、以下の規定を適用します。\n\n"
-    . "【返金率（開催日基準）】\n"
-    . "・開催8日前まで：全額返金（決済手数料を除く）\n"
-    . "・開催7〜2日前：50%返金\n"
-    . "・開催前日・当日／無連絡不参加：返金なし\n\n"
-    . "※ 返金はStripeを通じて、お支払いに使用されたカードへ行います。決済手数料は返金されません。\n"
-    . "※ 主催者都合での中止（荒天等）の場合は全額返金します。";
-
-$placeholders = [
-    'cancel_policy'   => $cancelSample,
-    'legal_tokushoho' => "販売事業者：〇〇イベント事務局\n運営責任者：山田 太郎\n所在地：（請求があれば遅滞なく開示します）\n連絡先：info@example.com\n販売価格：各イベントページに表示\n支払方法：クレジットカード（決済代行：Stripe）／当日現金\n支払時期：申込時（事前決済）または当日（当日支払い）\n提供時期：決済完了後ただちに参加受付\n返品・キャンセル：キャンセル・返金ポリシーに準じます",
-    'legal_terms'     => "第1条（本サービス）…\n第2条（アカウント）…\n第3条（料金）…\n第4条（禁止事項）…\n第5条（免責）…",
-    'legal_privacy'   => "1. 取得する情報…\n2. 利用目的…\n3. 第三者提供・委託（決済のため Stripe に提供）…\n4. 保管・安全管理…\n5. 開示・訂正・削除の請求先…",
-];
-
 $token = csrf_token();
 $pageTitle = '規約・ポリシー設定';
 $pageSub = '参加者・公開ページに表示される規約や表記をまとめて編集します';
@@ -69,7 +54,8 @@ require __DIR__ . '/_app_header.php';
 <?php endif; ?>
 
 <p class="muted">
-    4種類の文面を1画面で編集できます。<strong>空のまま保存すると、その項目は既定のテンプレート</strong>が表示されます。
+    4種類の文面を1画面で編集できます。各欄には<strong>現在公開ページに表示されている文面（既定テンプレート）</strong>をあらかじめ読み込んでいます。
+    そのまま編集して保存してください。<strong>空にして保存すると、その項目は既定テンプレートに戻ります。</strong>
     改行はそのまま反映され、HTMLタグは使えません（安全のため自動でエスケープされます）。
 </p>
 
@@ -82,7 +68,12 @@ require __DIR__ . '/_app_header.php';
 <form method="post">
     <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
     <?php foreach ($fields as $col => $meta): ?>
-        <?php $val = (string) ($tenant[$col] ?? ''); ?>
+        <?php
+            $saved = (string) ($tenant[$col] ?? '');
+            $isCustom = trim($saved) !== '';
+            // 未設定なら既定文面を初期表示（＝いま公開ページに出ている文章を編集できる）。
+            $val = $isCustom ? $saved : default_policy_text($col);
+        ?>
         <div class="card legal-sec" id="sec-<?= e($meta['anchor']) ?>">
             <div class="card__title">
                 <span><?= e($meta['label']) ?></span>
@@ -90,14 +81,13 @@ require __DIR__ . '/_app_header.php';
                    href="../<?= e($meta['preview']) ?>.php?t=<?= $tt ?>" target="_blank" rel="noopener">プレビュー（公開ページ）</a>
             </div>
             <p class="muted" style="margin:0 0 8px;">
-                <?php if ($val === ''): ?>
-                    現在は<strong>既定テンプレート</strong>を表示中です。下に入力して保存すると、その内容に差し替わります。
+                <?php if ($isCustom): ?>
+                    <strong>設定済み</strong>の文面です。空にして保存すると既定テンプレートに戻ります。
                 <?php else: ?>
-                    設定済みです。空にして保存すると既定テンプレートに戻ります。
+                    <strong>既定テンプレート</strong>を読み込んでいます。編集して保存すると、その内容に差し替わります。
                 <?php endif; ?>
             </p>
-            <textarea name="<?= e($col) ?>" rows="10" maxlength="8000"
-                      placeholder="<?= e($placeholders[$col] ?? '') ?>"><?= e($val) ?></textarea>
+            <textarea name="<?= e($col) ?>" rows="12" maxlength="8000"><?= e($val) ?></textarea>
         </div>
     <?php endforeach; ?>
 
