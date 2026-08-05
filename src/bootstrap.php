@@ -1343,6 +1343,8 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     $opts = stripe_opts($account);
 
     $participants = [];
+    $cancelFeePaid = []; // orig_customer => true（キャンセル料を支払い済み）
+    $cancelFeeAny  = []; // orig_customer => true（キャンセル料リンクを発行済み・未払い含む）
     $params = [
         'limit' => 100,
         // balance_transaction まで展開して Stripe 手数料（fee）・実受取額（net）を取得する。
@@ -1351,7 +1353,15 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
 
     foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
         if (($session->metadata['payment_type'] ?? '') === 'cancel_fee') {
-            continue; // キャンセル料の支払いは名簿に載せない
+            // キャンセル料の支払いは名簿に載せないが、支払い状況は元の参加者に紐づけて記録する。
+            $oc = (string) ($session->metadata['orig_customer'] ?? '');
+            if ($oc !== '') {
+                $cancelFeeAny[$oc] = true;
+                if ($session->payment_status === 'paid') {
+                    $cancelFeePaid[$oc] = true;
+                }
+            }
+            continue;
         }
         if (($session->metadata['event_id'] ?? null) !== $eventId) {
             continue;
@@ -1524,6 +1534,14 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             return false;
         }));
     }
+
+    // キャンセル料の支払い状況を各参加者へ付与（当日払いの状態表示に使用）。
+    foreach ($participants as &$pp) {
+        $cid = (string) ($pp['customer_id'] ?? '');
+        $pp['fee_paid']      = $cid !== '' && !empty($cancelFeePaid[$cid]);
+        $pp['fee_link_sent'] = $cid !== '' && !empty($cancelFeeAny[$cid]);
+    }
+    unset($pp);
 
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 

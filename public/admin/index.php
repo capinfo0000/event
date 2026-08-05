@@ -176,12 +176,24 @@ require __DIR__ . '/_app_header.php';
                         <?php
                             $cur = $p['currency'];
                             $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
+                            $cancelReq = !empty($p['cancel_requested']);
                             if ($isOnsite) {
-                                $statusHtml = !empty($p['collected'])
-                                    ? '<span class="badge badge--ok">受領済み</span>'
-                                    : '<span class="badge badge--warn">当日支払い・未収</span>';
+                                if (!empty($p['fee_paid'])) {
+                                    $statusHtml = '<span class="badge badge--ok">キャンセル料 入金済み</span>';
+                                } elseif ($cancelReq && !empty($p['fee_link_sent'])) {
+                                    $statusHtml = '<span class="badge badge--warn">キャンセル料 支払い待ち</span>';
+                                } elseif ($cancelReq) {
+                                    $statusHtml = '<span class="badge badge--warn">キャンセル受付（料金なし）</span>';
+                                } elseif (!empty($p['collected'])) {
+                                    $statusHtml = '<span class="badge badge--ok">受領済み</span>';
+                                } else {
+                                    $statusHtml = '<span class="badge badge--warn">当日支払い・未収</span>';
+                                }
                             } elseif ($p['fully_refunded']) {
-                                $statusHtml = '<span class="badge badge--danger">全額返金（キャンセル済）</span>';
+                                $statusHtml = '<span class="badge badge--danger">キャンセル済み（全額返金）</span>';
+                            } elseif ($cancelReq) {
+                                $statusHtml = '<span class="badge badge--warn">返金承認待ち</span>'
+                                    . ($p['amount_refunded'] > 0 ? ' <span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>' : '');
                             } elseif ($p['amount_refunded'] > 0) {
                                 $statusHtml = '<span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
                             } else {
@@ -196,7 +208,6 @@ require __DIR__ . '/_app_header.php';
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
                                 <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
                                 <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
-                                <?php if (!empty($p['cancel_requested'])): ?><span class="badge badge--warn" style="font-size:.72rem;" title="参加者からキャンセルの連絡がありました">キャンセル希望</span><?php endif; ?>
                             </td>
                             <?php foreach ($customCols as $lab): ?>
                                 <td><?= e($p['custom'][$lab] ?? '') ?></td>
@@ -228,30 +239,65 @@ require __DIR__ . '/_app_header.php';
                             </td>
                             <td>
                                 <?php if ($isOnsite): ?>
-                                    <div style="display:flex; gap:6px; align-items:center;">
-                                        <form method="post" action="onsite_collect.php">
-                                            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                            <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                            <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                            <?php if (empty($p['collected'])): ?>
-                                                <input type="hidden" name="collect" value="1">
-                                                <button type="submit" class="btn">受領にする</button>
+                                    <?php $pFee = (int) round(((int) $p['amount']) * (float) $feeInfo['rate']); ?>
+                                    <?php if (!empty($p['fee_paid'])): ?>
+                                        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                                            <span class="badge badge--ok" style="font-size:.72rem;">キャンセル料 入金済み</span>
+                                            <form method="post" action="onsite_cancel.php"
+                                                  data-confirm="「<?= e($p['name']) ?>」さんを名簿から取り消します（キャンセル確定）。よろしいですか？">
+                                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                <button type="submit" class="btn btn--danger">名簿から取消</button>
+                                            </form>
+                                        </div>
+                                    <?php elseif ($cancelReq): ?>
+                                        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                                            <?php if (!empty($p['fee_link_sent']) && $pFee > 0): ?>
+                                                <span class="badge badge--warn" style="font-size:.72rem;">キャンセル料 支払い待ち（<?= e(format_amount($pFee, $cur)) ?>）</span>
+                                                <?php if (($p['email'] ?? '') !== ''): ?>
+                                                    <form method="post" action="onsite_fee.php"
+                                                          data-confirm="「<?= e($p['name']) ?>」さんへキャンセル料 <?= e(format_amount($pFee, $cur)) ?> の支払いリンクを再送します。よろしいですか？">
+                                                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                        <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                        <button type="submit" class="btn btn--ghost">リンク再送（<?= e(format_amount($pFee, $cur)) ?>）</button>
+                                                    </form>
+                                                <?php endif; ?>
                                             <?php else: ?>
-                                                <input type="hidden" name="collect" value="0">
-                                                <button type="submit" class="btn btn--ghost">受領取消</button>
+                                                <span class="badge badge--warn" style="font-size:.72rem;">キャンセル受付（料金なし）</span>
                                             <?php endif; ?>
-                                        </form>
-                                        <form method="post" action="onsite_cancel.php"
-                                              data-confirm="「<?= e($p['name']) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？">
-                                            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                            <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                            <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                            <button type="submit" class="btn btn--danger">取消</button>
-                                        </form>
-                                    </div>
-                                    <?php if (($p['email'] ?? '') !== ''): ?>
-                                        <?php $pFee = (int) round(((int) $p['amount']) * (float) $feeInfo['rate']); ?>
-                                        <?php if ($pFee > 0): ?>
+                                            <form method="post" action="onsite_cancel.php"
+                                                  data-confirm="「<?= e($p['name']) ?>」さんを名簿から取り消します（キャンセル確定）。よろしいですか？">
+                                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                <button type="submit" class="btn btn--ghost">名簿から取消</button>
+                                            </form>
+                                        </div>
+                                    <?php else: ?>
+                                        <div style="display:flex; gap:6px; align-items:center;">
+                                            <form method="post" action="onsite_collect.php">
+                                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                <?php if (empty($p['collected'])): ?>
+                                                    <input type="hidden" name="collect" value="1">
+                                                    <button type="submit" class="btn">受領にする</button>
+                                                <?php else: ?>
+                                                    <input type="hidden" name="collect" value="0">
+                                                    <button type="submit" class="btn btn--ghost">受領取消</button>
+                                                <?php endif; ?>
+                                            </form>
+                                            <form method="post" action="onsite_cancel.php"
+                                                  data-confirm="「<?= e($p['name']) ?>」さん（当日支払い）の申込を取り消します。よろしいですか？">
+                                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                <button type="submit" class="btn btn--danger">取消</button>
+                                            </form>
+                                        </div>
+                                        <?php if (($p['email'] ?? '') !== '' && $pFee > 0): ?>
                                             <form method="post" action="onsite_fee.php" style="margin-top:6px;"
                                                   data-confirm="「<?= e($p['name']) ?>」さんへ、キャンセル料 <?= e(format_amount($pFee, $cur)) ?>（<?= e($feeInfo['label']) ?>）の支払いリンクをメールで送ります。よろしいですか？">
                                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
@@ -259,13 +305,16 @@ require __DIR__ . '/_app_header.php';
                                                 <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
                                                 <button type="submit" class="btn btn--ghost" title="開催日から逆算し、キャンセルポリシーの区分で自動算定した金額の支払いリンクをメール送信します（<?= e($feeInfo['label']) ?>）">キャンセル料を請求（<?= e(format_amount($pFee, $cur)) ?>）</button>
                                             </form>
-                                        <?php else: ?>
-                                            <span class="muted" style="font-size:.78rem; display:block; margin-top:6px;">キャンセル料なし（<?= e($feeInfo['label']) ?>）</span>
+                                        <?php elseif (($p['email'] ?? '') !== ''): ?>
+                                            <span class="muted" style="font-size:.78rem; display:block; margin-top:6px;">現時点はキャンセル料なし（<?= e($feeInfo['label']) ?>）</span>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                 <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
                                     <span class="muted">—</span>
                                 <?php else: ?>
+                                    <?php if ($cancelReq): ?>
+                                        <span class="badge badge--warn" style="font-size:.72rem; display:inline-block; margin-bottom:4px;">返金承認待ち</span>
+                                    <?php endif; ?>
                                     <form method="post" action="refund.php" class="refund-form"
                                           data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（空欄＝全額返金は、手数料を除いた実受取額を返金します）">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
@@ -278,7 +327,7 @@ require __DIR__ . '/_app_header.php';
                                             <input type="number" name="amount" step="0.01" min="0.01"
                                                    placeholder="一部" title="一部返金額（そのまま返金）。空欄なら全額返金＝手数料を除いた実受取額を返金。">
                                         <?php endif; ?>
-                                        <button type="submit" class="btn btn--danger">返金</button>
+                                        <button type="submit" class="btn btn--danger"><?= $cancelReq ? '承認して返金' : '返金' ?></button>
                                     </form>
                                 <?php endif; ?>
                             </td>
