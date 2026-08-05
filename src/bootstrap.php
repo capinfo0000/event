@@ -1158,6 +1158,41 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
         }));
     }
 
+    // 重複排除(当日払い同士): 万一同一メールの当日払いが複数記録されていても、
+    // 名簿・定員では最新の1件だけを残す（申込側でも既存更新にしているが、過去データの保険）。
+    $bestOnsite = [];   // email => 採用中の当日払い行の created
+    foreach ($participants as $p) {
+        if (($p['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        $em = strtolower(trim((string) ($p['email'] ?? '')));
+        if ($em === '') {
+            continue;
+        }
+        $c = (int) ($p['created'] ?? 0);
+        if (!isset($bestOnsite[$em]) || $c > $bestOnsite[$em]) {
+            $bestOnsite[$em] = $c;
+        }
+    }
+    if ($bestOnsite !== []) {
+        $keptOnsite = [];   // email => 既に1件残したか
+        $participants = array_values(array_filter($participants, static function ($p) use ($bestOnsite, &$keptOnsite) {
+            if (($p['payment_type'] ?? '') !== 'onsite') {
+                return true;
+            }
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            if ($em === '') {
+                return true;
+            }
+            // 最新 created の1件だけ残す（同着は最初の1件）。
+            if ((int) ($p['created'] ?? 0) === $bestOnsite[$em] && !isset($keptOnsite[$em])) {
+                $keptOnsite[$em] = true;
+                return true;
+            }
+            return false;
+        }));
+    }
+
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 
     return $participants;
@@ -1216,6 +1251,34 @@ function delete_onsite_customer_by_email(string $eventId, ?string $account, stri
         }
     }
     return $deleted;
+}
+
+/**
+ * 同一イベント・同一メールの「当日払い申込(未課金Customer)」が既にあれば、その Customer ID を返す。
+ * 無ければ null。当日払いの二重申込を防ぐため、checkout 側で「既存があれば更新・無ければ新規作成」に使う。
+ */
+function find_onsite_customer_id_by_email(string $eventId, ?string $account, string $email): ?string
+{
+    $email = strtolower(trim($email));
+    if ($eventId === '' || $email === '') {
+        return null;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    foreach (\Stripe\Customer::all(['limit' => 100], $opts)->autoPagingIterator() as $customer) {
+        $meta = $customer->metadata ?? null;
+        if (($meta['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if (($meta['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        if (strtolower(trim((string) ($customer->email ?? ''))) !== $email) {
+            continue;
+        }
+        return (string) $customer->id;
+    }
+    return null;
 }
 
 /**

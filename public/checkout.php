@@ -165,26 +165,32 @@ if ($capacity > 0) {
 // ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
 if ($paymentType === 'onsite') {
     $onsiteTotal = $onsiteUnit * $partySize;
-    // 課金なしの Stripe 顧客として、運営者のアカウントに名簿を記録する。
-    try {
-        \Stripe\Customer::create([
-            'name' => $metaName,
-            'email' => $email,
+    $custData = [
+        'name' => $metaName,
+        'email' => $email,
+        'phone' => $metaPhone,
+        'metadata' => array_merge([
+            'event_id' => $event['id'],
+            'event_name' => $event['name'] ?? '',
+            'participant_name' => $metaName,
             'phone' => $metaPhone,
-            'metadata' => array_merge([
-                'event_id' => $event['id'],
-                'event_name' => $event['name'] ?? '',
-                'participant_name' => $metaName,
-                'phone' => $metaPhone,
-                'party_size' => (string)$partySize,
-                'note' => $metaNote,
-                'payment_type' => 'onsite',
-                'onsite_unit' => (string)$onsiteUnit,
-                'onsite_total' => (string)$onsiteTotal,
-                'currency' => $currency,
-                'participant_category' => $tierLabel,
-            ], $customMeta),
-        ], $opts);
+            'party_size' => (string)$partySize,
+            'note' => $metaNote,
+            'payment_type' => 'onsite',
+            'onsite_unit' => (string)$onsiteUnit,
+            'onsite_total' => (string)$onsiteTotal,
+            'currency' => $currency,
+            'participant_category' => $tierLabel,
+        ], $customMeta),
+    ];
+    // 二重防止: 同一イベント・同一メールの当日払いが既にあれば、新規作成せず既存を更新する。
+    $existingOnsite = find_onsite_customer_id_by_email($event['id'], $account, $email);
+    try {
+        if ($existingOnsite !== null) {
+            \Stripe\Customer::update($existingOnsite, $custData, $opts);
+        } else {
+            \Stripe\Customer::create($custData, $opts);
+        }
     } catch (\Throwable $e) {
         http_response_code(502);
         error_log('当日申込の記録失敗: ' . $e->getMessage());
