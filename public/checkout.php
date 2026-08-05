@@ -212,6 +212,21 @@ if ($paymentType === 'onsite') {
     exit;
 }
 
+// 二重決済の防止: 同一イベント・同一メールで既に支払い済み（全額返金を除く）なら、
+// 新しい決済を作らず、既存の完了ページへ戻す（重複請求・名簿重複を防ぐ。画面追加なし）。
+$emailLower = strtolower(trim($email));
+foreach (fetch_event_participants($event['id'], $account) as $p) {
+    if (($p['payment_type'] ?? '') === 'prepay'
+        && empty($p['fully_refunded'])
+        && strtolower(trim((string) ($p['email'] ?? ''))) === $emailLower
+        && ($p['session_id'] ?? '') !== ''
+    ) {
+        header('Location: ' . base_url() . '/success.php?event_id=' . urlencode($event['id'])
+            . '&session_id=' . urlencode((string) $p['session_id']), true, 303);
+        exit;
+    }
+}
+
 // ---- 事前決済: Stripe Checkout で前払い ----
 try {
     $session = \Stripe\Checkout\Session::create([
