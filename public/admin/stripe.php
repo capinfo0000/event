@@ -255,6 +255,13 @@ require __DIR__ . '/_app_header.php';
             <li>この画面で<strong>新しいキーに差し替え</strong>。</li>
             <li>身に覚えのない<strong>返金・顧客作成などがないか</strong>、Stripe の取引履歴と監査ログ（<code>logs/audit.log</code> の <code>refund</code>・<code>stripe.key.*</code>）を確認。心当たりがあれば Stripe サポートにも相談を。</li>
         </ol>
+        <div class="flash flash--ng" style="margin:8px 0;">
+            <strong>キーは「合言葉（パスワード）」と同じ秘密情報です。</strong>
+            メール・チャット・スクリーンショット・プログラムのコード・共有フォルダなどに貼らないでください。
+            もし<strong>ご自身で誤ってどこかに載せた／人に共有したかも</strong>と思ったら、少しでも不安があれば、
+            上と同じ手順で<strong>必ず新しいキーに作り直してください</strong>（Stripe で該当キーを失効 → 新しく作成 → この画面で再登録）。
+            作り直せば<strong>古いキーは即座に無効</strong>になり、以後は悪用できなくなります。
+        </div>
         <p class="muted">※ カード番号そのものは Stripe が保持し、鍵の所有者も閲覧できません。<br>※ フルアクセスキー（sk_）でも動きますが、漏れたときの被害が大きくなり得ます。<strong>あなたの資産を守るため</strong>、制限付きキー（本番は <code>rk_live_…</code>）をおすすめします。</p>
 
         <div class="modal__actions">
