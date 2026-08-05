@@ -84,6 +84,15 @@ require __DIR__ . '/_app_header.php';
     .bar select { width: auto; }
     .refund-form { display: flex; gap: 6px; align-items: center; }
     .refund-form input { width: 92px; }
+    /* 統計カードは常に横一列（返金合計まで折り返さない）。狭い画面のみ自動折返し。 */
+    .stat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    @media (max-width: 900px) {
+        .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    }
+    /* 表のセルは改行させない（枠が狭くて文字が縦に折れないように）。 */
+    .table-wrap th, .table-wrap td { white-space: nowrap; }
+    /* お名前・メールは長くなるため折り返しを許可。 */
+    .table-wrap td:nth-child(2), .table-wrap td:nth-child(3) { white-space: normal; }
 </style>
 
 <?php if ($flash !== ''): ?>
