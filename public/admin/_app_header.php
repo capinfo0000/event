@@ -41,8 +41,8 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <div class="app">
     <aside class="sidebar">
         <div class="sidebar__brand" style="justify-content:center; padding:16px;">
-            <img src="/assets/logo.webp?v=1" alt="決済くん"
-                 style="width:100%; max-width:180px; height:auto; display:block; border-radius:12px; background:#fff; padding:8px; box-sizing:border-box;">
+            <img src="/assets/logo.webp?v=2" alt="決済くん"
+                 style="width:100%; max-width:184px; height:auto; display:block; margin:0 auto;">
         </div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
