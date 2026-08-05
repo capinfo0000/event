@@ -209,8 +209,8 @@ require __DIR__ . '/_app_header.php';
     <p class="btnrow" style="margin-top:14px;">
         <button type="button" class="btn btn--ghost" data-modal-open="keyKinds">キーの見分け方</button>
         <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキーの作り方</button>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー（テスト）</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">APIキー（本番）</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">Stripeでテスト用APIキーを開く ↗</a>
+        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripeで本番用APIキーを開く ↗</a>
     </p>
 </div>
 
@@ -218,9 +218,8 @@ require __DIR__ . '/_app_header.php';
     <div class="card__title">その他の設定・確認</div>
     <p class="muted" style="margin-top:0;">決済画面には、Stripe 側で有効化した支払い方法（カード・Apple/Google Pay・PayPay 等）が自動表示されます。アプリ側の追加設定は不要です。</p>
     <p class="btnrow">
-        <button type="button" class="btn btn--ghost" data-modal-open="paypayGuide">PayPay等の支払い方法を追加</button>
+        <button type="button" class="btn btn--ghost" data-modal-open="paypayGuide">支払い方法を追加する（PayPay等の手順）</button>
         <button type="button" class="btn btn--ghost" data-modal-open="testCards">テスト用カード番号</button>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">支払い方法（テスト）</a>
     </p>
 </div>
 
@@ -425,7 +424,7 @@ require __DIR__ . '/_app_header.php';
                 <div class="gt">「決済手段」設定を開く</div>
                 <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong>（決済・チェックアウト・決済手段） →「決済手段」。</p>
                 <p class="muted">⚙ 設定 › Payments › 決済手段</p>
-                <p class="muted">※ 下の「支払い方法（テスト）を開く」ボタンからも直接開けます。</p>
+                <p class="muted">※ 下の「Stripeで支払い方法を開く（テスト／本番）」ボタンからも直接開けます。</p>
             </div>
         </div>
         <div class="guide__row">
@@ -464,7 +463,8 @@ require __DIR__ . '/_app_header.php';
         </div>
 
         <div class="modal__actions">
-            <a class="btn" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">決済手段（テスト）を開く</a>
+            <a class="btn" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">Stripeで支払い方法を開く（テスト）↗</a>
+            <a class="btn" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">Stripeで支払い方法を開く（本番）↗</a>
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
         </div>
     </div>
