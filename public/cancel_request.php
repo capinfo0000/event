@@ -109,7 +109,6 @@ if ($event !== null && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="text" name="name" required maxlength="100" value="<?= e($inName) ?>">
                 <label>メールアドレス（お申し込み時のもの）</label>
                 <input type="email" name="email" required autocomplete="email" value="<?= e($inEmail) ?>">
-                <p class="hint">当日払いの方：キャンセルポリシーに応じたキャンセル料が発生する場合、お支払い画面に進みます。<br>事前決済の方：返金はキャンセルポリシーに従い、主催者の確認後に対応します。</p>
                 <p style="margin-top:14px;"><button type="submit" class="btn btn--block btn--lg">キャンセルを申請する</button></p>
             </form>
         </div>
