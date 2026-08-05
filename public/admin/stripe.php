@@ -209,7 +209,6 @@ require __DIR__ . '/_app_header.php';
     <p class="btnrow" style="margin-top:14px;">
         <button type="button" class="btn btn--ghost" data-modal-open="keyKinds">キーの見分け方</button>
         <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキーの作り方</button>
-        <button type="button" class="btn btn--ghost" data-modal-open="apiKeyOpen">StripeでAPIキーを開く</button>
     </p>
 </div>
 
@@ -319,25 +318,6 @@ require __DIR__ . '/_app_header.php';
     </div>
 </div>
 
-<!-- StripeのAPIキー画面を開く（説明＋テスト/本番へ移動） -->
-<div class="modal" id="apiKeyOpen" role="dialog" aria-modal="true">
-    <div class="modal__box">
-        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
-        <div class="modal__title">Stripe の APIキー画面を開く</div>
-        <p class="modal__lead">Stripe のダッシュボードで、決済に使う APIキー（<code>rk_</code>／<code>sk_</code>）を作成・確認できます。ボタンを押すと Stripe が<strong>別タブ</strong>で開きます。</p>
-        <ul class="muted" style="line-height:1.9;">
-            <li><strong>テスト</strong>：練習・動作確認用（<code>_test_</code>）。本物の課金は発生しません。</li>
-            <li><strong>本番</strong>：実際に課金される環境（<code>_live_</code>）。</li>
-        </ul>
-        <p class="muted">※ 作成手順は「制限付きキーの作り方」、種類の違いは「キーの見分け方」をご覧ください。おすすめは制限付きキー（本番は <code>rk_live_…</code>）です。</p>
-        <div class="modal__actions">
-            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">Stripeでテスト用APIキーを開く ↗</a>
-            <a class="btn" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripeで本番用APIキーを開く ↗</a>
-            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
-        </div>
-    </div>
-</div>
-
 <!-- テスト用カード番号 -->
 <div class="modal" id="testCards" role="dialog" aria-modal="true">
     <div class="modal__box">
@@ -423,7 +403,10 @@ require __DIR__ . '/_app_header.php';
             </div>
         </div>
 
+        <p class="muted" style="margin-top:6px;">下のボタンから Stripe の APIキー画面を別タブで開けます（作成は<strong>テスト</strong>環境から試すのがおすすめ。本番は <code>rk_live_…</code>）。</p>
         <div class="modal__actions">
+            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">Stripeでテスト用APIキーを開く ↗</a>
+            <a class="btn" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripeで本番用APIキーを開く ↗</a>
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
         </div>
     </div>
