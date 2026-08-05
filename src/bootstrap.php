@@ -1204,7 +1204,8 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     $participants = [];
     $params = [
         'limit' => 100,
-        'expand' => ['data.payment_intent.latest_charge', 'data.customer'],
+        // balance_transaction まで展開して Stripe 手数料（fee）・実受取額（net）を取得する。
+        'expand' => ['data.payment_intent.latest_charge.balance_transaction', 'data.customer'],
     ];
 
     foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
@@ -1239,11 +1240,21 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
         $piId = is_object($pi) ? ($pi->id ?? '') : (string) $pi;
         $charge = is_object($pi) ? ($pi->latest_charge ?? null) : null;
 
+        $amountTotal = (int) ($session->amount_total ?? 0);
         $amountRefunded = 0;
-        $fullyRefunded = false;
+        $stripeFee = 0;
         if (is_object($charge)) {
             $amountRefunded = (int) ($charge->amount_refunded ?? 0);
-            $fullyRefunded = (bool) ($charge->refunded ?? false);
+            $bt = $charge->balance_transaction ?? null;
+            $stripeFee = is_object($bt) ? (int) ($bt->fee ?? 0) : 0;
+        }
+        // 主催者の実受取額（手数料控除後）。全額返金はこの額を上限に返金し、主催者が手数料を負担しないようにする。
+        $netAmount = max(0, $amountTotal - $stripeFee);
+        // 「実質キャンセル」＝実受取額をすべて返金済み（Stripe の refunded フラグ、または実受取額に達する返金）。
+        $fullyRefunded = false;
+        if (is_object($charge)) {
+            $fullyRefunded = (bool) ($charge->refunded ?? false)
+                || ($netAmount > 0 && $amountRefunded >= $netAmount);
         }
 
         // 出席チェックは顧客の metadata.attended に保存する（事前・当日で共通）
@@ -1263,7 +1274,9 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'category'        => (string) ($meta['participant_category'] ?? ''),
             'custom'          => extract_custom_meta($meta),
             'note'            => $note,
-            'amount'          => (int) ($session->amount_total ?? 0),
+            'amount'          => $amountTotal,
+            'fee'             => $stripeFee,   // Stripe 手数料
+            'net'             => $netAmount,   // 主催者の実受取額（＝amount − fee）
             'currency'        => (string) ($session->currency ?? 'jpy'),
             'amount_refunded' => $amountRefunded,
             'fully_refunded'  => $fullyRefunded,
@@ -1297,6 +1310,8 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'custom'          => extract_custom_meta($meta),
             'note'            => $meta['note'] ?? '',
             'amount'          => (int) ($meta['onsite_total'] ?? 0),
+            'fee'             => 0, // 当日払いは未課金のため手数料なし
+            'net'             => (int) ($meta['onsite_total'] ?? 0),
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),
             'amount_refunded' => 0,
             'fully_refunded'  => false,

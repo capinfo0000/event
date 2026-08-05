@@ -185,7 +185,8 @@ require __DIR__ . '/_app_header.php';
                             } else {
                                 $statusHtml = '<span class="badge badge--ok">事前決済済み</span>';
                             }
-                            $remaining = $p['amount'] - $p['amount_refunded'];
+                            // 返金の上限＝「実受取額（Stripe手数料を除いた額）」の残り。全額返金もこの額を返金する。
+                            $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
                         ?>
                         <tr>
                             <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
@@ -249,16 +250,16 @@ require __DIR__ . '/_app_header.php';
                                     <span class="muted">—</span>
                                 <?php else: ?>
                                     <form method="post" action="refund.php" class="refund-form"
-                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（Stripe の決済手数料は返金されません）">
+                                          data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（空欄＝全額返金は、手数料を除いた実受取額を返金します）">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
                                         <?php if (strtolower($cur) === 'jpy'): ?>
                                             <input type="number" name="amount" min="1" max="<?= (int) $remaining ?>"
-                                                   placeholder="一部¥" title="一部返金する円。空欄なら全額返金。">
+                                                   placeholder="一部¥" title="一部返金する円（そのまま返金）。空欄なら全額返金＝手数料を除いた実受取額<?= ' ' . e(format_amount((int) $remaining, $cur)) ?>を返金。">
                                         <?php else: ?>
                                             <input type="number" name="amount" step="0.01" min="0.01"
-                                                   placeholder="一部" title="一部返金額。空欄なら全額返金。">
+                                                   placeholder="一部" title="一部返金額（そのまま返金）。空欄なら全額返金＝手数料を除いた実受取額を返金。">
                                         <?php endif; ?>
                                         <button type="submit" class="btn btn--danger">返金</button>
                                     </form>
@@ -269,8 +270,8 @@ require __DIR__ . '/_app_header.php';
                 </tbody>
             </table>
         </div>
-        <p class="muted" style="margin-top:10px;">返金欄を空欄で実行すると全額返金（＝キャンセル）になります。</p>
-        <p class="muted" style="margin-top:4px;">⚠️ 返金しても、Stripe の決済手数料は返金されません（手数料は主催者の負担となります）。全額返金でも手数料分は戻りません。</p>
+        <p class="muted" style="margin-top:10px;">返金欄を<strong>空欄</strong>で実行すると<strong>全額返金（＝キャンセル）</strong>。このとき Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。金額を入力した場合は<strong>その額をそのまま返金</strong>します（上限は実受取額）。</p>
+        <p class="muted" style="margin-top:4px;">⚠️ Stripe の決済手数料は返金時に戻りません。この仕組みでは<strong>手数料分は参加者の実質負担</strong>となります（全額返金でも参加者へ戻るのは実受取額まで）。トラブル防止のため、キャンセル・返金ポリシーに明記することをおすすめします。</p>
     <?php endif; ?>
 <?php endif; ?>
 <?php require __DIR__ . '/_app_footer.php'; ?>
