@@ -41,7 +41,7 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <div class="app">
     <aside class="sidebar">
         <div class="sidebar__brand" style="justify-content:center; padding:16px;">
-            <img src="/assets/logo.svg?v=1" alt="決済くん"
+            <img src="/assets/logo.webp?v=1" alt="決済くん"
                  style="width:100%; max-width:180px; height:auto; display:block; border-radius:12px; background:#fff; padding:8px; box-sizing:border-box;">
         </div>
         <nav class="nav">
