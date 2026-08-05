@@ -1009,18 +1009,41 @@ function stripe_opts(?string $account): array
  * @return array<int, array<string, mixed>>
  */
 /**
- * Stripe metadata の cf0,cf1,... （"ラベル: 値" 形式）を順に配列で取り出す。
- * @return array<int,string>
+ * Stripe metadata の cf0,cf1,... （"ラベル: 値" 形式）を「ラベル => 値」の連想配列で取り出す。
+ * 表示・CSV で項目ごとに列を分けられるようにする。
+ * 氏名相当（お名前列に採用済み）の最初の1項目は重複するため除外する。
+ * @return array<string,string>  ラベル => 値（cf の並び順を保持）
  */
 function extract_custom_meta($meta): array
 {
     $out = [];
+    $nameTaken = false; // 氏名相当の先頭1件は participant_name（お名前列）と重複するので落とす
     if ($meta) {
         for ($i = 0; $i < 20; $i++) {
             $v = $meta['cf' . $i] ?? null;
-            if ($v !== null && $v !== '') {
-                $out[] = (string) $v;
+            if ($v === null || $v === '') {
+                continue;
             }
+            $v = (string) $v;
+            // "ラベル: 値" を分解（区切りが無ければ全体を値として扱う）
+            $pos = mb_strpos($v, ': ');
+            if ($pos !== false) {
+                $label = mb_substr($v, 0, $pos);
+                $value = mb_substr($v, $pos + 2);
+            } else {
+                $label = '';
+                $value = $v;
+            }
+            if ($value === '') {
+                continue;
+            }
+            // お名前列に採用された氏名相当の最初の1件だけ除外（checkout の名前採用と同じ規則）。
+            if (!$nameTaken && $label !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $label)) {
+                $nameTaken = true;
+                continue;
+            }
+            $key = $label !== '' ? $label : ('項目' . ($i + 1));
+            $out[$key] = $value;
         }
     }
     return $out;

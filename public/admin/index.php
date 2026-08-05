@@ -89,10 +89,8 @@ require __DIR__ . '/_app_header.php';
     @media (max-width: 900px) {
         .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
     }
-    /* 表のセルは改行させない（枠が狭くて文字が縦に折れないように）。 */
+    /* 表のセルは改行させない（枠が狭くて文字が縦に折れないように）。横幅が足りなければ表ごと横スクロール。 */
     .table-wrap th, .table-wrap td { white-space: nowrap; }
-    /* お名前・メールは長くなるため折り返しを許可。 */
-    .table-wrap td:nth-child(2), .table-wrap td:nth-child(3) { white-space: normal; }
 </style>
 
 <?php if ($flash !== ''): ?>
@@ -145,11 +143,25 @@ require __DIR__ . '/_app_header.php';
     <?php if ($totalCount === 0): ?>
         <p class="muted">まだ申込はありません。</p>
     <?php else: ?>
+        <?php
+            // 追加入力項目（年齢・フリガナ・紹介者・自由項目）を列として展開する。
+            // 参加者に登場する順で列ラベルを集約（各申込のフィールド順を保持）。
+            $customCols = [];
+            foreach ($participants as $p) {
+                foreach (($p['custom'] ?? []) as $lab => $val) {
+                    if (!in_array($lab, $customCols, true)) {
+                        $customCols[] = $lab;
+                    }
+                }
+            }
+        ?>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
-                        <th>申込日時</th><th>お名前</th><th>メール</th><th>電話</th>
+                        <th>申込日時</th><th>お名前</th>
+                        <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
+                        <th>メール</th><th>電話</th>
                         <th>人数</th><th>支払方法</th><th>金額</th><th>状態</th><th>出席</th><th>キャンセル / 返金</th>
                     </tr>
                 </thead>
@@ -177,10 +189,10 @@ require __DIR__ . '/_app_header.php';
                                 <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
                                 <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
                                 <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
-                                <?php if (!empty($p['custom'])): ?>
-                                    <div class="muted" style="font-size:.78rem; margin-top:2px;"><?php foreach ($p['custom'] as $cv): ?><?= e($cv) ?><br><?php endforeach; ?></div>
-                                <?php endif; ?>
                             </td>
+                            <?php foreach ($customCols as $lab): ?>
+                                <td><?= e($p['custom'][$lab] ?? '') ?></td>
+                            <?php endforeach; ?>
                             <td><?= e($p['email']) ?></td>
                             <td><?= e($p['phone']) ?></td>
                             <td><?= (int) $p['party_size'] ?> 名</td>

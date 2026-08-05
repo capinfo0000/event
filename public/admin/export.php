@@ -58,6 +58,12 @@ foreach ($participants as $p) {
         $idRef = $p['payment_intent'];
     }
 
+    // 追加項目は「ラベル: 値 / ラベル: 値」でまとめる（氏名は重複排除済み）。
+    $customPairs = [];
+    foreach (($p['custom'] ?? []) as $lab => $val) {
+        $customPairs[] = ($lab !== '' ? $lab . ': ' : '') . $val;
+    }
+
     // 参加者由来の文字列（氏名・メール・電話・備考）は数式インジェクション対策で無害化する。
     fputcsv($out, [
         date('Y-m-d H:i', $p['created']),
@@ -66,7 +72,7 @@ foreach ($participants as $p) {
         csv_cell($p['phone']),
         (int) $p['party_size'] . '名',
         csv_cell($p['category'] ?? ''),
-        csv_cell(implode(' / ', $p['custom'] ?? [])),
+        csv_cell(implode(' / ', $customPairs)),
         $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),
