@@ -44,14 +44,21 @@ a:hover { text-decoration: underline; }
 .appshell { display: flex; flex-direction: column; min-height: 100vh; }
 .brandbar-top {
   height: 64px; flex: 0 0 64px;
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 20px; background: var(--surface);
+  display: flex; align-items: stretch;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 30;
 }
-.brandbar-top img { height: 42px; width: auto; display: block; }
-.brandbar-top__spacer { flex: 1; }
-.brandbar-top__who { font-size: .82rem; color: var(--muted); font-weight: 600; text-align: right; line-height: 1.3; }
+.brandbar-top__logo {
+  flex: 0 0 240px; display: flex; align-items: center;
+  padding: 0 20px; border-right: 1px solid var(--border);
+}
+.brandbar-top__logo img { height: 42px; width: auto; display: block; }
+.brandbar-top__page {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 28px;
+}
 
 .app { display: flex; flex: 1; min-height: 0; }
 
@@ -215,8 +222,10 @@ tbody tr:hover { background: #fafbfc; }
 .cf-row .btn { flex: 0 0 auto; padding: 8px 12px; }
 
 @media (max-width: 720px) {
-  .brandbar-top { position: static; height: 54px; flex-basis: 54px; }
-  .brandbar-top img { height: 34px; }
+  .brandbar-top { position: static; height: auto; flex-basis: auto; flex-direction: column; align-items: stretch; }
+  .brandbar-top__logo { flex-basis: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 10px 16px; }
+  .brandbar-top__logo img { height: 34px; }
+  .brandbar-top__page { padding: 10px 16px; }
   .app { flex-direction: column; }
   .sidebar { width: 100%; flex: none; height: auto; position: static;
              flex-direction: row; align-items: center; overflow-x: auto; }

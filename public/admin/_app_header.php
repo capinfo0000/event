@@ -34,13 +34,20 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>決済くん</title>
-    <link rel="stylesheet" href="/assets/app.css?v=4">
+    <link rel="stylesheet" href="/assets/app.css?v=5">
     <script src="/assets/app.js?v=3" defer></script>
 </head>
 <body>
 <div class="appshell">
     <header class="brandbar-top">
-        <img src="/assets/logo-wide.webp?v=1" alt="決済くん">
+        <div class="brandbar-top__logo"><img src="/assets/logo-wide.webp?v=1" alt="決済くん"></div>
+        <div class="brandbar-top__page">
+            <div>
+                <h1 class="topbar__title"><?= e($pageTitle) ?></h1>
+                <?php if ($pageSub !== ''): ?><p class="topbar__sub"><?= e($pageSub) ?></p><?php endif; ?>
+            </div>
+            <?php if ($topActions !== ''): ?><div class="topbar__actions"><?= $topActions ?></div><?php endif; ?>
+        </div>
     </header>
     <div class="app">
     <aside class="sidebar">
@@ -57,13 +64,6 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
         <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
     </aside>
     <div class="content">
-        <header class="topbar">
-            <div>
-                <h1 class="topbar__title"><?= e($pageTitle) ?></h1>
-                <?php if ($pageSub !== ''): ?><p class="topbar__sub"><?= e($pageSub) ?></p><?php endif; ?>
-            </div>
-            <?php if ($topActions !== ''): ?><div class="topbar__actions"><?= $topActions ?></div><?php endif; ?>
-        </header>
         <main class="page">
         <?php if (is_demo_tenant($tenant)): ?>
             <div class="flash" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;">
