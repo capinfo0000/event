@@ -189,7 +189,8 @@ $customPolicy = ($policyOwner !== null && trim((string) ($policyOwner['cancel_po
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
         <p class="hint">キャンセル時の返金は<button type="button" class="btn btn--ghost" data-modal-open="policyInfo" style="padding:3px 10px; font-size:.82rem; vertical-align:baseline;">キャンセルポリシー</button>をご確認ください。</p>
-        <p class="hint">ご参加いただけなくなった場合は、<strong>開催日前までに主催者へキャンセルのご連絡</strong>をお願いします。無断キャンセル（無連絡不参加）は、キャンセルポリシーに基づき<strong>キャンセル料</strong>が発生する場合があります。</p>
+        <p class="hint">ご参加いただけなくなった場合は、<strong>開催日前までに</strong>キャンセルのご連絡をお願いします。無断キャンセル（無連絡不参加）は、キャンセルポリシーに基づき<strong>キャンセル料</strong>が発生する場合があります。</p>
+        <p style="margin-top:6px;"><a class="btn btn--ghost" href="cancel_request.php?event_id=<?= e($event['id']) ?>">キャンセル連絡はこちら →</a></p>
         <?php if ($allowPrepay): ?>
             <p class="hint"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済（カード）の安全性について</button></p>
         <?php endif; ?>

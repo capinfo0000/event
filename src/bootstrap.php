@@ -297,6 +297,102 @@ function cancellation_fee_rate_for_event(string $eventDate, ?int $nowTs = null):
 }
 
 /**
+ * 名簿から「メール＋氏名の両方一致」の参加者を返す（公開キャンセル手続きの本人確認）。
+ * 既に全額返金済み（キャンセル済）の行は対象外。無ければ null。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_email_name(string $eventId, ?string $account, string $email, string $name): ?array
+{
+    $email = strtolower(trim($email));
+    $name = trim($name);
+    if ($email === '' || $name === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (!empty($p['fully_refunded'])) {
+            continue;
+        }
+        if (strtolower(trim((string) ($p['email'] ?? ''))) === $email
+            && trim((string) ($p['name'] ?? '')) === $name) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/** 参加者（Stripe顧客）に「キャンセル希望」の印を付ける（主催者の承認待ちの目印）。 */
+function mark_cancel_requested(?string $account, string $customerId): void
+{
+    if ($customerId === '') {
+        return;
+    }
+    init_stripe();
+    try {
+        \Stripe\Customer::update(
+            $customerId,
+            ['metadata' => ['cancel_requested' => '1', 'cancel_requested_at' => (string) time()]],
+            stripe_opts($account)
+        );
+    } catch (\Throwable $e) {
+        error_log('キャンセル希望マーク失敗: ' . $e->getMessage());
+    }
+}
+
+/**
+ * キャンセル料の支払い用 Checkout を作成する（当日払いのキャンセル料に使用）。
+ * 名簿には載せない支払い（metadata.payment_type=cancel_fee）。失敗時 null。
+ */
+function create_cancel_fee_checkout(?string $account, array $event, string $email, string $name, string $customerId, int $fee): ?\Stripe\Checkout\Session
+{
+    if ($fee <= 0) {
+        return null;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    $currency = strtolower((string) ($event['currency'] ?? 'jpy'));
+    try {
+        return \Stripe\Checkout\Session::create([
+            'mode' => 'payment',
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => $currency,
+                    'unit_amount' => $fee,
+                    'product_data' => [
+                        'name' => '【キャンセル料】' . ($event['name'] ?? 'イベント'),
+                        'description' => trim(((string) ($event['date'] ?? '')) . ' / ' . ((string) ($event['place'] ?? ''))),
+                    ],
+                ],
+                'quantity' => 1,
+            ]],
+            'customer_email' => $email,
+            'metadata' => [
+                'payment_type'     => 'cancel_fee',
+                'fee_event_id'     => (string) ($event['id'] ?? ''),
+                'fee_event_name'   => (string) ($event['name'] ?? ''),
+                'participant_name' => $name,
+                'orig_customer'    => $customerId,
+            ],
+            'payment_intent_data' => [
+                'metadata' => [
+                    'payment_type'  => 'cancel_fee',
+                    'fee_event_id'  => (string) ($event['id'] ?? ''),
+                    'orig_customer' => $customerId,
+                ],
+            ],
+            'custom_text' => [
+                'submit' => ['message' => 'キャンセルポリシーに基づくキャンセル料のお支払いです。'],
+            ],
+            'success_url' => base_url() . '/cancelfee_done.php',
+            'cancel_url'  => base_url() . '/cancelfee_done.php?canceled=1',
+        ], $opts);
+    } catch (\Throwable $e) {
+        error_log('キャンセル料Checkout作成失敗: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
  * 各種ポリシー・規約の既定文面（プレーンテキスト）を返す。
  * 管理画面「規約・ポリシー」の編集欄に初期表示し、主催者がこれを土台に編集できるようにする。
  * 未対応のキーは空文字。
@@ -1305,6 +1401,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
         $customerObj = is_object($session->customer) ? $session->customer : null;
         $customerId = $customerObj ? ($customerObj->id ?? '') : (string) $session->customer;
         $attended = $customerObj ? (($customerObj->metadata['attended'] ?? '') === '1') : false;
+        $cancelReq = $customerObj ? (($customerObj->metadata['cancel_requested'] ?? '') === '1') : false;
 
         $participants[] = [
             'payment_type'    => 'prepay',   // 事前決済
@@ -1326,6 +1423,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'fully_refunded'  => $fullyRefunded,
             'collected'       => false, // 事前決済では使わない（当日支払い用）
             'attended'        => $attended,
+            'cancel_requested' => $cancelReq,
             'created'         => (int) ($session->created ?? 0),
         ];
     }
@@ -1361,6 +1459,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'fully_refunded'  => false,
             'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の受領（集金）済みか
             'attended'        => (($meta['attended'] ?? '') === '1'),  // 出席確認済みか
+            'cancel_requested' => (($meta['cancel_requested'] ?? '') === '1'), // 参加者からのキャンセル希望
             'created'         => (int) ($customer->created ?? 0),
         ];
     }
