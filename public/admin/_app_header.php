@@ -40,7 +40,10 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand">決済くん</div>
+        <div class="sidebar__brand" style="justify-content:center; padding:16px;">
+            <img src="/assets/logo.png?v=1" alt="決済くん"
+                 style="width:100%; max-width:180px; height:auto; display:block; border-radius:12px; background:#fff; padding:8px; box-sizing:border-box;">
+        </div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
                 <a href="<?= e($href) ?>" class="<?= in_array($current, $match, true) ? 'active' : '' ?>">
