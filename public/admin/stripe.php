@@ -466,8 +466,8 @@ require __DIR__ . '/_app_header.php';
 
         <div class="modal__actions" style="flex-direction:column; align-items:stretch; gap:10px;">
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                <a class="btn" style="flex:1 1 200px; text-align:center;" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">Stripeで支払い方法を開く（テスト）↗</a>
-                <a class="btn" style="flex:1 1 200px; text-align:center;" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">Stripeで支払い方法を開く（本番）↗</a>
+                <a class="btn" style="flex:1 1 180px; text-align:center; white-space:nowrap;" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">Stripeで開く（テスト）↗</a>
+                <a class="btn" style="flex:1 1 180px; text-align:center; white-space:nowrap;" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">Stripeで開く（本番）↗</a>
             </div>
             <button type="button" class="btn btn--ghost" data-modal-close style="align-self:flex-start;">閉じる</button>
         </div>
