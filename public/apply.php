@@ -221,7 +221,18 @@ $customPolicy = ($policyOwner !== null && trim((string) ($policyOwner['cancel_po
             </div>
             <p class="muted" style="font-size:.85rem;">※「全額返金」は、決済時にかかった Stripe 手数料を差し引いた全額（主催者の実受取額）の返金を指します。手数料は返金時に戻らないため、その分は差し引かれます。<br>※ 主催者都合での中止（荒天等）の場合も、Stripe手数料を差し引いた全額を返金します。</p>
             <p style="margin:12px 0 4px; font-weight:700;">当日払いのキャンセル</p>
-            <p class="muted" style="font-size:.85rem; margin-top:0;">当日払いは事前決済が発生しないため返金はありません。ご参加いただけなくなった場合は、開催日前までに主催者へキャンセルのご連絡をお願いします。無断でのキャンセル（無連絡不参加）は、キャンセルポリシーに基づくキャンセル料が発生する場合があります。</p>
+            <p class="muted" style="font-size:.85rem; margin:0 0 6px;">当日払いは事前の決済は発生しませんが、キャンセルの場合は下記のキャンセル料を申し受けます（開催日基準）。</p>
+            <div class="table-wrap" style="margin:0 0 8px;">
+                <table>
+                    <thead><tr><th>キャンセル時期</th><th>キャンセル料</th></tr></thead>
+                    <tbody>
+                        <tr><td>開催 8 日前まで</td><td>無料</td></tr>
+                        <tr><td>開催 7〜2 日前</td><td>参加費の 50%</td></tr>
+                        <tr><td>開催前日・当日／無連絡不参加</td><td>参加費の全額</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted" style="font-size:.85rem; margin-top:0;">※ キャンセル料が発生する場合は、お支払い用のリンクをメールでお送りします。開催日前までにキャンセルのご連絡をお願いします。</p>
         <?php endif; ?>
         <p class="muted" style="font-size:.85rem;">カード情報の入力・処理は決済代行 Stripe 上で行われ、主催者は決済情報を受け取りません。</p>
         <div class="modal__actions"><button type="button" class="btn" data-modal-close>閉じる</button></div>
