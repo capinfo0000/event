@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="決済くん">
+  <title>決済くん</title>
+  <defs>
+    <style>
+      .navy { fill: #14307a; }
+      .outline { fill: none; stroke: #1c3f94; stroke-width: 24; }
+      .band { fill: #3b7fe0; }
+      .card { fill: #a9c7ef; stroke: #1c3f94; stroke-width: 10; }
+      .green { fill: #5cb85c; }
+      .white { fill: #ffffff; }
+      .limb { fill: none; stroke: #1c3f94; stroke-width: 24; stroke-linecap: round; }
+      .yen { fill: none; stroke: #ffffff; stroke-width: 15; stroke-linecap: round; }
+      .brow { fill: none; stroke: #14307a; stroke-width: 13; stroke-linecap: round; }
+      .check { fill: none; stroke: #ffffff; stroke-width: 22; stroke-linecap: round; stroke-linejoin: round; }
+      .txt { font-family: "Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif; font-weight: 900; font-size: 165px; }
+    </style>
+  </defs>
+
+  <!-- arms (behind body) -->
+  <path class="limb" d="M 340 480 Q 292 505 262 520"/>
+  <path class="limb" d="M 660 455 Q 712 420 742 402"/>
+
+  <!-- card in left hand -->
+  <g transform="rotate(-16 235 505)">
+    <rect class="card" x="176" y="466" width="128" height="82" rx="12"/>
+    <rect x="188" y="492" width="44" height="30" rx="4" fill="#7fa8e0"/>
+    <path d="M 210 498 v 18 M 201 507 h 18" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 188 534 h 104" stroke="#1c3f94" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <!-- green check circle -->
+  <circle class="green" cx="772" cy="368" r="72"/>
+  <path class="check" d="M 740 370 L 764 394 L 808 346"/>
+
+  <!-- calendar rings -->
+  <rect class="navy" x="430" y="156" width="26" height="74" rx="13"/>
+  <rect class="navy" x="487" y="156" width="26" height="74" rx="13"/>
+  <rect class="navy" x="544" y="156" width="26" height="74" rx="13"/>
+
+  <!-- body -->
+  <rect class="outline" x="322" y="212" width="356" height="436" rx="66"/>
+
+  <!-- legs -->
+  <rect class="navy" x="418" y="636" width="46" height="62" rx="23"/>
+  <rect class="navy" x="536" y="636" width="46" height="62" rx="23"/>
+
+  <!-- eyebrows -->
+  <path class="brow" d="M 408 348 Q 440 326 472 348"/>
+  <path class="brow" d="M 528 348 Q 560 326 592 348"/>
+
+  <!-- eyes -->
+  <ellipse class="navy" cx="440" cy="388" rx="20" ry="27"/>
+  <ellipse class="navy" cx="560" cy="388" rx="20" ry="27"/>
+
+  <!-- mouth -->
+  <path class="navy" d="M 452 432 C 472 440 528 440 548 432 C 543 498 457 498 452 432 Z"/>
+  <ellipse class="band" cx="500" cy="476" rx="22" ry="13"/>
+
+  <!-- belly band with yen -->
+  <rect class="band" x="360" y="520" width="280" height="92" rx="30"/>
+  <path class="yen" d="M 472 538 L 500 566 L 528 538"/>
+  <path class="yen" d="M 500 566 L 500 596"/>
+  <path class="yen" d="M 477 573 L 523 573"/>
+  <path class="yen" d="M 477 586 L 523 586"/>
+
+  <!-- wordmark -->
+  <text class="txt" x="500" y="880" text-anchor="middle"><tspan fill="#14307a">決済</tspan><tspan fill="#4a90e2">くん</tspan></text>
+  <!-- green accent dot -->
+  <circle class="green" cx="243" cy="742" r="15"/>
+</svg>
