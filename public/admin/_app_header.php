@@ -40,9 +40,9 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand" style="justify-content:center; padding:16px;">
+        <div class="sidebar__brand" style="justify-content:center; padding:18px 14px; background:#fff; border-bottom:1px solid rgba(0,0,0,.06);">
             <img src="/assets/logo.webp?v=2" alt="決済くん"
-                 style="width:100%; max-width:184px; height:auto; display:block; margin:0 auto;">
+                 style="width:100%; max-width:188px; height:auto; display:block; margin:0 auto;">
         </div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
