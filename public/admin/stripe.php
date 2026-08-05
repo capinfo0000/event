@@ -207,6 +207,7 @@ require __DIR__ . '/_app_header.php';
     <?php endif; ?>
 
     <p class="btnrow" style="margin-top:14px;">
+        <button type="button" class="btn btn--ghost" data-modal-open="keyInfo">制限付きキーについて</button>
         <button type="button" class="btn btn--ghost" data-modal-open="keyKinds">キーの見分け方</button>
         <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキーの作り方</button>
     </p>
