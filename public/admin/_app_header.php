@@ -40,9 +40,9 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
 <body>
 <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand" style="justify-content:center; padding:18px 14px; background:#fff; border-bottom:1px solid rgba(0,0,0,.06);">
-            <img src="/assets/logo.webp?v=2" alt="決済くん"
-                 style="width:100%; max-width:188px; height:auto; display:block; margin:0 auto;">
+        <div class="sidebar__brand" style="height:74px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:10px 16px; background:#fff; border-bottom:1px solid rgba(0,0,0,.06);">
+            <img src="/assets/logo-wide.webp?v=1" alt="決済くん"
+                 style="max-height:100%; max-width:100%; width:auto; height:auto; display:block;">
         </div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
@@ -57,7 +57,7 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
         <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
     </aside>
     <div class="content">
-        <header class="topbar">
+        <header class="topbar" style="height:74px; box-sizing:border-box;">
             <div>
                 <h1 class="topbar__title"><?= e($pageTitle) ?></h1>
                 <?php if ($pageSub !== ''): ?><p class="topbar__sub"><?= e($pageSub) ?></p><?php endif; ?>
