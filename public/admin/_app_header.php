@@ -20,7 +20,7 @@ $navItems = [
     ['events.php',    '', 'イベント管理',   ['events.php']],
     ['index.php',     '', '参加者管理',     ['index.php']],
     ['stripe.php',    '', 'Stripe設定',    ['stripe.php', 'setup.php']],
-    ['policy_edit.php', '', 'キャンセルポリシー', ['policy_edit.php']],
+    ['legal_edit.php', '', '規約・ポリシー', ['legal_edit.php', 'policy_edit.php']],
     ['account.php',   '', 'アカウント設定', ['account.php']],
     ['twofa_setup.php', '', '2段階認証', ['twofa_setup.php']],
 ];

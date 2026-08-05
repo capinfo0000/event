@@ -8,9 +8,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
+// 主催者（運営者）が管理画面で設定した文面があればそれを表示。無ければ下のテンプレート。
+$owner = resolve_legal_owner();
+$custom = ($owner !== null && trim((string) ($owner['legal_terms'] ?? '')) !== '')
+    ? (string) $owner['legal_terms']
+    : null;
+
 $title = '利用規約';
 require __DIR__ . '/_legal_header.php';
 ?>
+<?php if ($custom !== null): ?>
+<div class="legal-custom"><?= nl2br(e($custom)) ?></div>
+<?php else: ?>
 <p>本規約は、［事業者名］（以下「当方」）が提供するイベント事前決済サービス（以下「本サービス」）の利用条件を定めるものです。主催者および参加者（以下「利用者」）は、本規約に同意のうえ本サービスを利用するものとします。</p>
 
 <h2>第1条（本サービス）</h2>
@@ -41,4 +50,5 @@ require __DIR__ . '/_legal_header.php';
 <p>当方は必要に応じて本規約を変更できます。変更後の規約は本ページに掲示した時点で効力を生じます。</p>
 
 <p class="muted">制定日：［YYYY年MM月DD日］　／　※本ページはテンプレートです。実運用前に内容を確定してください。</p>
+<?php endif; ?>
 <?php require __DIR__ . '/_legal_footer.php'; ?>

@@ -87,7 +87,12 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
 
     <p class="muted" style="margin-top:24px; font-size:.85rem;">
         カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。
-        <a href="policy.php?t=<?= e(urlencode($tenantId)) ?>">キャンセル・返金ポリシー</a>
+    </p>
+    <p class="muted" style="margin-top:6px; font-size:.85rem;">
+        <a href="policy.php?t=<?= e(urlencode($tenantId)) ?>">キャンセル・返金ポリシー</a> ／
+        <a href="tokushoho.php?t=<?= e(urlencode($tenantId)) ?>">特定商取引法に基づく表記</a> ／
+        <a href="terms.php?t=<?= e(urlencode($tenantId)) ?>">利用規約</a> ／
+        <a href="privacy.php?t=<?= e(urlencode($tenantId)) ?>">プライバシーポリシー</a>
     </p>
     <p style="margin-top:8px;"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済について</button></p>
 </div>

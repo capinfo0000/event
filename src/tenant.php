@@ -227,9 +227,57 @@ function create_tenant(string $email, string $password, string $displayName, boo
 /** 主催者のキャンセル・返金ポリシー本文を保存する（空/null で既定文面に戻す）。 */
 function set_tenant_cancel_policy(string $tenantId, ?string $text): void
 {
+    set_tenant_policy_text($tenantId, 'cancel_policy', $text);
+}
+
+/**
+ * 主催者ごとの規約・表記テキストを保存する（空/null で既定テンプレートに戻す）。
+ * 対象カラムはキャンセルポリシー・特商法・利用規約・プライバシーの4種のみ。
+ * $field はホワイトリスト照合してから SQL に埋め込むため、外部入力でも安全。
+ */
+function set_tenant_policy_text(string $tenantId, string $field, ?string $text): void
+{
+    $allowed = ['cancel_policy', 'legal_tokushoho', 'legal_terms', 'legal_privacy'];
+    if (!in_array($field, $allowed, true)) {
+        throw new \InvalidArgumentException('unknown policy field: ' . $field);
+    }
     $text = ($text !== null && trim($text) !== '') ? $text : null;
-    $stmt = db()->prepare('UPDATE tenants SET cancel_policy = ? WHERE id = ?');
+    $stmt = db()->prepare("UPDATE tenants SET {$field} = ? WHERE id = ?");
     $stmt->execute([$text, $tenantId]);
+}
+
+/**
+ * プラットフォーム運営者（最初の管理者テナント）を返す。
+ * 主催者を特定できない全体向け法務ページ（TOP からのリンク等）の既定表示に使う。
+ */
+function platform_operator_tenant(): ?array
+{
+    $stmt = db()->query('SELECT * FROM tenants WHERE is_admin = 1 ORDER BY created_at ASC, id ASC LIMIT 1');
+    $row = $stmt !== false ? $stmt->fetch() : false;
+    return $row ?: null;
+}
+
+/**
+ * 公開の法務ページ（特商法・利用規約・プライバシー・キャンセルポリシー）で
+ * 表示対象の主催者を特定する。?event_id= か ?t= があればその主催者、
+ * 無ければプラットフォーム運営者（管理者）を返す。
+ *
+ * @return array<string,mixed>|null
+ */
+function resolve_legal_owner(): ?array
+{
+    $eventId = (string) ($_GET['event_id'] ?? '');
+    $t = (string) ($_GET['t'] ?? '');
+    if ($eventId !== '') {
+        $ev = find_event($eventId);
+        if ($ev !== null) {
+            return find_tenant_by_id((string) $ev['tenant_id']);
+        }
+    }
+    if ($t !== '') {
+        return find_tenant_by_id($t);
+    }
+    return platform_operator_tenant();
 }
 
 function set_tenant_stripe_account(string $tenantId, ?string $accountId): void

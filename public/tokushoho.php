@@ -10,9 +10,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
+// 主催者（運営者）が管理画面で設定した文面があればそれを表示。無ければ下のテンプレート。
+$owner = resolve_legal_owner();
+$custom = ($owner !== null && trim((string) ($owner['legal_tokushoho'] ?? '')) !== '')
+    ? (string) $owner['legal_tokushoho']
+    : null;
+
 $title = '特定商取引法に基づく表記';
 require __DIR__ . '/_legal_header.php';
 ?>
+<?php if ($custom !== null): ?>
+<div class="legal-custom"><?= nl2br(e($custom)) ?></div>
+<?php else: ?>
 <table>
     <tr><th>販売事業者</th><td>［事業者名 / 屋号］</td></tr>
     <tr><th>運営責任者</th><td>［氏名］</td></tr>
@@ -26,4 +35,5 @@ require __DIR__ . '/_legal_header.php';
     <tr><th>返品・キャンセル</th><td>プラン利用料：日割り返金は行いません（解約後は次回更新を停止）。イベント参加費：<a href="policy.php">キャンセル・返金ポリシー</a>に準じます。</td></tr>
 </table>
 <p class="muted">※ 本ページはテンプレートです。実運用前に必ず内容を確定してください。</p>
+<?php endif; ?>
 <?php require __DIR__ . '/_legal_footer.php'; ?>

@@ -8,9 +8,18 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
+// 主催者（運営者）が管理画面で設定した文面があればそれを表示。無ければ下のテンプレート。
+$owner = resolve_legal_owner();
+$custom = ($owner !== null && trim((string) ($owner['legal_privacy'] ?? '')) !== '')
+    ? (string) $owner['legal_privacy']
+    : null;
+
 $title = 'プライバシーポリシー';
 require __DIR__ . '/_legal_header.php';
 ?>
+<?php if ($custom !== null): ?>
+<div class="legal-custom"><?= nl2br(e($custom)) ?></div>
+<?php else: ?>
 <p>［事業者名］（以下「当方」）は、本サービスにおける個人情報を以下のとおり取り扱います。</p>
 
 <h2>1. 取得する情報</h2>
@@ -36,4 +45,5 @@ require __DIR__ . '/_legal_header.php';
 <p>本ポリシーは必要に応じて改定し、本ページに掲示します。</p>
 
 <p class="muted">制定日：［YYYY年MM月DD日］　／　※本ページはテンプレートです。実運用前に内容を確定してください。</p>
+<?php endif; ?>
 <?php require __DIR__ . '/_legal_footer.php'; ?>

@@ -9,18 +9,8 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
-// 表示対象の主催者を特定（event_id または t=tenant_id）。その主催者が設定した文面を優先表示する。
-$eventId = (string) ($_GET['event_id'] ?? '');
-$t = (string) ($_GET['t'] ?? '');
-$owner = null;
-if ($eventId !== '') {
-    $ev = find_event($eventId);
-    if ($ev !== null) {
-        $owner = find_tenant_by_id((string) $ev['tenant_id']);
-    }
-} elseif ($t !== '') {
-    $owner = find_tenant_by_id($t);
-}
+// 表示対象の主催者を特定（event_id / t=tenant_id、無ければ運営者）。その主催者が設定した文面を優先表示する。
+$owner = resolve_legal_owner();
 $customPolicy = ($owner !== null && trim((string) ($owner['cancel_policy'] ?? '')) !== '')
     ? (string) $owner['cancel_policy']
     : null;

@@ -83,6 +83,9 @@ function db_migrate(\PDO $pdo): void
     db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
     db_add_column_if_missing($pdo, 'tenants', 'stripe_secret_enc', 'TEXT');  // 主催者が画面登録した Stripe 秘密鍵（AES-256-GCM 暗号化）
     db_add_column_if_missing($pdo, 'tenants', 'cancel_policy', 'TEXT');      // 主催者ごとのキャンセル・返金ポリシー本文（未設定なら既定文面）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_tokushoho', 'TEXT');    // 特定商取引法に基づく表記（未設定なら既定テンプレート）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_terms', 'TEXT');        // 利用規約（未設定なら既定テンプレート）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_privacy', 'TEXT');      // プライバシーポリシー（未設定なら既定テンプレート）
     db_add_column_if_missing($pdo, 'tenants', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0'); // 初回ログイン時のパスワード強制変更フラグ
     db_add_column_if_missing($pdo, 'tenants', 'totp_secret', 'TEXT');        // 2段階認証の秘密鍵（APP_KEY で暗号化。未設定なら NULL）
     db_add_column_if_missing($pdo, 'tenants', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0'); // 2段階認証が有効か
