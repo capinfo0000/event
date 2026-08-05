@@ -246,23 +246,15 @@ require __DIR__ . '/_app_header.php';
         </ul>
         <p class="muted">＝「参加者名簿の取得・決済の受付・返金」に必要な最小限だけ。これ以外は「なし」で大丈夫です。</p>
 
-        <h4>もしキーが漏れてしまったら（あなたの損失を防ぐために）</h4>
-        <p>漏れたキーで何ができるかは<strong>キーの権限しだい</strong>です。とくに<strong>フルアクセスキー（sk_）</strong>は操作範囲が広く、悪用されると<strong>あなた自身の金銭的な損害につながる可能性</strong>があります。</p>
-        <p><strong>だからこそ制限付きキー（rk_）をおすすめしています。</strong>このアプリで付与する権限には <strong>送金（Payouts）や入金先口座の変更（External accounts）を含めません</strong>。そのため rk_ なら、<strong>万一漏れても第三者があなたの売上金を別口座へ移すことはできません</strong>。想定される操作も「名簿の閲覧・返金・顧客作成」など、付与した範囲に限られます。</p>
-        <p>漏えいに気づいたら、できるだけ早く次を行ってください。</p>
+        <h4>緊急時の対応（キーが漏れたかも、と思ったら）</h4>
+        <p>APIキーは<strong>パスワードと同じ秘密情報</strong>です。メール・チャット・スクリーンショット・プログラムのコード・共有フォルダなどに貼らないでください。</p>
+        <p>もし<strong>どこかに漏れた／自分で誤って載せた・共有したかも</strong>と思ったら、少しでも不安があれば <strong>キーを作り直してください</strong>。作り直せば<strong>古いキーはすぐ無効</strong>になり、以後は使えなくなります。</p>
         <ol class="muted" style="line-height:1.9;">
-            <li>Stripe ダッシュボード →「開発者」→「APIキー」で、該当キー（末尾4桁で照合）を<strong>失効（Roll）</strong>して無効化。</li>
-            <li>この画面で<strong>新しいキーに差し替え</strong>。</li>
-            <li>身に覚えのない<strong>返金・顧客作成などがないか</strong>、Stripe の取引履歴と監査ログ（<code>logs/audit.log</code> の <code>refund</code>・<code>stripe.key.*</code>）を確認。心当たりがあれば Stripe サポートにも相談を。</li>
+            <li>Stripe ダッシュボード →「開発者」→「APIキー」で、該当キー（末尾4桁で照合）を<strong>失効（Roll）</strong>。</li>
+            <li>新しいキーを作成し、<strong>この画面で再登録</strong>。</li>
+            <li>身に覚えのない<strong>返金・顧客作成などがないか</strong>、Stripe の取引履歴と監査ログ（<code>logs/audit.log</code>）を確認。心当たりがあれば Stripe サポートへ相談。</li>
         </ol>
-        <div class="flash flash--ng" style="margin:8px 0;">
-            <strong>キーは「合言葉（パスワード）」と同じ秘密情報です。</strong>
-            メール・チャット・スクリーンショット・プログラムのコード・共有フォルダなどに貼らないでください。
-            もし<strong>ご自身で誤ってどこかに載せた／人に共有したかも</strong>と思ったら、少しでも不安があれば、
-            上と同じ手順で<strong>必ず新しいキーに作り直してください</strong>（Stripe で該当キーを失効 → 新しく作成 → この画面で再登録）。
-            作り直せば<strong>古いキーは即座に無効</strong>になり、以後は悪用できなくなります。
-        </div>
-        <p class="muted">※ カード番号そのものは Stripe が保持し、鍵の所有者も閲覧できません。<br>※ フルアクセスキー（sk_）でも動きますが、漏れたときの被害が大きくなり得ます。<strong>あなたの資産を守るため</strong>、制限付きキー（本番は <code>rk_live_…</code>）をおすすめします。</p>
+        <p class="muted">※ 制限付きキー（rk_）なら、送金・入金先変更の権限を含まないため、万一漏れても売上金を別口座へ移されることはありません。カード番号そのものは Stripe が保持し、鍵の所有者も閲覧できません。</p>
 
         <div class="modal__actions">
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
