@@ -89,8 +89,12 @@ require __DIR__ . '/_app_header.php';
     @media (max-width: 900px) {
         .stat-grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
     }
+    /* この画面は表が横に広いので、ページ幅の上限（1100px）を外して左右の余白まで使い切る。 */
+    .page { max-width: none; }
     /* 表のセルは改行させない（枠が狭くて文字が縦に折れないように）。横幅が足りなければ表ごと横スクロール。 */
     .table-wrap th, .table-wrap td { white-space: nowrap; }
+    /* 列を少しコンパクトにして、できるだけ横スクロールなしで収める。 */
+    .table-wrap th, .table-wrap td { padding-left: 10px; padding-right: 10px; }
 </style>
 
 <?php if ($flash !== ''): ?>
