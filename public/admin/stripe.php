@@ -207,6 +207,7 @@ require __DIR__ . '/_app_header.php';
     <?php endif; ?>
 
     <p class="btnrow" style="margin-top:14px;">
+        <button type="button" class="btn btn--ghost" data-modal-open="keyKinds">キーの見分け方</button>
         <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキーの作り方</button>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー（テスト）</a>
         <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">APIキー（本番）</a>
@@ -256,6 +257,63 @@ require __DIR__ . '/_app_header.php';
             <li>必要なら監査ログ（<code>logs/audit.log</code>）で <code>stripe.key.*</code>・<code>refund</code> などの記録を確認。</li>
         </ol>
         <p class="muted">※ フルアクセスキー（sk_）でも動きますが、漏れたときにできる範囲が広くなるため、制限付きキーをおすすめしています。</p>
+
+        <div class="modal__actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- キーの見分け方（rk/sk・test/live） -->
+<div class="modal" id="keyKinds" role="dialog" aria-modal="true">
+    <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">キーの見分け方（rk / sk・test / live）</div>
+        <p class="modal__lead">Stripe のキーは先頭の文字で種類がわかります。形は <code>種別_モード_……</code> です。</p>
+
+        <h4 style="margin:4px 0 6px;">① 最初の2文字＝権限の種別</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li><code>rk_</code> … <strong>制限付きキー</strong>（Restricted・権限を絞れる／<strong style="color:#16a34a">推奨</strong>）</li>
+            <li><code>sk_</code> … <strong>フルアクセスキー</strong>（Secret・全権限）</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px;">② 次の語＝モード</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li><code>_test_</code> … <strong>テスト</strong>（本物の課金は発生しない・練習用）</li>
+            <li><code>_live_</code> … <strong>本番</strong>（実際に課金される）</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px;">組み合わせ（4種類）</h4>
+        <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:.88rem;">
+                <tr>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">先頭</th>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">意味</th>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">用途</th>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>rk_test_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">制限付き × テスト</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">練習・動作確認に最適</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>rk_live_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">制限付き × 本番</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><strong style="color:#16a34a">本番運用のおすすめ ✅</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>sk_test_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">フルアクセス × テスト</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">動くが権限が広め</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px;"><code>sk_live_…</code></td>
+                    <td style="padding:8px 10px;">フルアクセス × 本番</td>
+                    <td style="padding:8px 10px;">最も取り扱い注意</td>
+                </tr>
+            </table>
+        </div>
+        <p class="muted" style="margin-top:12px;">※ 迷ったら、本番は <code>rk_live_…</code> が安全です。<br>※ <code>pk_</code>（公開可能キー）はこのアプリでは使いません。</p>
 
         <div class="modal__actions">
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
@@ -349,7 +407,6 @@ require __DIR__ . '/_app_header.php';
         </div>
 
         <div class="modal__actions">
-            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー画面を開く（テスト）</a>
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
         </div>
     </div>
