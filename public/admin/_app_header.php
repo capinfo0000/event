@@ -34,16 +34,16 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle !== '' ? $pageTitle . ' - ' : '') ?>決済くん</title>
-    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <link rel="stylesheet" href="/assets/app.css?v=4">
     <script src="/assets/app.js?v=3" defer></script>
 </head>
 <body>
-<div class="app">
+<div class="appshell">
+    <header class="brandbar-top">
+        <img src="/assets/logo-wide.webp?v=1" alt="決済くん">
+    </header>
+    <div class="app">
     <aside class="sidebar">
-        <div class="sidebar__brand" style="height:74px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:10px 16px; background:#fff; border-bottom:1px solid rgba(0,0,0,.06);">
-            <img src="/assets/logo-wide.webp?v=1" alt="決済くん"
-                 style="max-height:100%; max-width:100%; width:auto; height:auto; display:block;">
-        </div>
         <nav class="nav">
             <?php foreach ($navItems as [$href, $icon, $label, $match]): ?>
                 <a href="<?= e($href) ?>" class="<?= in_array($current, $match, true) ? 'active' : '' ?>">
@@ -57,7 +57,7 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
         <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
     </aside>
     <div class="content">
-        <header class="topbar" style="height:74px; box-sizing:border-box;">
+        <header class="topbar">
             <div>
                 <h1 class="topbar__title"><?= e($pageTitle) ?></h1>
                 <?php if ($pageSub !== ''): ?><p class="topbar__sub"><?= e($pageSub) ?></p><?php endif; ?>

@@ -40,13 +40,26 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* ---------- 管理画面シェル（サイドバー） ---------- */
-.app { display: flex; min-height: 100vh; }
+/* 全体シェル: 最上部の横断ヘッダー + その下に（サイドバー + 本文） */
+.appshell { display: flex; flex-direction: column; min-height: 100vh; }
+.brandbar-top {
+  height: 64px; flex: 0 0 64px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 30;
+}
+.brandbar-top img { height: 42px; width: auto; display: block; }
+.brandbar-top__spacer { flex: 1; }
+.brandbar-top__who { font-size: .82rem; color: var(--muted); font-weight: 600; text-align: right; line-height: 1.3; }
+
+.app { display: flex; flex: 1; min-height: 0; }
 
 .sidebar {
   width: 240px; flex: 0 0 240px;
   background: var(--navy); color: #e2e8f0;
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 64px; height: calc(100vh - 64px);
 }
 .sidebar__brand {
   display: flex; align-items: center; gap: 10px;
@@ -74,7 +87,7 @@ a:hover { text-decoration: underline; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 16px 28px; position: sticky; top: 0; z-index: 5;
+  padding: 16px 28px; position: sticky; top: 64px; z-index: 5;
 }
 .topbar__title { font-size: 1.25rem; font-weight: 800; margin: 0; }
 .topbar__sub { font-size: .82rem; color: var(--muted); margin: 2px 0 0; }
@@ -202,9 +215,12 @@ tbody tr:hover { background: #fafbfc; }
 .cf-row .btn { flex: 0 0 auto; padding: 8px 12px; }
 
 @media (max-width: 720px) {
+  .brandbar-top { position: static; height: 54px; flex-basis: 54px; }
+  .brandbar-top img { height: 34px; }
   .app { flex-direction: column; }
-  .sidebar { width: 100%; flex: none; height: auto; position: sticky; top: 0; z-index: 20;
+  .sidebar { width: 100%; flex: none; height: auto; position: static;
              flex-direction: row; align-items: center; overflow-x: auto; }
+  .topbar { top: 0; }
   .sidebar__brand { padding: 14px 16px; white-space: nowrap; }
   .nav { flex-direction: row; flex: 1; overflow-x: auto; padding: 8px; }
   .nav a { white-space: nowrap; }
