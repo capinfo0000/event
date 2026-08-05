@@ -261,6 +261,41 @@ function field_slot_for_label(string $label): string
     return 'post';
 }
 
+/** イベントの日時文字列（datetime-local 等）を UNIX 時刻へ。解釈できなければ null。 */
+function event_datetime_ts(string $date): ?int
+{
+    $date = trim($date);
+    if ($date === '') {
+        return null;
+    }
+    $ts = strtotime(str_replace('T', ' ', $date));
+    return $ts !== false ? $ts : null;
+}
+
+/**
+ * キャンセルポリシー（既定の区分）に基づき、開催日からの逆算でキャンセル料率を返す。
+ * 既定区分: 開催8日以上前=0%（全額返金相当）／7〜2日前=50%／前日・当日以降・無連絡=100%。
+ * ※ 主催者が独自の日数・率でポリシーを定めている場合は一致しません（既定区分での自動算定）。
+ *
+ * @return array{days:int|null, rate:float, label:string}
+ */
+function cancellation_fee_rate_for_event(string $eventDate, ?int $nowTs = null): array
+{
+    $nowTs = $nowTs ?? time();
+    $ts = event_datetime_ts($eventDate);
+    if ($ts === null) {
+        return ['days' => null, 'rate' => 1.0, 'label' => '開催日時が不明のため満額（100%）'];
+    }
+    $days = (int) floor(($ts - $nowTs) / 86400); // 開催まで残り日数（切り捨て）
+    if ($days >= 8) {
+        return ['days' => $days, 'rate' => 0.0, 'label' => '開催8日以上前のためキャンセル料なし（0%）'];
+    }
+    if ($days >= 2) {
+        return ['days' => $days, 'rate' => 0.5, 'label' => '開催7〜2日前のため50%'];
+    }
+    return ['days' => $days, 'rate' => 1.0, 'label' => '開催前日・当日以降／無連絡のため満額（100%）'];
+}
+
 /**
  * 各種ポリシー・規約の既定文面（プレーンテキスト）を返す。
  * 管理画面「規約・ポリシー」の編集欄に初期表示し、主催者がこれを土台に編集できるようにする。
@@ -1215,6 +1250,9 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     ];
 
     foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
+        if (($session->metadata['payment_type'] ?? '') === 'cancel_fee') {
+            continue; // キャンセル料の支払いは名簿に載せない
+        }
         if (($session->metadata['event_id'] ?? null) !== $eventId) {
             continue;
         }

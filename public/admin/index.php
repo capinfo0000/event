@@ -135,6 +135,8 @@ require __DIR__ . '/_app_header.php';
 <?php else: ?>
     <?php $cur0 = $selectedEvent['currency'] ?? 'jpy'; ?>
     <?php $cap = (int) ($selectedEvent['capacity'] ?? 0); ?>
+    <?php // 当日払いキャンセル料の率（開催日からの逆算・ポリシー区分）。全参加者共通。
+          $feeInfo = cancellation_fee_rate_for_event((string) ($selectedEvent['date'] ?? '')); ?>
     <div class="stat-grid">
         <div class="stat"><span class="stat__num accent"><?= $headcount ?><?= $cap > 0 ? ' / ' . $cap : '' ?></span><span class="stat__label">参加人数<?= $cap > 0 ? '（定員）' : '' ?></span></div>
         <div class="stat"><span class="stat__num"><?= $totalCount ?></span><span class="stat__label">申込数（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</span></div>
@@ -246,6 +248,20 @@ require __DIR__ . '/_app_header.php';
                                             <button type="submit" class="btn btn--danger">取消</button>
                                         </form>
                                     </div>
+                                    <?php if (($p['email'] ?? '') !== ''): ?>
+                                        <?php $pFee = (int) round(((int) $p['amount']) * (float) $feeInfo['rate']); ?>
+                                        <?php if ($pFee > 0): ?>
+                                            <form method="post" action="onsite_fee.php" style="margin-top:6px;"
+                                                  data-confirm="「<?= e($p['name']) ?>」さんへ、キャンセル料 <?= e(format_amount($pFee, $cur)) ?>（<?= e($feeInfo['label']) ?>）の支払いリンクをメールで送ります。よろしいですか？">
+                                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                                <button type="submit" class="btn btn--ghost" title="開催日から逆算し、キャンセルポリシーの区分で自動算定した金額の支払いリンクをメール送信します（<?= e($feeInfo['label']) ?>）">キャンセル料を請求（<?= e(format_amount($pFee, $cur)) ?>）</button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="muted" style="font-size:.78rem; display:block; margin-top:6px;">キャンセル料なし（<?= e($feeInfo['label']) ?>）</span>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                                 <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
                                     <span class="muted">—</span>
                                 <?php else: ?>
