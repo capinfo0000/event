@@ -279,7 +279,7 @@ try {
             ],
         ],
         'success_url' => base_url() . '/success.php?event_id=' . urlencode($event['id']) . '&session_id={CHECKOUT_SESSION_ID}',
-        'cancel_url' => base_url() . '/cancel.php?event_id=' . urlencode($event['id']),
+        'cancel_url' => base_url() . '/cancel.php?event_id=' . urlencode($event['id']) . '&session_id={CHECKOUT_SESSION_ID}',
     ], $opts);
 } catch (\Throwable $e) {
     // 認証エラー・通信エラー・予期しない応答など、あらゆる決済作成失敗をここで受ける

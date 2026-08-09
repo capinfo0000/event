@@ -393,6 +393,58 @@ function create_cancel_fee_checkout(?string $account, array $event, string $emai
 }
 
 /**
+ * Stripe のカード拒否コードを、参加者向けの日本語説明に変換する。分からなければ null。
+ * 不正・紛失・盗難など機微な拒否は、具体的な理由を伏せて汎用文言を返す。
+ */
+function decline_reason_ja(?string $declineCode, ?string $code): ?string
+{
+    $dc = (string) $declineCode;
+    $c  = (string) $code;
+
+    $sensitive = ['lost_card', 'stolen_card', 'fraudulent', 'pickup_card', 'merchant_blacklist', 'security_violation', 'restricted_card', 'revocation_of_authorization', 'stop_payment_order'];
+    if ($dc !== '' && in_array($dc, $sensitive, true)) {
+        return 'このカードは使用できませんでした。お手数ですがカード発行会社へお問い合わせいただくか、別のカードをお試しください。';
+    }
+
+    $map = [
+        'insufficient_funds'               => '残高不足、または利用限度額を超えている可能性があります。',
+        'card_velocity_exceeded'           => '短時間での利用回数・金額の上限を超えた可能性があります。時間をおいてお試しください。',
+        'withdrawal_count_limit_exceeded'  => '利用回数・金額の上限を超えた可能性があります。',
+        'do_not_honor'                     => 'カード発行会社が承認しませんでした（理由は開示されていません）。',
+        'generic_decline'                  => 'カード発行会社が理由を明示せずに拒否しました。',
+        'transaction_not_allowed'          => 'このカードでは、この取引が許可されていない可能性があります（ネット決済の制限など）。',
+        'currency_not_supported'           => 'このカードは、この通貨での支払いに対応していない可能性があります。',
+        'card_not_supported'               => 'このカードは対応していない可能性があります。別のカードをお試しください。',
+        'expired_card'                     => 'カードの有効期限が切れている可能性があります。',
+        'incorrect_cvc'                    => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'invalid_cvc'                      => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'incorrect_number'                 => 'カード番号が正しくない可能性があります。',
+        'invalid_expiry_month'             => '有効期限（月）が正しくない可能性があります。',
+        'invalid_expiry_year'              => '有効期限（年）が正しくない可能性があります。',
+        'processing_error'                 => '処理中に一時的なエラーが発生しました。時間をおいてお試しください。',
+        'try_again_later'                  => '一時的に処理できませんでした。時間をおいて再度お試しください。',
+        'authentication_required'          => '本人認証（3Dセキュア）が必要です。認証のうえ再度お試しください。',
+        'call_issuer'                      => 'カード発行会社への確認が必要です。発行会社へお問い合わせください。',
+    ];
+    if ($dc !== '' && isset($map[$dc])) {
+        return $map[$dc];
+    }
+
+    $codeMap = [
+        'card_declined'           => 'カードが拒否されました。',
+        'expired_card'            => 'カードの有効期限が切れている可能性があります。',
+        'incorrect_cvc'           => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'incorrect_number'        => 'カード番号が正しくない可能性があります。',
+        'processing_error'        => '処理中に一時的なエラーが発生しました。時間をおいてお試しください。',
+        'authentication_required' => '本人認証（3Dセキュア）が必要です。',
+    ];
+    if ($c !== '' && isset($codeMap[$c])) {
+        return $codeMap[$c];
+    }
+    return null; // 不明
+}
+
+/**
  * 各種ポリシー・規約の既定文面（プレーンテキスト）を返す。
  * 管理画面「規約・ポリシー」の編集欄に初期表示し、主催者がこれを土台に編集できるようにする。
  * 未対応のキーは空文字。
