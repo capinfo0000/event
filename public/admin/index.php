@@ -108,6 +108,23 @@ require __DIR__ . '/_app_header.php';
     .rfrow input[type=number] { width: 150px; }
     #bulkModal input[type=checkbox] { width: auto; flex: 0 0 auto; margin: 0; }
     #bulkModal label { font-weight: 400; }
+    /* スマホ時は余白を詰める（この画面のみ） */
+    @media (max-width: 720px) {
+        .page { padding: 10px 10px 20px; }
+        .topbar { padding: 10px 12px; }
+        .topbar__title { font-size: 1.12rem; }
+        .topbar__sub { font-size: .78rem; }
+        .stat-grid { gap: 8px; margin-bottom: 12px; }
+        .stat { padding: 10px 12px; }
+        .stat__num { font-size: 1.25rem; }
+        .stat__label { font-size: .72rem; }
+        .bar { gap: 8px; margin-bottom: 10px; }
+        .psearchbar { margin-bottom: 8px; }
+        .table-wrap th, .table-wrap td { padding-left: 8px; padding-right: 8px; }
+        .ptbl td { padding-top: 9px; padding-bottom: 9px; }
+        .modal__box { margin: 12px auto; padding: 16px 16px; }
+        .searchgrid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    }
 </style>
 
 <?php if ($flash !== ''): ?>
