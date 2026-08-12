@@ -96,6 +96,18 @@ require __DIR__ . '/_app_header.php';
     .table-wrap th, .table-wrap td { white-space: nowrap; }
     /* 列を少しコンパクトにして、できるだけ横スクロールなしで収める。 */
     .table-wrap th, .table-wrap td { padding-left: 10px; padding-right: 10px; }
+    /* 請求管理モーダル内のセクション・返金行 */
+    .mgr-sec { padding: 4px 0 10px; border-top: 1px solid var(--border); margin-top: 10px; }
+    .mgr-sec:first-of-type { border-top: 0; margin-top: 0; }
+    .mgr-sec__h { font-weight: 800; margin: 10px 0 6px; }
+    .rfrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .rfrow__name { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; }
+    .rfrow__pct { display: flex; gap: 4px; }
+    .rfrow .pctbtn { padding: 4px 8px; font-size: .8rem; }
+    .rfrow .pctbtn.is-active { background: var(--navy); color: #fff; }
+    .rfrow input[type=number] { width: 150px; }
+    #bulkModal input[type=checkbox] { width: auto; flex: 0 0 auto; margin: 0; }
+    #bulkModal label { font-weight: 400; }
 </style>
 
 <?php if ($flash !== ''): ?>
@@ -156,54 +168,109 @@ require __DIR__ . '/_app_header.php';
         <div class="stat"><span class="stat__num"><?= e(format_amount($refunded, $cur0)) ?></span><span class="stat__label">返金合計</span></div>
     </div>
 
-    <?php if ($onsiteList !== []): ?>
+    <?php
+        // 事前決済の返金対象＝全額返金済みでなく、実受取額（Stripe手数料を除く）の残りがある人。
+        $refundList = [];
+        foreach ($participants as $pp2) {
+            if (($pp2['payment_type'] ?? 'prepay') === 'onsite') { continue; }
+            if (!empty($pp2['fully_refunded'])) { continue; }
+            $rem = (int) (($pp2['net'] ?? $pp2['amount']) - $pp2['amount_refunded']);
+            if ($rem <= 0) { continue; }
+            $pp2['remaining'] = $rem;
+            $refundList[] = $pp2;
+        }
+    ?>
+    <?php if ($onsiteList !== [] || $refundList !== []): ?>
         <p style="margin:0 0 14px;">
             <button type="button" class="btn btn--danger" data-modal-open="bulkModal">請求管理</button>
-            <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの方への<strong>キャンセル料の請求・再送</strong>や<strong>キャンセル済みへの変更</strong>をまとめて行えます（キャンセル料は自動：<?= e($feeInfo['label']) ?>）</span>
+            <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの<strong>キャンセル料の請求・キャンセル処理</strong>や、事前決済の<strong>一部返金（％で選択）</strong>をまとめて行えます</span>
         </p>
         <div class="modal" id="bulkModal" role="dialog" aria-modal="true">
             <div class="modal__box">
                 <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
-                <div class="modal__title">請求管理（当日払いのキャンセル料・キャンセル処理）</div>
-                <p class="modal__lead">当日払いの方を選んで、キャンセル料の請求メール送信（未請求の方へ新規／請求済みの方へ再送）、または<strong>キャンセル済みへの変更</strong>ができます。キャンセルにしても<strong>名簿からは削除されず状態が変わるだけ</strong>です。金額はポリシー逆算で自動（<?= e($feeInfo['label']) ?>）。<strong>初期選択は「未受領・未請求」の方</strong>です。</p>
-                <form id="bulkForm" method="post">
-                    <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                    <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                    <label style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-weight:700;">
-                        <input type="checkbox" id="bulkAll"> すべて選択 / 解除
-                    </label>
-                    <div style="max-height:320px; overflow:auto; margin:4px 0;">
-                        <?php foreach ($onsiteList as $op): ?>
-                            <?php
-                                // 初期選択＝未受領・未請求・未入金（＝新規に請求する候補）。
-                                $precheck = empty($op['collected']) && empty($op['fee_link_sent']) && empty($op['fee_paid']);
-                                $opFee = (int) round(((int) $op['amount']) * (float) $feeInfo['rate']);
-                                $noEmail = trim((string) ($op['email'] ?? '')) === '';
-                            ?>
-                            <label style="display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
-                                <input type="checkbox" class="bulkChk" name="customer_ids[]" value="<?= e($op['customer_id']) ?>" <?= $precheck ? 'checked' : '' ?>>
-                                <span style="flex:1; min-width:0;">
-                                    <strong><?= e($op['name'] !== '' ? $op['name'] : '（未入力）') ?></strong>
-                                    <span class="muted" style="font-size:.82rem;">
-                                        <?= e(format_amount((int) $op['amount'], $cur0)) ?>
-                                        <?php if (!empty($op['fee_paid'])): ?>・<span style="color:var(--ok,#16a34a);">キャンセル料 入金済み</span><?php else: ?>・<?= !empty($op['collected']) ? '受領済み' : '未受領' ?><?php endif; ?>
-                                        <?= !empty($op['cancelled']) ? '・<span style="color:var(--dng,#dc2626);">キャンセル済み</span>' : '' ?>
-                                        <?= !empty($op['attended']) ? '・出席済み' : '' ?>
-                                        <?= (!empty($op['fee_link_sent']) && empty($op['fee_paid'])) ? '・請求済み（未入金）' : '' ?>
-                                        <?= $noEmail ? '・メールなし' : '' ?>
+                <div class="modal__title">請求管理</div>
+
+                <?php if ($onsiteList !== []): ?>
+                <div class="mgr-sec">
+                    <div class="mgr-sec__h">当日払い（キャンセル料の請求・キャンセル処理）</div>
+                    <p class="modal__lead">当日払いの方を選んで、キャンセル料の請求メール送信（未請求の方へ新規／請求済みの方へ再送）、または<strong>キャンセル済みへの変更</strong>ができます。キャンセルにしても<strong>名簿からは削除されず状態が変わるだけ</strong>です。金額はポリシー逆算で自動（<?= e($feeInfo['label']) ?>）。<strong>初期選択は「未受領・未請求」の方</strong>です。</p>
+                    <form id="bulkForm" method="post">
+                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                        <label style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-weight:700;">
+                            <input type="checkbox" id="bulkAll"> すべて選択 / 解除
+                        </label>
+                        <div style="max-height:280px; overflow:auto; margin:4px 0;">
+                            <?php foreach ($onsiteList as $op): ?>
+                                <?php
+                                    // 初期選択＝未受領・未請求・未入金（＝新規に請求する候補）。
+                                    $precheck = empty($op['collected']) && empty($op['fee_link_sent']) && empty($op['fee_paid']);
+                                    $opFee = (int) round(((int) $op['amount']) * (float) $feeInfo['rate']);
+                                    $noEmail = trim((string) ($op['email'] ?? '')) === '';
+                                ?>
+                                <label style="display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
+                                    <input type="checkbox" class="bulkChk" name="customer_ids[]" value="<?= e($op['customer_id']) ?>" <?= $precheck ? 'checked' : '' ?>>
+                                    <span style="flex:1; min-width:0;">
+                                        <strong><?= e($op['name'] !== '' ? $op['name'] : '（未入力）') ?></strong>
+                                        <span class="muted" style="font-size:.82rem;">
+                                            <?= e(format_amount((int) $op['amount'], $cur0)) ?>
+                                            <?php if (!empty($op['fee_paid'])): ?>・<span style="color:var(--ok,#16a34a);">キャンセル料 入金済み</span><?php else: ?>・<?= !empty($op['collected']) ? '受領済み' : '未受領' ?><?php endif; ?>
+                                            <?= !empty($op['cancelled']) ? '・<span style="color:var(--dng,#dc2626);">キャンセル済み</span>' : '' ?>
+                                            <?= !empty($op['attended']) ? '・出席済み' : '' ?>
+                                            <?= (!empty($op['fee_link_sent']) && empty($op['fee_paid'])) ? '・請求済み（未入金）' : '' ?>
+                                            <?= $noEmail ? '・メールなし' : '' ?>
+                                        </span>
                                     </span>
-                                </span>
-                                <span class="muted" style="font-size:.82rem; white-space:nowrap;">料金 <?= $opFee > 0 ? e(format_amount($opFee, $cur0)) : 'なし' ?></span>
-                            </label>
+                                    <span class="muted" style="font-size:.82rem; white-space:nowrap;">料金 <?= $opFee > 0 ? e(format_amount($opFee, $cur0)) : 'なし' ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="hint">※ キャンセル料の請求は「メール有り・料金&gt;0」の方にのみ送信します（メールなし・料金0の方は自動スキップ）。</p>
+                        <div class="modal__actions">
+                            <button type="submit" formaction="onsite_fee_bulk.php" class="btn btn--danger" data-confirm="選択した当日払いの方へ、キャンセル料の請求メールを送信します。よろしいですか？（金額はポリシー逆算で自動）">選択者にキャンセル料を請求</button>
+                            <button type="submit" formaction="onsite_cancel_bulk.php" class="btn btn--ghost" data-confirm="選択した当日払いの方を「キャンセル済み」にします。よろしいですか？（名簿からは削除されず、状態が変わるだけです）">選択者をキャンセルにする</button>
+                        </div>
+                    </form>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($refundList !== []): ?>
+                <div class="mgr-sec">
+                    <div class="mgr-sec__h">事前決済の返金（％で選択／金額入力）</div>
+                    <p class="modal__lead">返金する<strong>割合（％）</strong>を選ぶか金額を入力して「返金」を押します。<strong>全額は Stripe手数料を除いた実受取額</strong>を返します（手数料は戻りません）。</p>
+                    <div style="max-height:300px; overflow:auto; margin:4px 0;">
+                        <?php foreach ($refundList as $rp): ?>
+                            <?php $rcur = (string) $rp['currency']; $rjpy = strtolower($rcur) === 'jpy'; $rrem = (int) $rp['remaining']; ?>
+                            <form method="post" action="refund.php" class="rfrow" data-confirm="「<?= e($rp['name']) ?>」さんへ返金します。よろしいですか？（空欄＝全額返金は手数料を除いた実受取額）">
+                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                <input type="hidden" name="payment_intent" value="<?= e($rp['payment_intent']) ?>">
+                                <div class="rfrow__name">
+                                    <strong><?= e($rp['name'] !== '' ? $rp['name'] : '（未入力）') ?></strong>
+                                    <span class="muted" style="font-size:.8rem;">残り <?= e(format_amount($rrem, $rcur)) ?><?= !empty($rp['cancel_requested']) ? ' ・<span style="color:#dc2626;">返金承認待ち</span>' : '' ?></span>
+                                </div>
+                                <div class="rfrow__pct">
+                                    <button type="button" class="btn btn--ghost pctbtn" data-pct="25">25%</button>
+                                    <button type="button" class="btn btn--ghost pctbtn" data-pct="50">50%</button>
+                                    <button type="button" class="btn btn--ghost pctbtn" data-pct="75">75%</button>
+                                    <button type="button" class="btn btn--ghost pctbtn" data-pct="100">全額</button>
+                                </div>
+                                <?php if ($rjpy): ?>
+                                    <input type="number" class="rfamt" name="amount" min="1" max="<?= $rrem ?>" placeholder="金額¥（空欄=全額）" data-remaining="<?= $rrem ?>" data-cur="jpy">
+                                <?php else: ?>
+                                    <input type="number" class="rfamt" name="amount" step="0.01" min="0.01" placeholder="金額（空欄=全額）" data-remaining="<?= $rrem ?>" data-cur="other">
+                                <?php endif; ?>
+                                <button type="submit" class="btn btn--danger"><?= !empty($rp['cancel_requested']) ? '承認して返金' : '返金' ?></button>
+                            </form>
                         <?php endforeach; ?>
                     </div>
-                    <p class="hint">※ キャンセル料の請求は「メール有り・料金&gt;0」の方にのみ送信します（メールなし・料金0の方は自動スキップ）。</p>
-                    <div class="modal__actions">
-                        <button type="submit" formaction="onsite_fee_bulk.php" class="btn btn--danger" data-confirm="選択した当日払いの方へ、キャンセル料の請求メールを送信します。よろしいですか？（金額はポリシー逆算で自動）">選択者にキャンセル料を請求</button>
-                        <button type="submit" formaction="onsite_cancel_bulk.php" class="btn btn--ghost" data-confirm="選択した当日払いの方を「キャンセル済み」にします。よろしいですか？（名簿からは削除されず、状態が変わるだけです）">選択者をキャンセルにする</button>
-                        <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
-                    </div>
-                </form>
+                    <p class="hint">※ ％は「実受取額の残り」に対する割合です。全額を選ぶと入力欄は空欄（＝実受取額の全額返金）になります。</p>
+                </div>
+                <?php endif; ?>
+
+                <div class="modal__actions" style="justify-content:flex-end;">
+                    <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+                </div>
             </div>
         </div>
         <script nonce="<?= e(csp_nonce()) ?>">
@@ -212,6 +279,24 @@ require __DIR__ . '/_app_header.php';
                 if (all) { all.addEventListener('change', function(){
                     document.querySelectorAll('.bulkChk').forEach(function(c){ c.checked = all.checked; });
                 }); }
+                // ％ボタンで返金額を自動入力（全額＝空欄）
+                document.querySelectorAll('#bulkModal .pctbtn').forEach(function(btn){
+                    btn.addEventListener('click', function(){
+                        var form = btn.closest('form');
+                        var inp = form && form.querySelector('.rfamt');
+                        if (!inp) { return; }
+                        var rem = parseFloat(inp.getAttribute('data-remaining')) || 0;
+                        var pct = parseFloat(btn.getAttribute('data-pct')) || 0;
+                        if (pct >= 100) {
+                            inp.value = '';
+                        } else {
+                            var v = rem * pct / 100;
+                            inp.value = (inp.getAttribute('data-cur') === 'jpy') ? String(Math.round(v)) : v.toFixed(2);
+                        }
+                        form.querySelectorAll('.pctbtn').forEach(function(b){ b.classList.remove('is-active'); });
+                        btn.classList.add('is-active');
+                    });
+                });
             })();
         </script>
     <?php endif; ?>
@@ -390,16 +475,13 @@ require __DIR__ . '/_app_header.php';
                         <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
                             <span class="muted">—</span>
                         <?php else: ?>
-                            <form method="post" action="refund.php" class="refund-form" data-confirm="「<?= e($p['name']) ?>」さんへ返金します。よろしいですか？（空欄＝全額返金は、手数料を除いた実受取額を返金します）">
+                            <?php // 表内は「返金承認（全額）」のみ。一部（％）返金は上部の「請求管理」から。 ?>
+                            <form method="post" action="refund.php" class="refund-form" data-confirm="「<?= e($p['name']) ?>」さんへ全額返金します。よろしいですか？（Stripe手数料を除いた実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を返金します）">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                 <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                 <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
-                                <?php if (strtolower($cur) === 'jpy'): ?>
-                                    <input type="number" name="amount" min="1" max="<?= (int) $remaining ?>" placeholder="一部¥" title="空欄なら全額返金＝実受取額<?= ' ' . e(format_amount((int) $remaining, $cur)) ?>を返金。">
-                                <?php else: ?>
-                                    <input type="number" name="amount" step="0.01" min="0.01" placeholder="一部" title="空欄なら全額返金＝実受取額を返金。">
-                                <?php endif; ?>
-                                <button type="submit" class="btn btn--danger"><?= $cancelReq ? '承認して返金' : '返金' ?></button>
+                                <?php // amount 未指定＝全額返金（実受取額）。一部返金は「請求管理」で。 ?>
+                                <button type="submit" class="btn btn--danger" title="全額返金＝実受取額 <?= e(format_amount((int) $remaining, $cur)) ?>。一部返金は上部の「請求管理」から。"><?= $cancelReq ? '承認して返金' : '返金承認' ?></button>
                             </form>
                         <?php endif; ?>
                     </td>
@@ -462,7 +544,7 @@ require __DIR__ . '/_app_header.php';
                 });
             })();
         </script>
-        <p class="muted" style="margin-top:10px;">返金欄を<strong>空欄</strong>で実行すると<strong>全額返金（＝キャンセル）</strong>。このとき Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。金額を入力した場合は<strong>その額をそのまま返金</strong>します（上限は実受取額）。</p>
+        <p class="muted" style="margin-top:10px;">表内の<strong>「返金承認」</strong>は<strong>全額返金（＝キャンセル）</strong>で、Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。<strong>一部（％）返金</strong>は上部の<strong>「請求管理」</strong>から行えます。</p>
         <p class="muted" style="margin-top:4px;">⚠️ Stripe の決済手数料は返金時に戻りません。この仕組みでは<strong>手数料分は参加者の実質負担</strong>となります（全額返金でも参加者へ戻るのは実受取額まで）。トラブル防止のため、キャンセル・返金ポリシーに明記することをおすすめします。</p>
     <?php endif; ?>
 <?php endif; ?>
