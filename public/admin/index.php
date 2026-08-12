@@ -381,6 +381,19 @@ require __DIR__ . '/_app_header.php';
             .searchgrid select, .searchgrid input[type=search] { width: 100%; }
             .searchgrid .fAge span { display: flex; align-items: center; gap: 6px; }
             .searchgrid .fAge input[type=number] { width: 84px; }
+            /* スマホ: 文字を小さくして、できるだけ多くの列を表示（固定列も縮小） */
+            @media (max-width: 720px) {
+                .ptbl th, .ptbl td { font-size: .74rem; }
+                .table-wrap th, .table-wrap td { padding-left: 6px; padding-right: 6px; }
+                .ptbl td { padding-top: 7px; padding-bottom: 7px; }
+                .ptbl .op1 .btn, .ptbl .op2 .btn { padding: 5px 7px; font-size: .72rem; }
+                .ptbl .nm .nmmain { font-size: .8rem; }
+                .ptbl .nm .kana { font-size: .62rem; }
+                .badge { font-size: .66rem; padding: 2px 6px; }
+                .ptbl th.op1, .ptbl td.op1 { width: 88px; min-width: 88px; }
+                .ptbl th.op2, .ptbl td.op2 { left: 88px; width: 106px; min-width: 106px; }
+                .ptbl th.nm, .ptbl td.nm { left: 194px; min-width: 78px; }
+            }
         </style>
         <div class="psearchbar">
             <button type="button" class="btn btn--ghost" data-modal-open="searchModal" id="advToggle">🔍 詳細検索</button>
