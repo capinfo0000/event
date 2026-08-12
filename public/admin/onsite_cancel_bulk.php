@@ -1,8 +1,8 @@
 <?php
 
 /**
- * 当日払い参加者の一括取消（名簿から削除）。管理画面の一括モーダルからの POST のみ。
- * 選択された customer_ids[] の当日払い顧客を削除する。
+ * 当日払い参加者の一括キャンセル。管理画面の請求管理モーダルからの POST のみ。
+ * 名簿からは削除せず、選択された customer_ids[] を「キャンセル済み」（metadata.cancelled=1）にする。
  */
 
 declare(strict_types=1);
@@ -45,27 +45,31 @@ if ($ids === []) {
 init_stripe();
 $opts = stripe_opts($account);
 
-$removed = 0;
+$changed = 0;
 $skipped = 0;
 foreach ($ids as $cid) {
-    // IDOR対策: 指定 customer が「このイベントの当日払い参加者」であることを検証してから削除。
+    // IDOR対策: 指定 customer が「このイベントの当日払い参加者」であることを検証してから更新。
     $target = find_event_participant_by_customer($eventId, $account, $cid);
     if ($target === null || ($target['payment_type'] ?? '') !== 'onsite') {
         $skipped++;
         continue;
     }
     try {
-        \Stripe\Customer::retrieve($cid, $opts)->delete([], $opts);
-        $removed++;
+        \Stripe\Customer::update(
+            $cid,
+            ['metadata' => ['cancelled' => '1', 'cancelled_at' => (string) time()]],
+            $opts
+        );
+        $changed++;
     } catch (\Throwable $ex) {
-        error_log('一括取消の削除失敗: ' . $ex->getMessage());
+        error_log('一括キャンセルの更新失敗: ' . $ex->getMessage());
         $skipped++;
     }
 }
 
-audit_log('onsite_cancel_bulk', ['tenant' => $tenant['id'], 'event' => $eventId, 'removed' => (string) $removed, 'skipped' => (string) $skipped]);
+audit_log('onsite_cancel_bulk', ['tenant' => $tenant['id'], 'event' => $eventId, 'changed' => (string) $changed, 'skipped' => (string) $skipped]);
 
-if ($removed === 0) {
-    back_to_admin($eventId, '削除できる対象がありませんでした。', 'ng');
+if ($changed === 0) {
+    back_to_admin($eventId, 'キャンセルにできる対象がありませんでした。', 'ng');
 }
-back_to_admin($eventId, '当日払い ' . $removed . ' 件を名簿から削除しました' . ($skipped > 0 ? '（対象外 ' . $skipped . ' 件）' : '') . '。', 'ok');
+back_to_admin($eventId, '当日払い ' . $changed . ' 件をキャンセル済みにしました（名簿には残ります）' . ($skipped > 0 ? '（対象外 ' . $skipped . ' 件）' : '') . '。', 'ok');

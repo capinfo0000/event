@@ -1505,6 +1505,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'collected'       => false, // 事前決済では使わない（当日支払い用）
             'attended'        => $attended,
             'cancel_requested' => $cancelReq,
+            'cancelled'       => false, // 事前決済のキャンセルは返金で表す（当日払い用フラグ）
             'created'         => (int) ($session->created ?? 0),
         ];
     }
@@ -1541,6 +1542,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の受領（集金）済みか
             'attended'        => (($meta['attended'] ?? '') === '1'),  // 出席確認済みか
             'cancel_requested' => (($meta['cancel_requested'] ?? '') === '1'), // 参加者からのキャンセル希望
+            'cancelled'       => (($meta['cancelled'] ?? '') === '1'),  // 主催者がキャンセル確定（名簿には残す）
             'created'         => (int) ($customer->created ?? 0),
         ];
     }

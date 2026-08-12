@@ -48,18 +48,19 @@ if ($selectedEvent !== null && !stripe_ready_for_tenant($tenant)) {
         $participants = fetch_event_participants($selectedId, $account);
         $totalCount = count($participants);
         foreach ($participants as $p) {
+            $isCancelled = !empty($p['cancelled']);
             if (!empty($p['attended'])) {
                 $attendedCount++;
             }
-            if (empty($p['fully_refunded'])) {
+            if (empty($p['fully_refunded']) && !$isCancelled) {
                 $headcount += max(1, (int) $p['party_size']);
             }
             if (($p['payment_type'] ?? 'prepay') === 'onsite') {
                 $onsiteCount++;
                 if (!empty($p['collected'])) {
                     $onsiteCollectedCount++;
-                } else {
-                    $onsiteDue += $p['amount'];
+                } elseif (!$isCancelled) {
+                    $onsiteDue += $p['amount']; // キャンセル済みは未収に数えない
                 }
             } else {
                 $prepaidCount++;
@@ -157,14 +158,14 @@ require __DIR__ . '/_app_header.php';
 
     <?php if ($onsiteList !== []): ?>
         <p style="margin:0 0 14px;">
-            <button type="button" class="btn btn--danger" data-modal-open="bulkModal">当日払いの管理</button>
-            <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの方への<strong>キャンセル料の請求・再送</strong>や<strong>名簿からの削除</strong>をまとめて行えます（キャンセル料は自動：<?= e($feeInfo['label']) ?>）</span>
+            <button type="button" class="btn btn--danger" data-modal-open="bulkModal">請求管理</button>
+            <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの方への<strong>キャンセル料の請求・再送</strong>や<strong>キャンセル済みへの変更</strong>をまとめて行えます（キャンセル料は自動：<?= e($feeInfo['label']) ?>）</span>
         </p>
         <div class="modal" id="bulkModal" role="dialog" aria-modal="true">
             <div class="modal__box">
                 <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
-                <div class="modal__title">当日払いの管理（キャンセル料請求・名簿整理）</div>
-                <p class="modal__lead">当日払いの方を選んで、キャンセル料の請求メール送信（未請求の方へ新規／請求済みの方へ再送）、または名簿からの削除ができます。金額はポリシー逆算で自動（<?= e($feeInfo['label']) ?>）。<strong>初期選択は「未受領・未請求」の方</strong>です。</p>
+                <div class="modal__title">請求管理（当日払いのキャンセル料・キャンセル処理）</div>
+                <p class="modal__lead">当日払いの方を選んで、キャンセル料の請求メール送信（未請求の方へ新規／請求済みの方へ再送）、または<strong>キャンセル済みへの変更</strong>ができます。キャンセルにしても<strong>名簿からは削除されず状態が変わるだけ</strong>です。金額はポリシー逆算で自動（<?= e($feeInfo['label']) ?>）。<strong>初期選択は「未受領・未請求」の方</strong>です。</p>
                 <form id="bulkForm" method="post">
                     <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                     <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
@@ -186,6 +187,7 @@ require __DIR__ . '/_app_header.php';
                                     <span class="muted" style="font-size:.82rem;">
                                         <?= e(format_amount((int) $op['amount'], $cur0)) ?>
                                         <?php if (!empty($op['fee_paid'])): ?>・<span style="color:var(--ok,#16a34a);">キャンセル料 入金済み</span><?php else: ?>・<?= !empty($op['collected']) ? '受領済み' : '未受領' ?><?php endif; ?>
+                                        <?= !empty($op['cancelled']) ? '・<span style="color:var(--dng,#dc2626);">キャンセル済み</span>' : '' ?>
                                         <?= !empty($op['attended']) ? '・出席済み' : '' ?>
                                         <?= (!empty($op['fee_link_sent']) && empty($op['fee_paid'])) ? '・請求済み（未入金）' : '' ?>
                                         <?= $noEmail ? '・メールなし' : '' ?>
@@ -198,7 +200,7 @@ require __DIR__ . '/_app_header.php';
                     <p class="hint">※ キャンセル料の請求は「メール有り・料金&gt;0」の方にのみ送信します（メールなし・料金0の方は自動スキップ）。</p>
                     <div class="modal__actions">
                         <button type="submit" formaction="onsite_fee_bulk.php" class="btn btn--danger" data-confirm="選択した当日払いの方へ、キャンセル料の請求メールを送信します。よろしいですか？（金額はポリシー逆算で自動）">選択者にキャンセル料を請求</button>
-                        <button type="submit" formaction="onsite_cancel_bulk.php" class="btn btn--ghost" data-confirm="選択した当日払いの方を名簿から削除します。よろしいですか？（元に戻せません）">選択者を名簿から削除</button>
+                        <button type="submit" formaction="onsite_cancel_bulk.php" class="btn btn--ghost" data-confirm="選択した当日払いの方を「キャンセル済み」にします。よろしいですか？（名簿からは削除されず、状態が変わるだけです）">選択者をキャンセルにする</button>
                         <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
                     </div>
                 </form>
@@ -246,19 +248,32 @@ require __DIR__ . '/_app_header.php';
             .ptbl .feenote { font-size: .76rem; color: var(--muted); margin-top: 2px; }
             #bulkModal input[type=checkbox] { width: auto; flex: 0 0 auto; margin: 0; }
             #bulkModal label { font-weight: 400; }
+            /* 並べ替え可能な見出し */
+            .ptbl th[data-sort] { cursor: pointer; user-select: none; }
+            .ptbl th[data-sort]::after { content: "⇅"; font-size: .72em; color: var(--muted); margin-left: 4px; }
+            .ptbl th[data-sort][data-dir=asc]::after { content: "↑"; color: var(--navy); }
+            .ptbl th[data-sort][data-dir=desc]::after { content: "↓"; color: var(--navy); }
+            /* 検索ボックス（全幅にならないよう抑制） */
+            .psearchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
+            .psearchbar input { width: 100%; max-width: 320px; }
         </style>
+        <div class="psearchbar">
+            <input type="search" id="psearch" placeholder="名前・フリガナ・メール・電話で検索" autocomplete="off" aria-label="参加者を検索">
+            <span class="muted" id="psearchcount" style="font-size:.85rem;"></span>
+            <span class="muted" style="font-size:.8rem;">※ 見出しをクリックで並べ替え</span>
+        </div>
         <div class="table-wrap">
-            <table class="ptbl">
+            <table class="ptbl" id="ptbl">
                 <thead>
                     <tr>
                         <th class="op1">出席</th>
                         <th class="op2">集金・返金</th>
-                        <th class="nm">名前</th>
+                        <th class="nm" data-sort="name">名前</th>
                         <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
-                        <th>支払方法</th>
-                        <th>金額</th>
-                        <th>状態</th>
-                        <th>申込日時</th>
+                        <th data-sort="method">支払方法</th>
+                        <th data-sort="amount">金額</th>
+                        <th data-sort="status">状態</th>
+                        <th data-sort="created">申込日時</th>
                         <th>電話</th>
                         <th>メール</th>
                     </tr>
@@ -269,34 +284,66 @@ require __DIR__ . '/_app_header.php';
                     $cur = $p['currency'];
                     $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
                     $cancelReq = !empty($p['cancel_requested']);
+                    $isCancelled = !empty($p['cancelled']);
+                    $statusText = '';   // 並べ替え用のプレーンテキスト（バッジの主ラベル）
                     if ($isOnsite) {
-                        if (!empty($p['fee_paid'])) {
+                        if ($isCancelled) {
+                            $statusText = 'キャンセル済み';
+                            $statusHtml = '<span class="badge badge--danger">キャンセル済み</span>';
+                            if (!empty($p['fee_paid'])) {
+                                $statusHtml .= ' <span class="badge badge--ok" style="font-size:.72rem;">料金 入金済み</span>';
+                            } elseif (!empty($p['fee_link_sent'])) {
+                                $statusHtml .= ' <span class="badge badge--warn" style="font-size:.72rem;">料金 請求中</span>';
+                            }
+                        } elseif (!empty($p['fee_paid'])) {
+                            $statusText = 'キャンセル料 入金済み';
                             $statusHtml = '<span class="badge badge--ok">キャンセル料 入金済み</span>';
                         } elseif (!empty($p['fee_link_sent'])) {
+                            $statusText = 'キャンセル料 請求中';
                             $statusHtml = '<span class="badge badge--warn">キャンセル料 請求中（支払い待ち）</span>';
                         } elseif ($cancelReq) {
+                            $statusText = 'キャンセル受付';
                             $statusHtml = '<span class="badge badge--warn">キャンセル受付（料金なし）</span>';
                         } elseif (!empty($p['collected'])) {
+                            $statusText = '受領済み';
                             $statusHtml = '<span class="badge badge--ok">受領済み</span>';
                         } else {
+                            $statusText = '当日支払い・未収';
                             $statusHtml = '<span class="badge badge--warn">当日支払い・未収</span>';
                         }
                     } elseif ($p['fully_refunded']) {
+                        $statusText = 'キャンセル済み（全額返金）';
                         $statusHtml = '<span class="badge badge--danger">キャンセル済み（全額返金）</span>';
                     } elseif ($cancelReq) {
+                        $statusText = '返金承認待ち';
                         $statusHtml = '<span class="badge badge--warn">返金承認待ち</span>'
                             . ($p['amount_refunded'] > 0 ? ' <span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>' : '');
                     } elseif ($p['amount_refunded'] > 0) {
+                        $statusText = '一部返金';
                         $statusHtml = '<span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
                     } else {
+                        $statusText = '事前決済済み';
                         $statusHtml = '<span class="badge badge--ok">事前決済済み</span>';
                     }
                     // 返金の上限＝「実受取額（Stripe手数料を除いた額）」の残り。全額返金もこの額を返金する。
                     $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
+                    // 検索・並べ替え用の値を用意する（フリガナは名前セルでも使う）。
+                    $kana = '';
+                    foreach (($p['custom'] ?? []) as $lab => $val) {
+                        if ($isKanaLabel((string) $lab)) { $kana = (string) $val; break; }
+                    }
+                    $searchParts = [
+                        (string) ($p['name'] ?? ''), $kana, (string) ($p['email'] ?? ''),
+                        (string) ($p['phone'] ?? ''), (string) ($p['category'] ?? ''),
+                        (string) ($p['note'] ?? ''), $statusText, ($isOnsite ? '当日' : '事前'),
+                    ];
+                    foreach (($p['custom'] ?? []) as $val) { $searchParts[] = (string) $val; }
+                    $searchHay = mb_strtolower(trim(implode(' ', $searchParts)));
+                    $sortName = $kana !== '' ? $kana : (string) ($p['name'] ?? '');
                 ?>
-                <tr>
+                <tr data-search="<?= e($searchHay) ?>" data-name="<?= e($sortName) ?>" data-amount="<?= (int) $p['amount'] ?>" data-created="<?= (int) $p['created'] ?>" data-status="<?= e($statusText) ?>" data-method="<?= $isOnsite ? '当日' : '事前' ?>">
                     <td class="op1">
-                        <?php if (!empty($p['customer_id'])): ?>
+                        <?php if (!empty($p['customer_id']) && !$isCancelled): ?>
                             <form method="post" action="attend.php">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                 <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
@@ -309,12 +356,22 @@ require __DIR__ . '/_app_header.php';
                                     <button type="submit" class="btn btn--ghost">出席取消</button>
                                 <?php endif; ?>
                             </form>
+                        <?php else: ?>
+                            <span class="muted">—</span>
                         <?php endif; ?>
                     </td>
                     <td class="op2">
                         <?php if ($isOnsite): ?>
-                            <?php if (!empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
-                                <?php // キャンセル料の請求・再送・名簿削除は「当日払いの管理」からまとめて操作。 ?>
+                            <?php if ($isCancelled): ?>
+                                <form method="post" action="onsite_cancel.php" data-confirm="「<?= e($p['name']) ?>」さんのキャンセルを取り消して、通常の当日払いに戻します。よろしいですか？">
+                                    <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                    <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                    <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                    <input type="hidden" name="cancel" value="0">
+                                    <button type="submit" class="btn btn--ghost">キャンセルを戻す</button>
+                                </form>
+                            <?php elseif (!empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
+                                <?php // キャンセル料の請求・再送・キャンセル処理は「請求管理」からまとめて操作。 ?>
                                 <span class="muted">—</span>
                             <?php else: ?>
                                 <form method="post" action="onsite_collect.php">
@@ -347,7 +404,6 @@ require __DIR__ . '/_app_header.php';
                         <?php endif; ?>
                     </td>
                     <td class="nm">
-                        <?php $kana = ''; foreach (($p['custom'] ?? []) as $lab => $val) { if ($isKanaLabel((string) $lab)) { $kana = (string) $val; break; } } ?>
                         <?php if ($kana !== ''): ?><div class="kana"><?= e($kana) ?></div><?php endif; ?>
                         <span class="nmmain"><?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?></span>
                         <?php if (!empty($p['category'])): ?> <span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
@@ -365,6 +421,47 @@ require __DIR__ . '/_app_header.php';
                 </tbody>
             </table>
         </div>
+        <script nonce="<?= e(csp_nonce()) ?>">
+            (function(){
+                var table = document.getElementById('ptbl');
+                if (!table || !table.tBodies.length) { return; }
+                var tbody = table.tBodies[0];
+                var rows = Array.prototype.slice.call(tbody.rows);
+                var total = rows.length;
+                var search = document.getElementById('psearch');
+                var count = document.getElementById('psearchcount');
+                function applyFilter(){
+                    var q = (search && search.value || '').trim().toLowerCase();
+                    var shown = 0;
+                    rows.forEach(function(tr){
+                        var hay = tr.getAttribute('data-search') || '';
+                        var vis = (q === '' || hay.indexOf(q) >= 0);
+                        tr.style.display = vis ? '' : 'none';
+                        if (vis) { shown++; }
+                    });
+                    if (count) { count.textContent = (q === '') ? (total + ' 件') : (shown + ' / ' + total + ' 件'); }
+                }
+                if (search) { search.addEventListener('input', applyFilter); }
+                applyFilter();
+                var curKey = null, curDir = 1;
+                Array.prototype.forEach.call(table.querySelectorAll('th[data-sort]'), function(th){
+                    th.addEventListener('click', function(){
+                        var key = th.getAttribute('data-sort');
+                        if (curKey === key) { curDir = -curDir; } else { curKey = key; curDir = 1; }
+                        var sorted = rows.slice().sort(function(a, b){
+                            var va = a.getAttribute('data-' + key) || '', vb = b.getAttribute('data-' + key) || '';
+                            var na = parseFloat(va), nb = parseFloat(vb);
+                            var isNum = va !== '' && vb !== '' && !isNaN(na) && !isNaN(nb);
+                            var cmp = isNum ? (na - nb) : va.localeCompare(vb, 'ja');
+                            return cmp * curDir;
+                        });
+                        sorted.forEach(function(r){ tbody.appendChild(r); });
+                        Array.prototype.forEach.call(table.querySelectorAll('th[data-sort]'), function(h){ h.removeAttribute('data-dir'); });
+                        th.setAttribute('data-dir', curDir > 0 ? 'asc' : 'desc');
+                    });
+                });
+            })();
+        </script>
         <p class="muted" style="margin-top:10px;">返金欄を<strong>空欄</strong>で実行すると<strong>全額返金（＝キャンセル）</strong>。このとき Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。金額を入力した場合は<strong>その額をそのまま返金</strong>します（上限は実受取額）。</p>
         <p class="muted" style="margin-top:4px;">⚠️ Stripe の決済手数料は返金時に戻りません。この仕組みでは<strong>手数料分は参加者の実質負担</strong>となります（全額返金でも参加者へ戻るのは実受取額まで）。トラブル防止のため、キャンセル・返金ポリシーに明記することをおすすめします。</p>
     <?php endif; ?>
