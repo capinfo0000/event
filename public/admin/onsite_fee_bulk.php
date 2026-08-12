@@ -42,6 +42,13 @@ if (($rate['rate'] ?? 0) <= 0) {
     back_to_admin($eventId, 'キャンセルポリシー上、現時点ではキャンセル料は発生しません（' . $rate['label'] . '）。', 'ng');
 }
 
+// モーダルで選択された対象（customer_ids[]）。指定があればその人だけに送る。
+$selected = $_POST['customer_ids'] ?? null;
+$selectedSet = is_array($selected) ? array_flip(array_map('strval', $selected)) : null;
+if ($selectedSet !== null && $selectedSet === []) {
+    back_to_admin($eventId, '対象が選択されていません。', 'ng');
+}
+
 $currency = strtolower((string) ($event['currency'] ?? 'jpy'));
 $sent = 0;
 $skipped = 0;
@@ -57,9 +64,17 @@ foreach ($participants as $p) {
     if (($p['payment_type'] ?? '') !== 'onsite') {
         continue;
     }
-    // 未出席・未集金・未請求・未入金のみ対象
-    if (!empty($p['attended']) || !empty($p['collected']) || !empty($p['fee_paid']) || !empty($p['fee_link_sent'])) {
-        continue;
+    $cid = (string) ($p['customer_id'] ?? '');
+    if ($selectedSet !== null) {
+        // 選択モード: 選ばれた人のみ。入金済みは除外（メール・料金は下でチェック）。
+        if (!isset($selectedSet[$cid]) || !empty($p['fee_paid'])) {
+            continue;
+        }
+    } else {
+        // 自動モード: 未出席・未集金・未請求・未入金のみ対象
+        if (!empty($p['attended']) || !empty($p['collected']) || !empty($p['fee_paid']) || !empty($p['fee_link_sent'])) {
+            continue;
+        }
     }
     $email = trim((string) ($p['email'] ?? ''));
     if ($email === '') {

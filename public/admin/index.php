@@ -138,17 +138,12 @@ require __DIR__ . '/_app_header.php';
     <?php // 当日払いキャンセル料の率（開催日からの逆算・ポリシー区分）。全参加者共通。
           $feeInfo = cancellation_fee_rate_for_event((string) ($selectedEvent['date'] ?? '')); ?>
     <?php
-        // No-show一括請求の対象数: 当日払いで「未出席・未集金・未請求・未入金」＋メール有り。料金0%のときは対象なし。
-        $noShowTargets = 0;
-        if (($feeInfo['rate'] ?? 0) > 0) {
-            foreach ($participants as $pp1) {
-                if (($pp1['payment_type'] ?? '') === 'onsite'
-                    && empty($pp1['attended']) && empty($pp1['collected'])
-                    && empty($pp1['fee_paid']) && empty($pp1['fee_link_sent'])
-                    && trim((string) ($pp1['email'] ?? '')) !== '') {
-                    $noShowTargets++;
-                }
-            }
+        // 一括操作（キャンセル料請求／名簿削除）の対象一覧＝当日払いでキャンセル料が未入金の人。
+        $onsiteList = [];
+        foreach ($participants as $pp1) {
+            if (($pp1['payment_type'] ?? '') !== 'onsite') { continue; }
+            if (!empty($pp1['fee_paid'])) { continue; } // 入金済みは対象外
+            $onsiteList[] = $pp1;
         }
     ?>
     <div class="stat-grid">
@@ -160,16 +155,62 @@ require __DIR__ . '/_app_header.php';
         <div class="stat"><span class="stat__num"><?= e(format_amount($refunded, $cur0)) ?></span><span class="stat__label">返金合計</span></div>
     </div>
 
-    <?php if ($noShowTargets > 0): ?>
+    <?php if ($onsiteList !== []): ?>
         <p style="margin:0 0 14px;">
-            <form method="post" action="onsite_fee_bulk.php" style="display:inline;"
-                  data-confirm="未出席・未集金・未請求の当日払い <?= $noShowTargets ?>人へ、キャンセルポリシーに基づくキャンセル料の支払いリンクをメール送信します。金額は各自のポリシー逆算で自動です（<?= e($feeInfo['label']) ?>）。よろしいですか？">
-                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                <button type="submit" class="btn btn--danger">No-show（未出席）に一括でキャンセル料を請求（<?= $noShowTargets ?>人）</button>
-            </form>
-            <span class="muted" style="font-size:.82rem; margin-left:8px;">※ 未出席・未集金の当日払いの方が対象（<?= e($feeInfo['label']) ?>）</span>
+            <button type="button" class="btn btn--danger" data-modal-open="bulkModal">一括キャンセル料請求</button>
+            <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの方をまとめて請求／名簿整理できます（キャンセル料は自動：<?= e($feeInfo['label']) ?>）</span>
         </p>
+        <div class="modal" id="bulkModal" role="dialog" aria-modal="true">
+            <div class="modal__box">
+                <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+                <div class="modal__title">一括キャンセル料請求・名簿整理</div>
+                <p class="modal__lead">当日払いの方を選んで、キャンセル料の請求メール送信、または名簿からの削除ができます。金額はポリシー逆算で自動（<?= e($feeInfo['label']) ?>）。<strong>初期選択は「未受領」の方</strong>です。</p>
+                <form id="bulkForm" method="post">
+                    <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                    <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                    <label style="display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-weight:700;">
+                        <input type="checkbox" id="bulkAll"> すべて選択 / 解除
+                    </label>
+                    <div style="max-height:320px; overflow:auto; margin:4px 0;">
+                        <?php foreach ($onsiteList as $op): ?>
+                            <?php
+                                $precheck = empty($op['collected']); // 未受領を初期選択
+                                $opFee = (int) round(((int) $op['amount']) * (float) $feeInfo['rate']);
+                                $noEmail = trim((string) ($op['email'] ?? '')) === '';
+                            ?>
+                            <label style="display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
+                                <input type="checkbox" class="bulkChk" name="customer_ids[]" value="<?= e($op['customer_id']) ?>" <?= $precheck ? 'checked' : '' ?>>
+                                <span style="flex:1; min-width:0;">
+                                    <strong><?= e($op['name'] !== '' ? $op['name'] : '（未入力）') ?></strong>
+                                    <span class="muted" style="font-size:.82rem;">
+                                        <?= e(format_amount((int) $op['amount'], $cur0)) ?>
+                                        ・<?= !empty($op['collected']) ? '受領済み' : '未受領' ?>
+                                        <?= !empty($op['attended']) ? '・出席済み' : '' ?>
+                                        <?= !empty($op['fee_link_sent']) ? '・請求済み' : '' ?>
+                                        <?= $noEmail ? '・メールなし' : '' ?>
+                                    </span>
+                                </span>
+                                <span class="muted" style="font-size:.82rem; white-space:nowrap;">料金 <?= $opFee > 0 ? e(format_amount($opFee, $cur0)) : 'なし' ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <p class="hint">※ キャンセル料の請求は「メール有り・料金&gt;0」の方にのみ送信します（メールなし・料金0の方は自動スキップ）。</p>
+                    <div class="modal__actions">
+                        <button type="submit" formaction="onsite_fee_bulk.php" class="btn btn--danger" data-confirm="選択した当日払いの方へ、キャンセル料の請求メールを送信します。よろしいですか？（金額はポリシー逆算で自動）">選択者にキャンセル料を請求</button>
+                        <button type="submit" formaction="onsite_cancel_bulk.php" class="btn btn--ghost" data-confirm="選択した当日払いの方を名簿から削除します。よろしいですか？（元に戻せません）">選択者を名簿から削除</button>
+                        <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script nonce="<?= e(csp_nonce()) ?>">
+            (function(){
+                var all = document.getElementById('bulkAll');
+                if (all) { all.addEventListener('change', function(){
+                    document.querySelectorAll('.bulkChk').forEach(function(c){ c.checked = all.checked; });
+                }); }
+            })();
+        </script>
     <?php endif; ?>
 
     <?php if ($totalCount === 0): ?>
@@ -202,6 +243,8 @@ require __DIR__ . '/_app_header.php';
             .ptbl .nm .kana { font-size: .72rem; color: var(--muted); line-height: 1.2; }
             .ptbl .nm .nmmain { font-weight: 700; }
             .ptbl .feenote { font-size: .76rem; color: var(--muted); margin-top: 2px; }
+            #bulkModal input[type=checkbox] { width: auto; flex: 0 0 auto; margin: 0; }
+            #bulkModal label { font-weight: 400; }
         </style>
         <div class="table-wrap">
             <table class="ptbl">
