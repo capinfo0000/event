@@ -165,10 +165,11 @@ require __DIR__ . '/_app_header.php';
             .ptbl thead th { background: #f8fafc; }
             .ptbl td { padding-top: 12px; padding-bottom: 12px; }
             /* 横スクロールしても「操作」「名前」を固定 */
-            .ptbl th.op, .ptbl td.op { position: sticky; left: 0; z-index: 2; width: 230px; min-width: 230px; white-space: normal; }
-            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 230px; z-index: 2; white-space: nowrap; min-width: 120px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
+            .ptbl th.op, .ptbl td.op { position: sticky; left: 0; z-index: 2; width: 300px; min-width: 300px; white-space: normal; }
+            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 300px; z-index: 2; white-space: nowrap; min-width: 120px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
             .ptbl thead th.op, .ptbl thead th.nm { z-index: 3; }
-            .ptbl .op form { margin: 0 0 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+            /* 操作ボタンは横並び（幅が足りなければ折り返し） */
+            .ptbl .op form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; vertical-align: top; }
             .ptbl .op input[type=number] { width: 84px; }
             .ptbl .nm .kana { font-size: .72rem; color: var(--muted); line-height: 1.2; }
             .ptbl .nm .nmmain { font-weight: 700; }
