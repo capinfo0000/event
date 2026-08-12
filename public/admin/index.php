@@ -355,10 +355,13 @@ require __DIR__ . '/_app_header.php';
             .ptbl thead th { background: #f8fafc; }
             .ptbl td { padding-top: 12px; padding-bottom: 12px; }
             /* 横スクロールしても「操作」「名前」を固定 */
-            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 118px; min-width: 118px; white-space: nowrap; }
-            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 118px; z-index: 2; width: 150px; min-width: 150px; white-space: nowrap; }
-            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 268px; z-index: 2; white-space: nowrap; min-width: 110px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
+            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 98px; min-width: 98px; white-space: nowrap; }
+            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 98px; z-index: 2; width: 116px; min-width: 116px; white-space: nowrap; }
+            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 214px; z-index: 2; white-space: nowrap; min-width: 92px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
             .ptbl .op1 .btn, .ptbl .op2 .btn { white-space: nowrap; }
+            /* 列幅は内容ギリギリに：ボタン・セル余白を小さくして各列を詰める */
+            .ptbl .btn { padding: 6px 10px; font-size: .82rem; }
+            .ptbl th, .ptbl td { padding-left: 7px; padding-right: 7px; }
             .ptbl thead th.op1, .ptbl thead th.op2, .ptbl thead th.nm { z-index: 3; }
             /* 操作ボタンは横並び（幅が足りなければ折り返し） */
             .ptbl .op1 form, .ptbl .op2 form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; vertical-align: top; }
@@ -386,13 +389,14 @@ require __DIR__ . '/_app_header.php';
                 .ptbl th, .ptbl td { font-size: .74rem; }
                 .table-wrap th, .table-wrap td { padding-left: 6px; padding-right: 6px; }
                 .ptbl td { padding-top: 7px; padding-bottom: 7px; }
-                .ptbl .op1 .btn, .ptbl .op2 .btn { padding: 5px 7px; font-size: .72rem; }
+                .ptbl .op1 .btn, .ptbl .op2 .btn { padding: 4px 6px; font-size: .7rem; }
                 .ptbl .nm .nmmain { font-size: .8rem; }
                 .ptbl .nm .kana { font-size: .62rem; }
                 .badge { font-size: .66rem; padding: 2px 6px; }
-                .ptbl th.op1, .ptbl td.op1 { width: 88px; min-width: 88px; }
-                .ptbl th.op2, .ptbl td.op2 { left: 88px; width: 106px; min-width: 106px; }
-                .ptbl th.nm, .ptbl td.nm { left: 194px; min-width: 78px; }
+                .ptbl th, .ptbl td { padding-left: 5px; padding-right: 5px; }
+                .ptbl th.op1, .ptbl td.op1 { width: 78px; min-width: 78px; }
+                .ptbl th.op2, .ptbl td.op2 { left: 78px; width: 92px; min-width: 92px; }
+                .ptbl th.nm, .ptbl td.nm { left: 170px; min-width: 72px; }
             }
         </style>
         <div class="psearchbar">
