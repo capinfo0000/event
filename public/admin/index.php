@@ -472,17 +472,17 @@ require __DIR__ . '/_app_header.php';
                                     <?php endif; ?>
                                 </form>
                             <?php endif; ?>
-                        <?php elseif ($p['fully_refunded'] || $remaining <= 0): ?>
-                            <span class="muted">—</span>
-                        <?php else: ?>
-                            <?php // 表内は「返金承認（全額）」のみ。一部（％）返金は上部の「請求管理」から。 ?>
-                            <form method="post" action="refund.php" class="refund-form" data-confirm="「<?= e($p['name']) ?>」さんへ全額返金します。よろしいですか？（Stripe手数料を除いた実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を返金します）">
+                        <?php elseif ($cancelReq && $remaining > 0 && !$p['fully_refunded']): ?>
+                            <?php // 参加者からのキャンセル希望が出ている事前決済のみ「承認して返金」。任意の全額・一部返金は上部の「請求管理」から。 ?>
+                            <form method="post" action="refund.php" class="refund-form" data-confirm="「<?= e($p['name']) ?>」さんのキャンセル希望を承認して全額返金します。よろしいですか？（Stripe手数料を除いた実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を返金します）">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                 <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                 <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
-                                <?php // amount 未指定＝全額返金（実受取額）。一部返金は「請求管理」で。 ?>
-                                <button type="submit" class="btn btn--danger" title="全額返金＝実受取額 <?= e(format_amount((int) $remaining, $cur)) ?>。一部返金は上部の「請求管理」から。"><?= $cancelReq ? '承認して返金' : '返金承認' ?></button>
+                                <?php // amount 未指定＝全額返金（実受取額）。 ?>
+                                <button type="submit" class="btn btn--danger" title="キャンセル希望を承認し、実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を全額返金します。">承認して返金</button>
                             </form>
+                        <?php else: ?>
+                            <span class="muted">—</span>
                         <?php endif; ?>
                     </td>
                     <td class="nm">
@@ -544,7 +544,7 @@ require __DIR__ . '/_app_header.php';
                 });
             })();
         </script>
-        <p class="muted" style="margin-top:10px;">表内の<strong>「返金承認」</strong>は<strong>全額返金（＝キャンセル）</strong>で、Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。<strong>一部（％）返金</strong>は上部の<strong>「請求管理」</strong>から行えます。</p>
+        <p class="muted" style="margin-top:10px;">表内の<strong>「承認して返金」</strong>は、参加者からの<strong>キャンセル希望を承認して全額返金</strong>するボタンです（Stripe手数料を除いた実受取額を返金。例：¥50決済で手数料¥2なら¥48）。キャンセル希望がない方への<strong>任意の全額・一部（％）返金</strong>は上部の<strong>「請求管理」</strong>から行えます。</p>
         <p class="muted" style="margin-top:4px;">⚠️ Stripe の決済手数料は返金時に戻りません。この仕組みでは<strong>手数料分は参加者の実質負担</strong>となります（全額返金でも参加者へ戻るのは実受取額まで）。トラブル防止のため、キャンセル・返金ポリシーに明記することをおすすめします。</p>
     <?php endif; ?>
 <?php endif; ?>
