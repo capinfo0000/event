@@ -354,30 +354,41 @@ require __DIR__ . '/_app_header.php';
             .ptbl th[data-sort]::after { content: "⇅"; font-size: .72em; color: var(--muted); margin-left: 4px; }
             .ptbl th[data-sort][data-dir=asc]::after { content: "↑"; color: var(--navy); }
             .ptbl th[data-sort][data-dir=desc]::after { content: "↓"; color: var(--navy); }
-            /* 検索ボックス（全幅にならないよう抑制） */
+            /* 検索バー */
             .psearchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
-            .psearchbar input[type=search] { width: 100%; max-width: 280px; }
-            /* 詳細検索パネル */
-            .advpanel { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 0 0 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; }
-            .advpanel label { display: flex; gap: 6px; align-items: center; font-size: .85rem; font-weight: 600; margin: 0; }
-            .advpanel select, .advpanel input { width: auto; }
-            .advpanel input[type=number] { width: 78px; }
+            /* 詳細検索モーダルの入力グリッド */
+            .searchgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 16px; margin: 6px 0 10px; }
+            .searchgrid label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 700; margin: 0; }
+            .searchgrid select, .searchgrid input[type=search] { width: 100%; }
+            .searchgrid .fAge span { display: flex; align-items: center; gap: 6px; }
+            .searchgrid .fAge input[type=number] { width: 84px; }
         </style>
         <div class="psearchbar">
-            <input type="search" id="psearch" placeholder="名前・フリガナで検索" autocomplete="off" aria-label="名前・フリガナで検索">
-            <button type="button" class="btn btn--ghost" id="advToggle" aria-expanded="false" aria-controls="advPanel">詳細検索</button>
-            <span class="muted" id="psearchcount" style="font-size:.85rem;"></span>
+            <button type="button" class="btn btn--ghost" data-modal-open="searchModal" id="advToggle">🔍 詳細検索</button>
+            <span class="jsCount muted" style="font-size:.85rem;"></span>
             <span class="muted" style="font-size:.8rem;">※ 見出しをクリックで並べ替え</span>
         </div>
-        <div class="advpanel" id="advPanel" hidden>
-            <label>状態 <select id="fStatus"><option value="">すべて</option></select></label>
-            <label>出席 <select id="fAttend"><option value="">すべて</option><option value="1">出席済み</option><option value="0">未確認</option></select></label>
-            <label>支払方法 <select id="fMethod"><option value="">すべて</option></select></label>
-            <?php foreach ($customFilters as $ci => $cf): ?>
-                <label><?= e($cf['label']) ?> <select class="fcust" data-col="<?= (int) $ci ?>"><option value="">すべて</option><?php foreach ($cf['values'] as $v): ?><option value="<?= e($v) ?>"><?= e($v) ?></option><?php endforeach; ?></select></label>
-            <?php endforeach; ?>
-            <label class="fAge">年齢 <input type="number" id="fAgeMin" min="0" placeholder="下限"> 〜 <input type="number" id="fAgeMax" min="0" placeholder="上限"></label>
-            <button type="button" class="btn btn--ghost" id="fClear">条件クリア</button>
+        <div class="modal" id="searchModal" role="dialog" aria-modal="true">
+            <div class="modal__box">
+                <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+                <div class="modal__title">検索・絞り込み</div>
+                <p class="modal__lead">名前・フリガナで検索したり、状態・出席・支払方法などで絞り込めます。入力するとすぐ下の表に反映されます。</p>
+                <div class="searchgrid">
+                    <label>名前・フリガナ <input type="search" id="psearch" placeholder="名前・フリガナで検索" autocomplete="off"></label>
+                    <label>状態 <select id="fStatus"><option value="">すべて</option></select></label>
+                    <label>出席 <select id="fAttend"><option value="">すべて</option><option value="1">出席済み</option><option value="0">未確認</option></select></label>
+                    <label>支払方法 <select id="fMethod"><option value="">すべて</option></select></label>
+                    <?php foreach ($customFilters as $ci => $cf): ?>
+                        <label><?= e($cf['label']) ?> <select class="fcust" data-col="<?= (int) $ci ?>"><option value="">すべて</option><?php foreach ($cf['values'] as $v): ?><option value="<?= e($v) ?>"><?= e($v) ?></option><?php endforeach; ?></select></label>
+                    <?php endforeach; ?>
+                    <label class="fAge">年齢 <span><input type="number" id="fAgeMin" min="0" placeholder="下限"> 〜 <input type="number" id="fAgeMax" min="0" placeholder="上限"></span></label>
+                </div>
+                <div class="modal__actions">
+                    <span class="jsCount muted" style="font-size:.9rem; font-weight:700; margin-right:auto;"></span>
+                    <button type="button" class="btn btn--ghost" id="fClear">条件クリア</button>
+                    <button type="button" class="btn" data-modal-close>この条件で表示</button>
+                </div>
+            </div>
         </div>
         <div class="table-wrap">
             <table class="ptbl" id="ptbl">
@@ -485,6 +496,9 @@ require __DIR__ . '/_app_header.php';
                             <?php if ($isCancelled || !empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
                                 <?php // キャンセル済み等は行内で操作しない。戻す場合は参加者に再申込してもらう（メールで自動紐づけ）。 ?>
                                 <span class="muted">—</span>
+                            <?php elseif (empty($p['attended'])): ?>
+                                <?php // 受領（集金）は「出席にする」を押してから。未出席のうちは表示しない。 ?>
+                                <span class="muted" title="「出席にする」を押すと受領ボタンが出ます">—</span>
                             <?php else: ?>
                                 <form method="post" action="onsite_collect.php">
                                     <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
@@ -538,14 +552,12 @@ require __DIR__ . '/_app_header.php';
                 var rows = Array.prototype.slice.call(tbody.rows);
                 var total = rows.length;
                 var search = document.getElementById('psearch');
-                var count = document.getElementById('psearchcount');
+                var counts = Array.prototype.slice.call(document.querySelectorAll('.jsCount'));
                 var fStatus = document.getElementById('fStatus');
                 var fAttend = document.getElementById('fAttend');
                 var fMethod = document.getElementById('fMethod');
                 var fAgeMin = document.getElementById('fAgeMin');
                 var fAgeMax = document.getElementById('fAgeMax');
-                var advToggle = document.getElementById('advToggle');
-                var advPanel = document.getElementById('advPanel');
                 var fClear = document.getElementById('fClear');
                 var custSels = Array.prototype.slice.call(document.querySelectorAll('.fcust'));
 
@@ -563,7 +575,7 @@ require __DIR__ . '/_app_header.php';
                 });
                 fillSelect(fStatus, Object.keys(statuses));
                 fillSelect(fMethod, Object.keys(methods));
-                var ageWrap = document.querySelector('.advpanel .fAge');
+                var ageWrap = document.querySelector('#searchModal .fAge');
                 if (ageWrap && !hasAge) { ageWrap.style.display = 'none'; }
 
                 function applyFilter(){
@@ -596,18 +608,12 @@ require __DIR__ . '/_app_header.php';
                     });
                     var custActive = custSels.some(function(cs){ return cs.value !== ''; });
                     var active = q !== '' || st !== '' || at !== '' || me !== '' || amin !== null || amax !== null || custActive;
-                    if (count) { count.textContent = active ? (shown + ' / ' + total + ' 件') : (total + ' 件'); }
+                    var label = active ? (shown + ' / ' + total + ' 件') : (total + ' 件');
+                    counts.forEach(function(c){ c.textContent = label; });
                 }
                 [search, fStatus, fAttend, fMethod, fAgeMin, fAgeMax].concat(custSels).forEach(function(el){
                     if (el) { el.addEventListener('input', applyFilter); el.addEventListener('change', applyFilter); }
                 });
-                if (advToggle && advPanel) {
-                    advToggle.addEventListener('click', function(){
-                        var hidden = advPanel.hasAttribute('hidden');
-                        if (hidden) { advPanel.removeAttribute('hidden'); advToggle.setAttribute('aria-expanded', 'true'); }
-                        else { advPanel.setAttribute('hidden', ''); advToggle.setAttribute('aria-expanded', 'false'); }
-                    });
-                }
                 if (fClear) {
                     fClear.addEventListener('click', function(){
                         if (search) { search.value = ''; }
