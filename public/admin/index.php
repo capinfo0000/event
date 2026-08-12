@@ -482,16 +482,8 @@ require __DIR__ . '/_app_header.php';
                     </td>
                     <td class="op2">
                         <?php if ($isOnsite): ?>
-                            <?php if ($isCancelled): ?>
-                                <form method="post" action="onsite_cancel.php" data-confirm="「<?= e($p['name']) ?>」さんのキャンセルを取り消して、通常の当日払いに戻します。よろしいですか？">
-                                    <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                    <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                    <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                    <input type="hidden" name="cancel" value="0">
-                                    <button type="submit" class="btn btn--ghost">キャンセルを戻す</button>
-                                </form>
-                            <?php elseif (!empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
-                                <?php // キャンセル料の請求・再送・キャンセル処理は「請求管理」からまとめて操作。 ?>
+                            <?php if ($isCancelled || !empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
+                                <?php // キャンセル済み等は行内で操作しない。戻す場合は参加者に再申込してもらう（メールで自動紐づけ）。 ?>
                                 <span class="muted">—</span>
                             <?php else: ?>
                                 <form method="post" action="onsite_collect.php">

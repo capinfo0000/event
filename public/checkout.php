@@ -181,6 +181,11 @@ if ($paymentType === 'onsite') {
             'onsite_total' => (string)$onsiteTotal,
             'currency' => $currency,
             'participant_category' => $tierLabel,
+            // 再申込は「参加に戻す」動作。以前キャンセル済み／キャンセル希望だった場合は解除し、
+            // この時刻より前のキャンセル料履歴は無効化する（再申込者を通常の未収として扱う）。
+            'cancelled' => '',
+            'cancel_requested' => '',
+            'reactivated_at' => (string) time(),
         ], $customMeta),
     ];
     // 二重防止: 同一イベント・同一メールの当日払いが既にあれば、新規作成せず既存を更新する。

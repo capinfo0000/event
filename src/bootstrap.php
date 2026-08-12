@@ -1410,8 +1410,8 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     $opts = stripe_opts($account);
 
     $participants = [];
-    $cancelFeePaid = []; // orig_customer => true（キャンセル料を支払い済み）
-    $cancelFeeAny  = []; // orig_customer => true（キャンセル料リンクを発行済み・未払い含む）
+    $cancelFeePaid = []; // orig_customer => 最新のキャンセル料セッション created（支払い済み）
+    $cancelFeeAny  = []; // orig_customer => 最新のキャンセル料セッション created（発行済み・未払い含む）
     $params = [
         'limit' => 100,
         // balance_transaction まで展開して Stripe 手数料（fee）・実受取額（net）を取得する。
@@ -1423,9 +1423,12 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             // キャンセル料の支払いは名簿に載せないが、支払い状況は元の参加者に紐づけて記録する。
             $oc = (string) ($session->metadata['orig_customer'] ?? '');
             if ($oc !== '') {
-                $cancelFeeAny[$oc] = true;
-                if ($session->payment_status === 'paid') {
-                    $cancelFeePaid[$oc] = true;
+                $sc = (int) ($session->created ?? 0);
+                if (!isset($cancelFeeAny[$oc]) || $sc > $cancelFeeAny[$oc]) {
+                    $cancelFeeAny[$oc] = $sc;
+                }
+                if ($session->payment_status === 'paid' && (!isset($cancelFeePaid[$oc]) || $sc > $cancelFeePaid[$oc])) {
+                    $cancelFeePaid[$oc] = $sc;
                 }
             }
             continue;
@@ -1543,6 +1546,7 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'attended'        => (($meta['attended'] ?? '') === '1'),  // 出席確認済みか
             'cancel_requested' => (($meta['cancel_requested'] ?? '') === '1'), // 参加者からのキャンセル希望
             'cancelled'       => (($meta['cancelled'] ?? '') === '1'),  // 主催者がキャンセル確定（名簿には残す）
+            'reactivated_at'  => (int) ($meta['reactivated_at'] ?? 0),  // 再申込時刻（これ以前のキャンセル料履歴は無効化）
             'created'         => (int) ($customer->created ?? 0),
         ];
     }
@@ -1605,10 +1609,12 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
     }
 
     // キャンセル料の支払い状況を各参加者へ付与（当日払いの状態表示に使用）。
+    // 再申込した場合（reactivated_at）は、それ以前のキャンセル料履歴は無効化して「参加に戻す」。
     foreach ($participants as &$pp) {
         $cid = (string) ($pp['customer_id'] ?? '');
-        $pp['fee_paid']      = $cid !== '' && !empty($cancelFeePaid[$cid]);
-        $pp['fee_link_sent'] = $cid !== '' && !empty($cancelFeeAny[$cid]);
+        $reAt = (int) ($pp['reactivated_at'] ?? 0);
+        $pp['fee_paid']      = $cid !== '' && isset($cancelFeePaid[$cid]) && $cancelFeePaid[$cid] > $reAt;
+        $pp['fee_link_sent'] = $cid !== '' && isset($cancelFeeAny[$cid]) && $cancelFeeAny[$cid] > $reAt;
     }
     unset($pp);
 
