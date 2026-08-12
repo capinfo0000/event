@@ -314,7 +314,7 @@ require __DIR__ . '/_app_header.php';
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                         <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                         <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                        <button type="submit" class="btn btn--ghost" title="<?= e($feeInfo['label']) ?>">キャンセル料請求（<?= e(format_amount($pFee, $cur)) ?>）</button>
+                                        <button type="submit" class="btn btn--ghost" title="キャンセル料 <?= e(format_amount($pFee, $cur)) ?>（<?= e($feeInfo['label']) ?>）の支払いリンクをメール送信">キャンセル料請求</button>
                                     </form>
                                 <?php elseif (($p['email'] ?? '') !== ''): ?>
                                     <div class="feenote" title="<?= e($feeInfo['label']) ?>">キャンセル料：現在なし</div>
