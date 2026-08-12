@@ -165,12 +165,14 @@ require __DIR__ . '/_app_header.php';
             .ptbl thead th { background: #f8fafc; }
             .ptbl td { padding-top: 12px; padding-bottom: 12px; }
             /* 横スクロールしても「操作」「名前」を固定 */
-            .ptbl th.op, .ptbl td.op { position: sticky; left: 0; z-index: 2; width: 300px; min-width: 300px; white-space: normal; }
-            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 300px; z-index: 2; white-space: nowrap; min-width: 120px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
-            .ptbl thead th.op, .ptbl thead th.nm { z-index: 3; }
+            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 140px; min-width: 140px; white-space: normal; }
+            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 140px; z-index: 2; width: 250px; min-width: 250px; white-space: normal; }
+            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 390px; z-index: 2; white-space: nowrap; min-width: 120px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
+            .ptbl .op1 .btn, .ptbl .op2 .btn { white-space: nowrap; }
+            .ptbl thead th.op1, .ptbl thead th.op2, .ptbl thead th.nm { z-index: 3; }
             /* 操作ボタンは横並び（幅が足りなければ折り返し） */
-            .ptbl .op form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; vertical-align: top; }
-            .ptbl .op input[type=number] { width: 84px; }
+            .ptbl .op1 form, .ptbl .op2 form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; vertical-align: top; }
+            .ptbl .op2 input[type=number] { width: 84px; }
             .ptbl .nm .kana { font-size: .72rem; color: var(--muted); line-height: 1.2; }
             .ptbl .nm .nmmain { font-weight: 700; }
             .ptbl .feenote { font-size: .76rem; color: var(--muted); margin-top: 2px; }
@@ -179,7 +181,8 @@ require __DIR__ . '/_app_header.php';
             <table class="ptbl">
                 <thead>
                     <tr>
-                        <th class="op">操作</th>
+                        <th class="op1">出席</th>
+                        <th class="op2">キャンセル / 返金</th>
                         <th class="nm">名前</th>
                         <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
                         <th>支払方法</th>
@@ -222,7 +225,7 @@ require __DIR__ . '/_app_header.php';
                     $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
                 ?>
                 <tr>
-                    <td class="op">
+                    <td class="op1">
                         <?php if (!empty($p['customer_id'])): ?>
                             <form method="post" action="attend.php">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
