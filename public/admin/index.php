@@ -137,6 +137,20 @@ require __DIR__ . '/_app_header.php';
     <?php $cap = (int) ($selectedEvent['capacity'] ?? 0); ?>
     <?php // 当日払いキャンセル料の率（開催日からの逆算・ポリシー区分）。全参加者共通。
           $feeInfo = cancellation_fee_rate_for_event((string) ($selectedEvent['date'] ?? '')); ?>
+    <?php
+        // No-show一括請求の対象数: 当日払いで「未出席・未集金・未請求・未入金」＋メール有り。料金0%のときは対象なし。
+        $noShowTargets = 0;
+        if (($feeInfo['rate'] ?? 0) > 0) {
+            foreach ($participants as $pp1) {
+                if (($pp1['payment_type'] ?? '') === 'onsite'
+                    && empty($pp1['attended']) && empty($pp1['collected'])
+                    && empty($pp1['fee_paid']) && empty($pp1['fee_link_sent'])
+                    && trim((string) ($pp1['email'] ?? '')) !== '') {
+                    $noShowTargets++;
+                }
+            }
+        }
+    ?>
     <div class="stat-grid">
         <div class="stat"><span class="stat__num accent"><?= $headcount ?><?= $cap > 0 ? ' / ' . $cap : '' ?></span><span class="stat__label">参加人数<?= $cap > 0 ? '（定員）' : '' ?></span></div>
         <div class="stat"><span class="stat__num"><?= $totalCount ?></span><span class="stat__label">申込数（事前<?= $prepaidCount ?>・当日<?= $onsiteCount ?>）</span></div>
@@ -145,6 +159,18 @@ require __DIR__ . '/_app_header.php';
         <div class="stat"><span class="stat__num"><?= e(format_amount($onsiteDue, $cur0)) ?></span><span class="stat__label">当日・未収（受領 <?= $onsiteCollectedCount ?>/<?= $onsiteCount ?>）</span></div>
         <div class="stat"><span class="stat__num"><?= e(format_amount($refunded, $cur0)) ?></span><span class="stat__label">返金合計</span></div>
     </div>
+
+    <?php if ($noShowTargets > 0): ?>
+        <p style="margin:0 0 14px;">
+            <form method="post" action="onsite_fee_bulk.php" style="display:inline;"
+                  data-confirm="未出席・未集金・未請求の当日払い <?= $noShowTargets ?>人へ、キャンセルポリシーに基づくキャンセル料の支払いリンクをメール送信します。金額は各自のポリシー逆算で自動です（<?= e($feeInfo['label']) ?>）。よろしいですか？">
+                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                <button type="submit" class="btn btn--danger">No-show（未出席）に一括でキャンセル料を請求（<?= $noShowTargets ?>人）</button>
+            </form>
+            <span class="muted" style="font-size:.82rem; margin-left:8px;">※ 未出席・未集金の当日払いの方が対象（<?= e($feeInfo['label']) ?>）</span>
+        </p>
+    <?php endif; ?>
 
     <?php if ($totalCount === 0): ?>
         <p class="muted">まだ申込はありません。</p>
@@ -202,8 +228,8 @@ require __DIR__ . '/_app_header.php';
                     if ($isOnsite) {
                         if (!empty($p['fee_paid'])) {
                             $statusHtml = '<span class="badge badge--ok">キャンセル料 入金済み</span>';
-                        } elseif ($cancelReq && !empty($p['fee_link_sent'])) {
-                            $statusHtml = '<span class="badge badge--warn">キャンセル料 支払い待ち</span>';
+                        } elseif (!empty($p['fee_link_sent'])) {
+                            $statusHtml = '<span class="badge badge--warn">キャンセル料 請求中（支払い待ち）</span>';
                         } elseif ($cancelReq) {
                             $statusHtml = '<span class="badge badge--warn">キャンセル受付（料金なし）</span>';
                         } elseif (!empty($p['collected'])) {
@@ -249,7 +275,7 @@ require __DIR__ . '/_app_header.php';
                                     <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
                                     <button type="submit" class="btn btn--danger">名簿から取消</button>
                                 </form>
-                            <?php elseif ($cancelReq): ?>
+                            <?php elseif ($cancelReq || !empty($p['fee_link_sent'])): ?>
                                 <?php if (!empty($p['fee_link_sent']) && $pFee > 0 && ($p['email'] ?? '') !== ''): ?>
                                     <form method="post" action="onsite_fee.php" data-confirm="「<?= e($p['name']) ?>」さんへキャンセル料 <?= e(format_amount($pFee, $cur)) ?> の支払いリンクを再送します。よろしいですか？">
                                         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
