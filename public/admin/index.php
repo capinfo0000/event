@@ -208,7 +208,7 @@ require __DIR__ . '/_app_header.php';
                 <thead>
                     <tr>
                         <th class="op1">出席</th>
-                        <th class="op2">キャンセル / 返金</th>
+                        <th class="op2">集金・返金</th>
                         <th class="nm">名前</th>
                         <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
                         <th>支払方法</th>
