@@ -314,6 +314,22 @@ require __DIR__ . '/_app_header.php';
                     $customCols[] = $lab;
                 }
             }
+            // 詳細検索用: 追加項目ごとの絞り込み。年齢は数値範囲、それ以外は値のプルダウン。
+            $isAgeLabel = static fn (string $l): bool => (bool) preg_match('/(年齢|歳|age)/ui', $l);
+            $customFilters = []; // ci => ['label' => ..., 'values' => [...]]
+            foreach ($customCols as $ci => $lab) {
+                if ($isAgeLabel((string) $lab)) { continue; } // 年齢は範囲入力で扱う
+                $vals = [];
+                foreach ($participants as $pp) {
+                    $v = trim((string) ($pp['custom'][$lab] ?? ''));
+                    if ($v !== '') { $vals[$v] = true; }
+                }
+                if ($vals !== []) {
+                    $keys = array_keys($vals);
+                    sort($keys, SORT_NATURAL | SORT_FLAG_CASE);
+                    $customFilters[$ci] = ['label' => (string) $lab, 'values' => $keys];
+                }
+            }
         ?>
         <style nonce="<?= e(csp_nonce()) ?>">
             .ptbl th, .ptbl td { white-space: nowrap; vertical-align: top; background: var(--surface); }
@@ -340,12 +356,28 @@ require __DIR__ . '/_app_header.php';
             .ptbl th[data-sort][data-dir=desc]::after { content: "↓"; color: var(--navy); }
             /* 検索ボックス（全幅にならないよう抑制） */
             .psearchbar { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
-            .psearchbar input { width: 100%; max-width: 320px; }
+            .psearchbar input[type=search] { width: 100%; max-width: 280px; }
+            /* 詳細検索パネル */
+            .advpanel { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 0 0 12px; padding: 12px 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; }
+            .advpanel label { display: flex; gap: 6px; align-items: center; font-size: .85rem; font-weight: 600; margin: 0; }
+            .advpanel select, .advpanel input { width: auto; }
+            .advpanel input[type=number] { width: 78px; }
         </style>
         <div class="psearchbar">
-            <input type="search" id="psearch" placeholder="名前・フリガナ・メール・電話で検索" autocomplete="off" aria-label="参加者を検索">
+            <input type="search" id="psearch" placeholder="名前・フリガナで検索" autocomplete="off" aria-label="名前・フリガナで検索">
+            <button type="button" class="btn btn--ghost" id="advToggle" aria-expanded="false" aria-controls="advPanel">詳細検索</button>
             <span class="muted" id="psearchcount" style="font-size:.85rem;"></span>
             <span class="muted" style="font-size:.8rem;">※ 見出しをクリックで並べ替え</span>
+        </div>
+        <div class="advpanel" id="advPanel" hidden>
+            <label>状態 <select id="fStatus"><option value="">すべて</option></select></label>
+            <label>出席 <select id="fAttend"><option value="">すべて</option><option value="1">出席済み</option><option value="0">未確認</option></select></label>
+            <label>支払方法 <select id="fMethod"><option value="">すべて</option></select></label>
+            <?php foreach ($customFilters as $ci => $cf): ?>
+                <label><?= e($cf['label']) ?> <select class="fcust" data-col="<?= (int) $ci ?>"><option value="">すべて</option><?php foreach ($cf['values'] as $v): ?><option value="<?= e($v) ?>"><?= e($v) ?></option><?php endforeach; ?></select></label>
+            <?php endforeach; ?>
+            <label class="fAge">年齢 <input type="number" id="fAgeMin" min="0" placeholder="下限"> 〜 <input type="number" id="fAgeMax" min="0" placeholder="上限"></label>
+            <button type="button" class="btn btn--ghost" id="fClear">条件クリア</button>
         </div>
         <div class="table-wrap">
             <table class="ptbl" id="ptbl">
@@ -412,21 +444,24 @@ require __DIR__ . '/_app_header.php';
                     }
                     // 返金の上限＝「実受取額（Stripe手数料を除いた額）」の残り。全額返金もこの額を返金する。
                     $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
-                    // 検索・並べ替え用の値を用意する（フリガナは名前セルでも使う）。
+                    // フリーワード検索は「名前・フリガナ」のみ。その他の条件は詳細検索で絞り込む。
                     $kana = '';
                     foreach (($p['custom'] ?? []) as $lab => $val) {
                         if ($isKanaLabel((string) $lab)) { $kana = (string) $val; break; }
                     }
-                    $searchParts = [
-                        (string) ($p['name'] ?? ''), $kana, (string) ($p['email'] ?? ''),
-                        (string) ($p['phone'] ?? ''), (string) ($p['category'] ?? ''),
-                        (string) ($p['note'] ?? ''), $statusText, ($isOnsite ? '当日' : '事前'),
-                    ];
-                    foreach (($p['custom'] ?? []) as $val) { $searchParts[] = (string) $val; }
-                    $searchHay = mb_strtolower(trim(implode(' ', $searchParts)));
+                    $searchHay = mb_strtolower(trim((string) ($p['name'] ?? '') . ' ' . $kana));
                     $sortName = $kana !== '' ? $kana : (string) ($p['name'] ?? '');
+                    // 年齢（追加項目に「年齢/歳/age」があれば数値だけ取り出して詳細検索に使う）。
+                    $ageVal = '';
+                    foreach (($p['custom'] ?? []) as $lab => $val) {
+                        if (preg_match('/(年齢|歳|age)/ui', (string) $lab) && preg_match('/\d+/', (string) $val, $m)) {
+                            $ageVal = $m[0];
+                            break;
+                        }
+                    }
+                    $attendedAttr = !empty($p['attended']) ? '1' : '0';
                 ?>
-                <tr data-search="<?= e($searchHay) ?>" data-name="<?= e($sortName) ?>" data-amount="<?= (int) $p['amount'] ?>" data-created="<?= (int) $p['created'] ?>" data-status="<?= e($statusText) ?>" data-method="<?= $isOnsite ? '当日' : '事前' ?>">
+                <tr data-search="<?= e($searchHay) ?>" data-name="<?= e($sortName) ?>" data-amount="<?= (int) $p['amount'] ?>" data-created="<?= (int) $p['created'] ?>" data-status="<?= e($statusText) ?>" data-method="<?= $isOnsite ? '当日' : '事前' ?>" data-attended="<?= $attendedAttr ?>" data-age="<?= e($ageVal) ?>"<?php foreach ($customCols as $ci => $lab): ?> data-c<?= (int) $ci ?>="<?= e((string) ($p['custom'][$lab] ?? '')) ?>"<?php endforeach; ?>>
                     <td class="op1">
                         <?php if (!empty($p['customer_id']) && !$isCancelled): ?>
                             <form method="post" action="attend.php">
@@ -512,18 +547,87 @@ require __DIR__ . '/_app_header.php';
                 var total = rows.length;
                 var search = document.getElementById('psearch');
                 var count = document.getElementById('psearchcount');
+                var fStatus = document.getElementById('fStatus');
+                var fAttend = document.getElementById('fAttend');
+                var fMethod = document.getElementById('fMethod');
+                var fAgeMin = document.getElementById('fAgeMin');
+                var fAgeMax = document.getElementById('fAgeMax');
+                var advToggle = document.getElementById('advToggle');
+                var advPanel = document.getElementById('advPanel');
+                var fClear = document.getElementById('fClear');
+                var custSels = Array.prototype.slice.call(document.querySelectorAll('.fcust'));
+
+                // 状態・支払方法の選択肢を実データから生成（常に表示中のデータと一致させる）
+                function fillSelect(sel, values){
+                    if (!sel) { return; }
+                    values.sort(function(a, b){ return a.localeCompare(b, 'ja'); });
+                    values.forEach(function(v){ var o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+                }
+                var statuses = {}, methods = {}, hasAge = false;
+                rows.forEach(function(tr){
+                    var s = tr.getAttribute('data-status'); if (s) { statuses[s] = 1; }
+                    var m = tr.getAttribute('data-method'); if (m) { methods[m] = 1; }
+                    if ((tr.getAttribute('data-age') || '') !== '') { hasAge = true; }
+                });
+                fillSelect(fStatus, Object.keys(statuses));
+                fillSelect(fMethod, Object.keys(methods));
+                var ageWrap = document.querySelector('.advpanel .fAge');
+                if (ageWrap && !hasAge) { ageWrap.style.display = 'none'; }
+
                 function applyFilter(){
                     var q = (search && search.value || '').trim().toLowerCase();
+                    var st = fStatus ? fStatus.value : '';
+                    var at = fAttend ? fAttend.value : '';
+                    var me = fMethod ? fMethod.value : '';
+                    var amin = (fAgeMin && fAgeMin.value !== '') ? parseFloat(fAgeMin.value) : null;
+                    var amax = (fAgeMax && fAgeMax.value !== '') ? parseFloat(fAgeMax.value) : null;
                     var shown = 0;
                     rows.forEach(function(tr){
-                        var hay = tr.getAttribute('data-search') || '';
-                        var vis = (q === '' || hay.indexOf(q) >= 0);
-                        tr.style.display = vis ? '' : 'none';
-                        if (vis) { shown++; }
+                        var ok = true;
+                        if (q !== '' && (tr.getAttribute('data-search') || '').indexOf(q) < 0) { ok = false; }
+                        if (ok && st !== '' && tr.getAttribute('data-status') !== st) { ok = false; }
+                        if (ok && at !== '' && (tr.getAttribute('data-attended') || '0') !== at) { ok = false; }
+                        if (ok && me !== '' && tr.getAttribute('data-method') !== me) { ok = false; }
+                        if (ok && (amin !== null || amax !== null)) {
+                            var av = tr.getAttribute('data-age');
+                            if (av === '' || av === null) { ok = false; }
+                            else { var n = parseFloat(av); if (amin !== null && n < amin) { ok = false; } if (amax !== null && n > amax) { ok = false; } }
+                        }
+                        if (ok) {
+                            for (var i = 0; i < custSels.length; i++) {
+                                var cv = custSels[i].value;
+                                if (cv !== '' && tr.getAttribute('data-c' + custSels[i].getAttribute('data-col')) !== cv) { ok = false; break; }
+                            }
+                        }
+                        tr.style.display = ok ? '' : 'none';
+                        if (ok) { shown++; }
                     });
-                    if (count) { count.textContent = (q === '') ? (total + ' 件') : (shown + ' / ' + total + ' 件'); }
+                    var custActive = custSels.some(function(cs){ return cs.value !== ''; });
+                    var active = q !== '' || st !== '' || at !== '' || me !== '' || amin !== null || amax !== null || custActive;
+                    if (count) { count.textContent = active ? (shown + ' / ' + total + ' 件') : (total + ' 件'); }
                 }
-                if (search) { search.addEventListener('input', applyFilter); }
+                [search, fStatus, fAttend, fMethod, fAgeMin, fAgeMax].concat(custSels).forEach(function(el){
+                    if (el) { el.addEventListener('input', applyFilter); el.addEventListener('change', applyFilter); }
+                });
+                if (advToggle && advPanel) {
+                    advToggle.addEventListener('click', function(){
+                        var hidden = advPanel.hasAttribute('hidden');
+                        if (hidden) { advPanel.removeAttribute('hidden'); advToggle.setAttribute('aria-expanded', 'true'); }
+                        else { advPanel.setAttribute('hidden', ''); advToggle.setAttribute('aria-expanded', 'false'); }
+                    });
+                }
+                if (fClear) {
+                    fClear.addEventListener('click', function(){
+                        if (search) { search.value = ''; }
+                        if (fStatus) { fStatus.value = ''; }
+                        if (fAttend) { fAttend.value = ''; }
+                        if (fMethod) { fMethod.value = ''; }
+                        if (fAgeMin) { fAgeMin.value = ''; }
+                        if (fAgeMax) { fAgeMax.value = ''; }
+                        custSels.forEach(function(cs){ cs.value = ''; });
+                        applyFilter();
+                    });
+                }
                 applyFilter();
                 var curKey = null, curDir = 1;
                 Array.prototype.forEach.call(table.querySelectorAll('th[data-sort]'), function(th){
