@@ -354,18 +354,17 @@ require __DIR__ . '/_app_header.php';
             .ptbl th, .ptbl td { white-space: nowrap; vertical-align: top; background: var(--surface); }
             .ptbl thead th { background: #f8fafc; }
             .ptbl td { padding-top: 12px; padding-bottom: 12px; }
-            /* 横スクロールしても「操作」「名前」を固定 */
-            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 98px; min-width: 98px; white-space: nowrap; }
-            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 98px; z-index: 2; width: 116px; min-width: 116px; white-space: nowrap; }
-            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 214px; z-index: 2; white-space: nowrap; min-width: 92px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
-            .ptbl .op1 .btn, .ptbl .op2 .btn { white-space: nowrap; }
+            /* 横スクロールしても「操作」「状態」「名前」を固定（出席と集金・返金は1列に統合し縦積み） */
+            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 112px; min-width: 112px; white-space: nowrap; }
+            .ptbl th.st, .ptbl td.st { position: sticky; left: 112px; z-index: 2; width: 118px; min-width: 118px; white-space: normal; }
+            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 230px; z-index: 2; white-space: nowrap; min-width: 92px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
+            .ptbl td.op1 { display: flex; flex-direction: column; gap: 5px; align-items: stretch; }
+            .ptbl td.op1 form { display: block; margin: 0; }
+            .ptbl .op1 .btn { white-space: nowrap; width: 100%; }
             /* 列幅は内容ギリギリに：ボタン・セル余白を小さくして各列を詰める */
             .ptbl .btn { padding: 6px 10px; font-size: .82rem; }
             .ptbl th, .ptbl td { padding-left: 7px; padding-right: 7px; }
-            .ptbl thead th.op1, .ptbl thead th.op2, .ptbl thead th.nm { z-index: 3; }
-            /* 操作ボタンは横並び（幅が足りなければ折り返し） */
-            .ptbl .op1 form, .ptbl .op2 form { display: inline-flex; gap: 6px; align-items: center; margin: 0 6px 6px 0; vertical-align: top; }
-            .ptbl .op2 input[type=number] { width: 84px; }
+            .ptbl thead th.op1, .ptbl thead th.st, .ptbl thead th.nm { z-index: 3; }
             .ptbl .nm .kana { font-size: .72rem; color: var(--muted); line-height: 1.2; }
             .ptbl .nm .nmmain { font-weight: 700; }
             .ptbl .feenote { font-size: .76rem; color: var(--muted); margin-top: 2px; }
@@ -389,14 +388,14 @@ require __DIR__ . '/_app_header.php';
                 .ptbl th, .ptbl td { font-size: .74rem; }
                 .table-wrap th, .table-wrap td { padding-left: 6px; padding-right: 6px; }
                 .ptbl td { padding-top: 7px; padding-bottom: 7px; }
-                .ptbl .op1 .btn, .ptbl .op2 .btn { padding: 4px 6px; font-size: .7rem; }
+                .ptbl .op1 .btn { padding: 4px 6px; font-size: .7rem; }
                 .ptbl .nm .nmmain { font-size: .8rem; }
                 .ptbl .nm .kana { font-size: .62rem; }
                 .badge { font-size: .66rem; padding: 2px 6px; }
                 .ptbl th, .ptbl td { padding-left: 5px; padding-right: 5px; }
-                .ptbl th.op1, .ptbl td.op1 { width: 78px; min-width: 78px; }
-                .ptbl th.op2, .ptbl td.op2 { left: 78px; width: 92px; min-width: 92px; }
-                .ptbl th.nm, .ptbl td.nm { left: 170px; min-width: 72px; }
+                .ptbl th.op1, .ptbl td.op1 { width: 92px; min-width: 92px; }
+                .ptbl th.st, .ptbl td.st { left: 92px; width: 100px; min-width: 100px; }
+                .ptbl th.nm, .ptbl td.nm { left: 192px; min-width: 72px; }
             }
         </style>
         <div class="psearchbar">
@@ -430,13 +429,12 @@ require __DIR__ . '/_app_header.php';
             <table class="ptbl" id="ptbl">
                 <thead>
                     <tr>
-                        <th class="op1">出席</th>
-                        <th class="op2">集金・返金</th>
+                        <th class="op1">操作</th>
+                        <th class="st" data-sort="status">状態</th>
                         <th class="nm" data-sort="name">名前</th>
                         <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
                         <th data-sort="method">支払方法</th>
                         <th data-sort="amount">金額</th>
-                        <th data-sort="status">状態</th>
                         <th data-sort="created">申込日時</th>
                         <th>電話</th>
                         <th>メール</th>
@@ -509,8 +507,14 @@ require __DIR__ . '/_app_header.php';
                     $attendedAttr = !empty($p['attended']) ? '1' : '0';
                 ?>
                 <tr data-search="<?= e($searchHay) ?>" data-name="<?= e($sortName) ?>" data-amount="<?= (int) $p['amount'] ?>" data-created="<?= (int) $p['created'] ?>" data-status="<?= e($statusText) ?>" data-method="<?= $isOnsite ? '当日' : '事前' ?>" data-attended="<?= $attendedAttr ?>" data-age="<?= e($ageVal) ?>"<?php foreach ($customCols as $ci => $lab): ?> data-c<?= (int) $ci ?>="<?= e((string) ($p['custom'][$lab] ?? '')) ?>"<?php endforeach; ?>>
+                    <?php
+                        // 出席と集金・返金を1列に統合（縦積み）。
+                        $hasAttend  = !empty($p['customer_id']) && !$isCancelled;
+                        $showCollect = $isOnsite && !$isCancelled && empty($p['fee_paid']) && empty($p['fee_link_sent']) && !$cancelReq && !empty($p['attended']);
+                        $showRefund  = !$isOnsite && $cancelReq && $remaining > 0 && !$p['fully_refunded'];
+                    ?>
                     <td class="op1">
-                        <?php if (!empty($p['customer_id']) && !$isCancelled): ?>
+                        <?php if ($hasAttend): ?>
                             <form method="post" action="attend.php">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                 <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
@@ -523,45 +527,33 @@ require __DIR__ . '/_app_header.php';
                                     <button type="submit" class="btn btn--ghost">出席取消</button>
                                 <?php endif; ?>
                             </form>
-                        <?php else: ?>
-                            <span class="muted">—</span>
                         <?php endif; ?>
-                    </td>
-                    <td class="op2">
-                        <?php if ($isOnsite): ?>
-                            <?php if ($isCancelled || !empty($p['fee_paid']) || !empty($p['fee_link_sent']) || $cancelReq): ?>
-                                <?php // キャンセル済み等は行内で操作しない。戻す場合は参加者に再申込してもらう（メールで自動紐づけ）。 ?>
-                                <span class="muted">—</span>
-                            <?php elseif (empty($p['attended'])): ?>
-                                <?php // 受領（集金）は「出席にする」を押してから。未出席のうちは表示しない。 ?>
-                                <span class="muted" title="「出席にする」を押すと受領ボタンが出ます">—</span>
-                            <?php else: ?>
-                                <form method="post" action="onsite_collect.php">
-                                    <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                    <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                    <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                    <?php if (empty($p['collected'])): ?>
-                                        <input type="hidden" name="collect" value="1">
-                                        <button type="submit" class="btn">受領にする</button>
-                                    <?php else: ?>
-                                        <input type="hidden" name="collect" value="0">
-                                        <button type="submit" class="btn btn--ghost">受領取消</button>
-                                    <?php endif; ?>
-                                </form>
-                            <?php endif; ?>
-                        <?php elseif ($cancelReq && $remaining > 0 && !$p['fully_refunded']): ?>
-                            <?php // 参加者からのキャンセル希望が出ている事前決済のみ「承認して返金」。任意の全額・一部返金は上部の「請求管理」から。 ?>
+                        <?php if ($showCollect): ?>
+                            <form method="post" action="onsite_collect.php">
+                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                <?php if (empty($p['collected'])): ?>
+                                    <input type="hidden" name="collect" value="1">
+                                    <button type="submit" class="btn">受領にする</button>
+                                <?php else: ?>
+                                    <input type="hidden" name="collect" value="0">
+                                    <button type="submit" class="btn btn--ghost">受領取消</button>
+                                <?php endif; ?>
+                            </form>
+                        <?php elseif ($showRefund): ?>
                             <form method="post" action="refund.php" class="refund-form" data-confirm="「<?= e($p['name']) ?>」さんのキャンセル希望を承認して全額返金します。よろしいですか？（Stripe手数料を除いた実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を返金します）">
                                 <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
                                 <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
                                 <input type="hidden" name="payment_intent" value="<?= e($p['payment_intent']) ?>">
-                                <?php // amount 未指定＝全額返金（実受取額）。 ?>
                                 <button type="submit" class="btn btn--danger" title="キャンセル希望を承認し、実受取額 <?= e(format_amount((int) $remaining, $cur)) ?> を全額返金します。">承認して返金</button>
                             </form>
-                        <?php else: ?>
+                        <?php endif; ?>
+                        <?php if (!$hasAttend && !$showCollect && !$showRefund): ?>
                             <span class="muted">—</span>
                         <?php endif; ?>
                     </td>
+                    <td class="st"><?= $statusHtml ?><?php if (!empty($p['attended'])): ?><br><span class="badge badge--ok" style="font-size:.72rem;">出席済み</span><?php endif; ?></td>
                     <td class="nm">
                         <?php if ($kana !== ''): ?><div class="kana"><?= e($kana) ?></div><?php endif; ?>
                         <span class="nmmain"><?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?></span>
@@ -571,7 +563,6 @@ require __DIR__ . '/_app_header.php';
                     <?php foreach ($customCols as $lab): ?><td><?= e($p['custom'][$lab] ?? '') ?></td><?php endforeach; ?>
                     <td><?= $isOnsite ? '当日' : '事前' ?></td>
                     <td><?= e(format_amount($p['amount'], $cur)) ?><br><span class="muted" style="font-size:.78rem;"><?= (int) $p['party_size'] ?>名</span></td>
-                    <td><?= $statusHtml ?><?php if (!empty($p['attended'])): ?><br><span class="badge badge--ok" style="font-size:.72rem;">出席済み</span><?php endif; ?></td>
                     <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
                     <td><?= ($p['phone'] ?? '') !== '' ? e($p['phone']) : '<span class="muted">—</span>' ?></td>
                     <td><?= $p['email'] !== '' ? e($p['email']) : '<span class="muted">—</span>' ?></td>
