@@ -149,95 +149,81 @@ require __DIR__ . '/_app_header.php';
     <?php if ($totalCount === 0): ?>
         <p class="muted">まだ申込はありません。</p>
     <?php else: ?>
-        <?php
-            // 追加入力項目（年齢・フリガナ・紹介者・自由項目）を列として展開する。
-            // 参加者に登場する順で列ラベルを集約（各申込のフィールド順を保持）。
-            $customCols = [];
-            foreach ($participants as $p) {
-                foreach (($p['custom'] ?? []) as $lab => $val) {
-                    if (!in_array($lab, $customCols, true)) {
-                        $customCols[] = $lab;
+        <style nonce="<?= e(csp_nonce()) ?>">
+            .plist { display:flex; flex-direction:column; gap:10px; }
+            .pcard { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px; box-shadow:var(--shadow); }
+            .pcard__top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+            .pcard__name { font-weight:800; font-size:1.02rem; }
+            .pcard__amount { margin-left:auto; font-weight:800; white-space:nowrap; }
+            .pcard__method { color:var(--muted); font-weight:600; font-size:.82rem; }
+            .pcard__meta { display:flex; flex-wrap:wrap; gap:4px 16px; margin:8px 0 0; font-size:.85rem; }
+            .pcard__meta .k { color:var(--muted); }
+            .pcard__actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; border-top:1px solid var(--border); padding-top:10px; margin-top:10px; }
+            .pcard__actions form { margin:0; display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap; }
+            .pcard__actions input[type=number] { width:96px; }
+        </style>
+        <div class="plist">
+            <?php foreach ($participants as $p): ?>
+                <?php
+                    $cur = $p['currency'];
+                    $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
+                    $cancelReq = !empty($p['cancel_requested']);
+                    if ($isOnsite) {
+                        if (!empty($p['fee_paid'])) {
+                            $statusHtml = '<span class="badge badge--ok">キャンセル料 入金済み</span>';
+                        } elseif ($cancelReq && !empty($p['fee_link_sent'])) {
+                            $statusHtml = '<span class="badge badge--warn">キャンセル料 支払い待ち</span>';
+                        } elseif ($cancelReq) {
+                            $statusHtml = '<span class="badge badge--warn">キャンセル受付（料金なし）</span>';
+                        } elseif (!empty($p['collected'])) {
+                            $statusHtml = '<span class="badge badge--ok">受領済み</span>';
+                        } else {
+                            $statusHtml = '<span class="badge badge--warn">当日支払い・未収</span>';
+                        }
+                    } elseif ($p['fully_refunded']) {
+                        $statusHtml = '<span class="badge badge--danger">キャンセル済み（全額返金）</span>';
+                    } elseif ($cancelReq) {
+                        $statusHtml = '<span class="badge badge--warn">返金承認待ち</span>'
+                            . ($p['amount_refunded'] > 0 ? ' <span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>' : '');
+                    } elseif ($p['amount_refunded'] > 0) {
+                        $statusHtml = '<span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
+                    } else {
+                        $statusHtml = '<span class="badge badge--ok">事前決済済み</span>';
                     }
-                }
-            }
-        ?>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>申込日時</th><th>お名前</th>
-                        <?php foreach ($customCols as $lab): ?><th><?= e($lab) ?></th><?php endforeach; ?>
-                        <th>メール</th><th>電話</th>
-                        <th>人数</th><th>支払方法</th><th>金額</th><th>状態</th><th>出席</th><th>キャンセル / 返金</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($participants as $p): ?>
-                        <?php
-                            $cur = $p['currency'];
-                            $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
-                            $cancelReq = !empty($p['cancel_requested']);
-                            if ($isOnsite) {
-                                if (!empty($p['fee_paid'])) {
-                                    $statusHtml = '<span class="badge badge--ok">キャンセル料 入金済み</span>';
-                                } elseif ($cancelReq && !empty($p['fee_link_sent'])) {
-                                    $statusHtml = '<span class="badge badge--warn">キャンセル料 支払い待ち</span>';
-                                } elseif ($cancelReq) {
-                                    $statusHtml = '<span class="badge badge--warn">キャンセル受付（料金なし）</span>';
-                                } elseif (!empty($p['collected'])) {
-                                    $statusHtml = '<span class="badge badge--ok">受領済み</span>';
-                                } else {
-                                    $statusHtml = '<span class="badge badge--warn">当日支払い・未収</span>';
-                                }
-                            } elseif ($p['fully_refunded']) {
-                                $statusHtml = '<span class="badge badge--danger">キャンセル済み（全額返金）</span>';
-                            } elseif ($cancelReq) {
-                                $statusHtml = '<span class="badge badge--warn">返金承認待ち</span>'
-                                    . ($p['amount_refunded'] > 0 ? ' <span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>' : '');
-                            } elseif ($p['amount_refunded'] > 0) {
-                                $statusHtml = '<span class="badge badge--warn">一部返金 ' . e(format_amount($p['amount_refunded'], $cur)) . '</span>';
-                            } else {
-                                $statusHtml = '<span class="badge badge--ok">事前決済済み</span>';
-                            }
-                            // 返金の上限＝「実受取額（Stripe手数料を除いた額）」の残り。全額返金もこの額を返金する。
-                            $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
-                        ?>
-                        <tr>
-                            <td class="muted"><?= e(date('Y-m-d H:i', $p['created'])) ?></td>
-                            <td<?= $p['note'] !== '' ? ' title="' . e('備考: ' . $p['note']) . '"' : '' ?>>
-                                <?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?>
-                                <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
-                                <?php if ($p['note'] !== ''): ?><span class="muted" style="font-size:.8rem;" title="<?= e($p['note']) ?>">[備考]</span><?php endif; ?>
-                            </td>
-                            <?php foreach ($customCols as $lab): ?>
-                                <td><?= e($p['custom'][$lab] ?? '') ?></td>
-                            <?php endforeach; ?>
-                            <td><?= e($p['email']) ?></td>
-                            <td><?= e($p['phone']) ?></td>
-                            <td><?= (int) $p['party_size'] ?> 名</td>
-                            <td><?= $isOnsite ? '当日' : '事前' ?></td>
-                            <td><?= e(format_amount($p['amount'], $cur)) ?></td>
-                            <td><?= $statusHtml ?></td>
-                            <td>
-                                <?php if (!empty($p['customer_id'])): ?>
-                                    <form method="post" action="attend.php">
-                                        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-                                        <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
-                                        <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
-                                        <?php if (empty($p['attended'])): ?>
-                                            <input type="hidden" name="attend" value="1">
-                                            <button type="submit" class="btn">出席にする</button>
-                                        <?php else: ?>
-                                            <input type="hidden" name="attend" value="0">
-                                            <span class="badge badge--ok">出席済み</span><br>
-                                            <button type="submit" class="btn btn--ghost" style="margin-top:4px;">取消</button>
-                                        <?php endif; ?>
-                                    </form>
+                    // 返金の上限＝「実受取額（Stripe手数料を除いた額）」の残り。全額返金もこの額を返金する。
+                    $remaining = (int) (($p['net'] ?? $p['amount']) - $p['amount_refunded']);
+                ?>
+                <div class="pcard">
+                    <div class="pcard__top">
+                        <span class="pcard__name"><?= e($p['name'] !== '' ? $p['name'] : '（未入力）') ?></span>
+                        <?php if (!empty($p['category'])): ?><span class="badge" style="font-size:.72rem;">区分:<?= e($p['category']) ?></span><?php endif; ?>
+                        <?= $statusHtml ?>
+                        <?php if (!empty($p['attended'])): ?><span class="badge badge--ok" style="font-size:.72rem;">出席済み</span><?php endif; ?>
+                        <span class="pcard__amount"><?= e(format_amount($p['amount'], $cur)) ?> <span class="pcard__method">/ <?= $isOnsite ? '当日払い' : '事前決済' ?></span></span>
+                    </div>
+                    <div class="pcard__meta">
+                        <?php foreach (($p['custom'] ?? []) as $lab => $val): ?><span><span class="k"><?= e($lab) ?>:</span> <?= e($val) ?></span><?php endforeach; ?>
+                        <span><span class="k">メール:</span> <?= $p['email'] !== '' ? e($p['email']) : '—' ?></span>
+                        <?php if (($p['phone'] ?? '') !== ''): ?><span><span class="k">電話:</span> <?= e($p['phone']) ?></span><?php endif; ?>
+                        <span><span class="k">人数:</span> <?= (int) $p['party_size'] ?>名</span>
+                        <span><span class="k">申込:</span> <?= e(date('Y-m-d H:i', $p['created'])) ?></span>
+                        <?php if ($p['note'] !== ''): ?><span><span class="k">備考:</span> <?= e($p['note']) ?></span><?php endif; ?>
+                    </div>
+                    <div class="pcard__actions">
+                        <?php if (!empty($p['customer_id'])): ?>
+                            <form method="post" action="attend.php">
+                                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                                <input type="hidden" name="event_id" value="<?= e($selectedId) ?>">
+                                <input type="hidden" name="customer_id" value="<?= e($p['customer_id']) ?>">
+                                <?php if (empty($p['attended'])): ?>
+                                    <input type="hidden" name="attend" value="1">
+                                    <button type="submit" class="btn">出席にする</button>
                                 <?php else: ?>
-                                    <span class="muted">—</span>
+                                    <input type="hidden" name="attend" value="0">
+                                    <button type="submit" class="btn btn--ghost">出席取消</button>
                                 <?php endif; ?>
-                            </td>
-                            <td>
+                            </form>
+                        <?php endif; ?>
                                 <?php if ($isOnsite): ?>
                                     <?php $pFee = (int) round(((int) $p['amount']) * (float) $feeInfo['rate']); ?>
                                     <?php if (!empty($p['fee_paid'])): ?>
@@ -330,11 +316,9 @@ require __DIR__ . '/_app_header.php';
                                         <button type="submit" class="btn btn--danger"><?= $cancelReq ? '承認して返金' : '返金' ?></button>
                                     </form>
                                 <?php endif; ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </div>
         <p class="muted" style="margin-top:10px;">返金欄を<strong>空欄</strong>で実行すると<strong>全額返金（＝キャンセル）</strong>。このとき Stripe手数料を除いた<strong>主催者の実受取額</strong>を返金します（例：¥50決済で手数料¥2なら¥48を返金）。金額を入力した場合は<strong>その額をそのまま返金</strong>します（上限は実受取額）。</p>
         <p class="muted" style="margin-top:4px;">⚠️ Stripe の決済手数料は返金時に戻りません。この仕組みでは<strong>手数料分は参加者の実質負担</strong>となります（全額返金でも参加者へ戻るのは実受取額まで）。トラブル防止のため、キャンセル・返金ポリシーに明記することをおすすめします。</p>
