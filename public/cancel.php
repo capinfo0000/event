@@ -16,9 +16,11 @@ $sessionId = (string) ($_GET['session_id'] ?? '');
 $event = $eventId !== '' ? find_event($eventId) : null;
 $account = $event !== null ? stripe_resolve_event($event) : null;
 
-$declined   = false;   // カード拒否で戻ってきたか
-$declineMsg = null;    // 具体的な拒否理由（分かれば）
+$declined   = false;   // 支払いが拒否/失敗で戻ってきたか
+$declineMsg = null;    // 具体的な理由（分かれば）
 $whoText    = '';      // 誰による中断か
+$methodType = '';      // 支払い方法（card / paypay など）
+$isCard     = true;    // カード系かどうか（文言・原因リストの出し分け）
 
 // session_id があれば、その決済の結果を確認して原因を特定する（細工された値でも 500 にしない）。
 if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
@@ -32,10 +34,18 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
         if (is_object($pi)) {
             $lpe = $pi->last_payment_error ?? null;
             if (is_object($lpe)) {
-                // 支払い試行が拒否された
                 $declined = true;
+                // 支払い方法タイプを特定（失敗した手段 → PI の候補 の順）
+                $pmObj = $lpe->payment_method ?? null;
+                $methodType = is_object($pmObj) ? (string) ($pmObj->type ?? '') : '';
+                if ($methodType === '' && isset($pi->payment_method_types) && is_array($pi->payment_method_types)) {
+                    $methodType = (string) ($pi->payment_method_types[0] ?? '');
+                }
+                $isCard = ($methodType === '' || $methodType === 'card');
                 $declineMsg = decline_reason_ja($lpe->decline_code ?? null, $lpe->code ?? null);
-                $whoText = 'カード発行会社（銀行）により、この支払いは承認されませんでした。';
+                $whoText = $isCard
+                    ? 'カード発行会社（銀行）により、この支払いは承認されませんでした。'
+                    : (payment_method_label_ja($methodType) . ' 側で、この支払いは完了しませんでした。');
             } else {
                 $reason = (string) ($pi->cancellation_reason ?? '');
                 $whoText = ($reason === 'abandoned')
@@ -53,7 +63,7 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $declined ? 'カードが承認されませんでした' : 'お支払いは完了していません' ?></title>
+    <title><?= $declined ? 'お支払いが完了しませんでした' : 'お支払いは完了していません' ?></title>
     <link rel="stylesheet" href="/assets/app.css?v=5">
     <style nonce="<?= e(csp_nonce()) ?>">
         .ng { color: var(--dng); font-size: 1.25rem; font-weight: 800; margin: 0 0 8px; }
@@ -66,15 +76,16 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
     <div class="brandbar">イベント参加申込</div>
     <div class="card">
         <?php if ($declined): ?>
-            <p class="ng">カードが承認されませんでした</p>
+            <p class="ng"><?= $isCard ? 'カードが承認されませんでした' : 'お支払いが完了しませんでした' ?></p>
             <p><?= e($whoText) ?>料金は請求されていません。</p>
             <div class="cause">
                 <strong>考えられる原因：</strong>
                 <?php if ($declineMsg !== null): ?>
                     <?= e($declineMsg) ?>
                 <?php else: ?>
-                    カード発行会社が理由を明示せずに拒否したため、当方では詳細を確認できません。下記のいずれかが考えられます。
+                    提供元が理由を明示していないため、当方では詳細を確認できません。下記のいずれかが考えられます。
                 <?php endif; ?>
+                <?php if ($isCard): ?>
                 <ul class="reasons">
                     <li>残高不足、または利用限度額を超えている</li>
                     <li>ネットショッピングの利用制限がかかっている</li>
@@ -82,8 +93,16 @@ if ($sessionId !== '' && $event !== null && stripe_ready_for_event($event)) {
                     <li>カード情報（番号・有効期限・セキュリティコード）の入力誤り</li>
                     <li>本人認証（3Dセキュア）が完了していない</li>
                 </ul>
+                <?php else: ?>
+                <ul class="reasons">
+                    <li>残高や利用上限が不足している</li>
+                    <li>アプリ／決済サービス側で承認をキャンセルした、または時間切れになった</li>
+                    <li>一時的な通信・認証の問題</li>
+                    <li>その決済方法に利用制限がかかっている</li>
+                </ul>
+                <?php endif; ?>
             </div>
-            <p class="muted">対処：もう一度お試しいただくか、<strong>別のカード</strong>をご利用ください。解決しない場合は<strong>カード発行会社</strong>へお問い合わせください（当方ではカード側の理由を変更できません）。</p>
+            <p class="muted">対処：もう一度お試しいただくか、<strong>別のお支払い方法</strong>（別のカードや他の決済）をご利用ください。<?= $isCard ? '解決しない場合は<strong>カード発行会社</strong>へお問い合わせください。' : '解決しない場合は、その決済サービスの残高・設定をご確認ください。' ?>（当方では提供元側の理由を変更できません）</p>
         <?php else: ?>
             <p class="ng">お支払いは完了していません</p>
             <p><?= $whoText !== '' ? e($whoText) : '料金は請求されていません。' ?>もう一度お申し込みいただけます。</p>

@@ -437,11 +437,26 @@ function decline_reason_ja(?string $declineCode, ?string $code): ?string
         'incorrect_number'        => 'カード番号が正しくない可能性があります。',
         'processing_error'        => '処理中に一時的なエラーが発生しました。時間をおいてお試しください。',
         'authentication_required' => '本人認証（3Dセキュア）が必要です。',
+        // カード以外（PayPay等）でも起こりうるコード
+        'payment_method_provider_decline'      => '決済サービス（提供元）側で承認されませんでした。',
+        'payment_intent_authentication_failure' => '認証が完了しませんでした。もう一度お試しください。',
+        'payment_method_provider_timeout'       => '認証・通信がタイムアウトした可能性があります。時間をおいてお試しください。',
     ];
     if ($c !== '' && isset($codeMap[$c])) {
         return $codeMap[$c];
     }
     return null; // 不明
+}
+
+/** Stripe の支払い方法タイプを日本語ラベルに。未知はそのまま/汎用。 */
+function payment_method_label_ja(string $type): string
+{
+    $m = [
+        'card' => 'クレジットカード', 'paypay' => 'PayPay', 'konbini' => 'コンビニ決済',
+        'customer_balance' => '銀行振込', 'wechat_pay' => 'WeChat Pay', 'alipay' => 'Alipay',
+        'link' => 'Link', 'au_becs_debit' => '口座振替',
+    ];
+    return $m[$type] ?? ($type !== '' ? $type : '選択されたお支払い方法');
 }
 
 /**
