@@ -332,13 +332,15 @@ require __DIR__ . '/_app_header.php';
             }
         ?>
         <style nonce="<?= e(csp_nonce()) ?>">
+            /* 列を内容幅に合わせる（全幅に引き伸ばして間隔が空きすぎるのを防ぐ）。足りなければ横スクロール。 */
+            .ptbl { width: auto; min-width: 0; }
             .ptbl th, .ptbl td { white-space: nowrap; vertical-align: top; background: var(--surface); }
             .ptbl thead th { background: #f8fafc; }
             .ptbl td { padding-top: 12px; padding-bottom: 12px; }
             /* 横スクロールしても「操作」「名前」を固定 */
-            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 140px; min-width: 140px; white-space: normal; }
-            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 140px; z-index: 2; width: 250px; min-width: 250px; white-space: normal; }
-            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 390px; z-index: 2; white-space: nowrap; min-width: 120px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
+            .ptbl th.op1, .ptbl td.op1 { position: sticky; left: 0; z-index: 2; width: 118px; min-width: 118px; white-space: nowrap; }
+            .ptbl th.op2, .ptbl td.op2 { position: sticky; left: 118px; z-index: 2; width: 150px; min-width: 150px; white-space: nowrap; }
+            .ptbl th.nm, .ptbl td.nm { position: sticky; left: 268px; z-index: 2; white-space: nowrap; min-width: 110px; box-shadow: 6px 0 6px -4px rgba(0,0,0,.12); }
             .ptbl .op1 .btn, .ptbl .op2 .btn { white-space: nowrap; }
             .ptbl thead th.op1, .ptbl thead th.op2, .ptbl thead th.nm { z-index: 3; }
             /* 操作ボタンは横並び（幅が足りなければ折り返し） */
