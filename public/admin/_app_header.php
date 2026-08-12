@@ -27,6 +27,12 @@ $navItems = [
 if ((int) ($tenant['is_admin'] ?? 0) === 1) {
     $navItems[] = ['invites.php', '', 'アカウント発行', ['invites.php']];
 }
+// スタッフ（限定運営）は、イベント管理・参加者管理・ダッシュボード＋自分のアカウント設定のみ。
+// Stripe設定 / 規約・ポリシー / 2段階認証 / アカウント発行は表示しない。
+if (is_staff($tenant)) {
+    $staffAllowed = ['dashboard.php', 'events.php', 'index.php', 'account.php'];
+    $navItems = array_values(array_filter($navItems, static fn ($it) => in_array($it[0], $staffAllowed, true)));
+}
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -61,7 +67,10 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
             <a href="../o.php?t=<?= e(urlencode($tenant['id'])) ?>" target="_blank">公開ページを見る</a>
             <a href="logout.php">ログアウト</a>
         </nav>
-        <div class="sidebar__foot"><?= e($tenant['display_name'] ?? '') ?><br><?= e($tenant['email'] ?? '') ?></div>
+        <div class="sidebar__foot">
+            <?= e($tenant['_auth_display'] ?? $tenant['display_name'] ?? '') ?><br><?= e($tenant['_auth_email'] ?? $tenant['email'] ?? '') ?>
+            <?php if (is_staff($tenant)): ?><br><span style="color:#93c5fd;">運営スタッフ（<?= e($tenant['display_name'] ?? '') ?>）</span><?php endif; ?>
+        </div>
     </aside>
     <div class="content">
         <main class="page">
@@ -71,9 +80,11 @@ if ((int) ($tenant['is_admin'] ?? 0) === 1) {
                 これはサンプルデータの体験用アカウントです。決済は無効で、外部への送信は行われません。イベントは自由に編集できますが、内容は再ログイン時にリセットされます。
             </div>
         <?php endif; ?>
+        <?php if (!is_staff($tenant)): // セキュリティ警告は主催者本人が対処するもの。スタッフには出さない。 ?>
         <?php foreach (security_warnings() as $__w): ?>
             <div class="flash flash--ng">
                 <strong><?= $__w['level'] === 'critical' ? '🔴 重大なセキュリティ警告' : '⚠️ セキュリティ警告' ?>:</strong>
                 <?= e($__w['msg']) ?>
             </div>
         <?php endforeach; ?>
+        <?php endif; ?>

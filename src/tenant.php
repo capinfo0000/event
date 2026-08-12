@@ -538,7 +538,14 @@ function logout_tenant(): void
     session_destroy();
 }
 
-/** 現在ログイン中のテナント（未ログインなら null）。 */
+/**
+ * 現在ログイン中のテナント（未ログインなら null）。
+ *
+ * スタッフ（role=staff, parent_id あり）でログインした場合は、データ操作は
+ * 所属する主催者(owner)のものになるよう owner の行を返す。ただし本人の識別・権限は
+ * "_"接頭辞のキー（_role/_auth_id/_auth_email/_auth_display/_must_change_password）で保持する。
+ * owner にとっては _auth_id == id となり従来どおり。
+ */
 function current_tenant(): ?array
 {
     session_boot();
@@ -546,7 +553,95 @@ function current_tenant(): ?array
     if ($id === '') {
         return null;
     }
-    return find_tenant_by_id($id);
+    $auth = find_tenant_by_id($id);
+    if ($auth === null) {
+        return null;
+    }
+    $role = ((string) ($auth['role'] ?? 'owner')) === 'staff' ? 'staff' : 'owner';
+    $parentId = (string) ($auth['parent_id'] ?? '');
+
+    if ($role === 'staff' && $parentId !== '') {
+        $owner = find_tenant_by_id($parentId);
+        if ($owner === null) {
+            return null; // 所属主催者が存在しない＝無効なスタッフ
+        }
+        // データは owner の文脈。ただし権限はスタッフ相当に落とす（管理者権限は持たせない）。
+        $owner['is_admin'] = 0;
+        $owner['_role'] = 'staff';
+        $owner['_auth_id'] = (string) $auth['id'];
+        $owner['_auth_email'] = (string) $auth['email'];
+        $owner['_auth_display'] = (string) ($auth['display_name'] ?? $auth['email']);
+        $owner['_must_change_password'] = (int) ($auth['must_change_password'] ?? 0);
+        return $owner;
+    }
+
+    $auth['_role'] = 'owner';
+    $auth['_auth_id'] = (string) $auth['id'];
+    $auth['_auth_email'] = (string) $auth['email'];
+    $auth['_auth_display'] = (string) ($auth['display_name'] ?? $auth['email']);
+    $auth['_must_change_password'] = (int) ($auth['must_change_password'] ?? 0);
+    return $auth;
+}
+
+/** ログイン中がスタッフ（限定権限）か。 */
+function is_staff(array $tenant): bool
+{
+    return ($tenant['_role'] ?? 'owner') === 'staff';
+}
+
+/** 実際にログインしている本人の tenant 行（スタッフなら owner ではなく本人）を返す。 */
+function auth_tenant(array $tenant): array
+{
+    $aid = (string) ($tenant['_auth_id'] ?? $tenant['id']);
+    return find_tenant_by_id($aid) ?? $tenant;
+}
+
+/**
+ * 主催者(owner)専用の操作を保護する。スタッフ（限定アカウント）は 403。
+ * 主催者本人（is_admin でなくても）は通す。
+ */
+function require_owner_tenant(): array
+{
+    $tenant = require_tenant();
+    if (is_staff($tenant)) {
+        audit_log('authz.staff_deny', ['auth' => (string) ($tenant['_auth_id'] ?? ''), 'path' => (string) ($_SERVER['SCRIPT_NAME'] ?? '')]);
+        http_response_code(403);
+        exit('この操作は主催者本人のみが行えます（このアカウントは運営スタッフ用の限定権限です）。');
+    }
+    return $tenant;
+}
+
+/**
+ * スタッフ（限定運営）アカウントを作成する。owner に所属し、管理者権限は持たない。
+ */
+function create_staff_account(string $ownerId, string $email, string $password, string $displayName): string
+{
+    $email = strtolower(trim($email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new \InvalidArgumentException('メールアドレスの形式が正しくありません。');
+    }
+    assert_password_strength($password);
+    if (find_tenant_by_email($email) !== null) {
+        throw new \RuntimeException('このメールアドレスは既に登録されています。');
+    }
+    if (find_tenant_by_id($ownerId) === null) {
+        throw new \RuntimeException('所属する主催者アカウントが見つかりません。');
+    }
+    $id = generate_tenant_id();
+    $stmt = db()->prepare(
+        'INSERT INTO tenants (id, email, password_hash, display_name, is_admin, parent_id, role, created_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $id,
+        $email,
+        password_hash($password, PASSWORD_DEFAULT),
+        $displayName !== '' ? $displayName : $email,
+        $ownerId,
+        'staff',
+        time(),
+    ]);
+    return $id;
 }
 
 /** ログイン必須。未ログインならログイン画面へリダイレクト。 */
@@ -557,8 +652,8 @@ function require_tenant(): array
         header('Location: login.php');
         exit;
     }
-    // 初回パスワード変更が必須の間は、変更ページ以外へ進ませない。
-    if ((int) ($tenant['must_change_password'] ?? 0) === 1) {
+    // 初回パスワード変更が必須の間は、変更ページ以外へ進ませない（スタッフは本人のフラグで判定）。
+    if ((int) ($tenant['_must_change_password'] ?? $tenant['must_change_password'] ?? 0) === 1) {
         $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
         if (!in_array($script, ['password_change.php', 'logout.php'], true)) {
             header('Location: password_change.php');

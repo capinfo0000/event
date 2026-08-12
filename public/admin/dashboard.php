@@ -78,14 +78,14 @@ foreach ($byDate as $day => $cnt) {
 }
 
 $pageTitle = 'ダッシュボード';
-$pageSub = 'ようこそ、' . $tenant['display_name'] . ' さん';
+$pageSub = 'ようこそ、' . ($tenant['_auth_display'] ?? $tenant['display_name']) . ' さん';
 $topActions = '<a class="btn" href="events.php">＋ イベントを作成</a>';
 require __DIR__ . '/_app_header.php';
 ?>
 <?php if ($flash !== ''): ?>
     <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
 <?php endif; ?>
-<?php if (!$connected): ?>
+<?php if (!$connected && !is_staff($tenant)): // Stripe設定はスタッフには案内しない ?>
     <div class="modal is-open" id="setupModal" role="dialog" aria-modal="true">
         <div class="modal__box">
             <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
@@ -109,9 +109,9 @@ require __DIR__ . '/_app_header.php';
 <?php endif; ?>
 
 <?php
-// 上部の案内バナー（設定漏れ・注意喚起）。デモアカウントでは出さない。
+// 上部の案内バナー（設定漏れ・注意喚起）。デモ／スタッフには出さない（本人が対処する設定のため）。
 $notices = [];
-if (!is_demo_tenant($tenant)) {
+if (!is_demo_tenant($tenant) && !is_staff($tenant)) {
     if (!tenant_totp_enabled($tenant)) {
         $notices[] = [
             'type' => 'warn', 'icon' => '🔐',
@@ -181,6 +181,7 @@ if (!is_demo_tenant($tenant)) {
     </div>
 </div>
 
+<?php if (!is_staff($tenant)): // Stripe（決済）設定カードは主催者のみ ?>
 <div class="card">
     <div class="card__title">Stripe（決済）</div>
     <?php if ($hasOwnKey): ?>
@@ -201,6 +202,7 @@ if (!is_demo_tenant($tenant)) {
         <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card__title">公開イベントページ</div>

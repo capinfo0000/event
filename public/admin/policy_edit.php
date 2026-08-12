@@ -10,6 +10,6 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-require_tenant();
+require_owner_tenant();
 header('Location: legal_edit.php#sec-cancel');
 exit;

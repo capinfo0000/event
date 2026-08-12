@@ -9,6 +9,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
+$acct = auth_tenant($tenant); // 表示名・パスワードは「ログイン中の本人」に対して操作する（スタッフは owner ではなく本人）
 $msg = '';
 $msgType = 'ok';
 
@@ -18,21 +19,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'name') {
         $name = trim((string) ($_POST['display_name'] ?? ''));
-        update_tenant_display_name($tenant['id'], mb_substr($name, 0, 100));
+        update_tenant_display_name($acct['id'], mb_substr($name, 0, 100));
         $msg = '表示名を更新しました。';
-        $tenant = find_tenant_by_id($tenant['id']);
+        $acct = find_tenant_by_id($acct['id']) ?? $acct;
     } elseif ($action === 'password') {
         $current = (string) ($_POST['current_password'] ?? '');
         $new = (string) ($_POST['new_password'] ?? '');
-        if (!password_verify($current, $tenant['password_hash'])) {
+        if (!password_verify($current, $acct['password_hash'])) {
             $msg = '現在のパスワードが違います。';
             $msgType = 'ng';
         } else {
             try {
-                update_tenant_password($tenant['id'], $new);
-                set_tenant_must_change_password($tenant['id'], false); // 変更済みなら強制フラグを解除
-                audit_log('account.password_change', ['tenant' => $tenant['id']]);
-                notify_security_event($tenant, 'パスワードの変更');
+                update_tenant_password($acct['id'], $new);
+                set_tenant_must_change_password($acct['id'], false); // 変更済みなら強制フラグを解除
+                audit_log('account.password_change', ['tenant' => $acct['id']]);
+                notify_security_event($acct, 'パスワードの変更');
                 $msg = 'パスワードを変更しました。';
             } catch (\Throwable $e) {
                 $msg = $e->getMessage();
@@ -44,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $token = csrf_token();
 $pageTitle = 'アカウント設定';
-$pageSub = $tenant['email'];
+$pageSub = $acct['email'];
 require __DIR__ . '/_app_header.php';
 ?>
 <?php if ($msg !== ''): ?>
@@ -56,7 +57,7 @@ require __DIR__ . '/_app_header.php';
     <form method="post">
         <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
         <input type="hidden" name="action" value="name">
-        <input type="text" name="display_name" maxlength="100" value="<?= e($tenant['display_name']) ?>">
+        <input type="text" name="display_name" maxlength="100" value="<?= e($acct['display_name']) ?>">
         <p style="margin-top:14px;"><button type="submit" class="btn">表示名を更新</button></p>
     </form>
 </div>

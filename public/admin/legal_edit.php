@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-$tenant = require_tenant();
+$tenant = require_owner_tenant();
 $msg = '';
 
 // 編集対象（DBカラム => 画面ラベル・入力名）。

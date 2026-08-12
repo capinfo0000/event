@@ -197,7 +197,7 @@ require __DIR__ . '/_app_header.php';
             $refundList[] = $pp2;
         }
     ?>
-    <?php if ($onsiteList !== [] || $refundList !== []): ?>
+    <?php if (!is_staff($tenant) && ($onsiteList !== [] || $refundList !== [])): // 請求管理（キャンセル料・一部返金）は主催者のみ ?>
         <p style="margin:0 0 14px;">
             <button type="button" class="btn btn--danger" data-modal-open="bulkModal">請求管理</button>
             <span class="muted" style="font-size:.82rem; margin-left:8px;">当日払いの<strong>キャンセル料の請求・キャンセル処理</strong>や、事前決済の<strong>一部返金（％で選択）</strong>をまとめて行えます</span>

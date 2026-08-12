@@ -89,6 +89,8 @@ function db_migrate(\PDO $pdo): void
     db_add_column_if_missing($pdo, 'tenants', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0'); // 初回ログイン時のパスワード強制変更フラグ
     db_add_column_if_missing($pdo, 'tenants', 'totp_secret', 'TEXT');        // 2段階認証の秘密鍵（APP_KEY で暗号化。未設定なら NULL）
     db_add_column_if_missing($pdo, 'tenants', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0'); // 2段階認証が有効か
+    db_add_column_if_missing($pdo, 'tenants', 'parent_id', 'TEXT'); // スタッフ用: 所属する主催者(owner)の tenant.id（owner は NULL）
+    db_add_column_if_missing($pdo, 'tenants', 'role', "TEXT NOT NULL DEFAULT 'owner'"); // owner | staff（権限）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (

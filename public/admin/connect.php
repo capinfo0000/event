@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-$tenant = require_tenant();
+$tenant = require_owner_tenant();
 
 /** 結果メッセージ付きでダッシュボードへ戻す。 */
 function back_to_dashboard(string $msg, string $type): never

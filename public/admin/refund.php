@@ -57,6 +57,15 @@ if ($participant === null) {
     back_to_admin($eventId, '返金対象の決済が見つかりません。', 'ng');
 }
 
+// スタッフ（限定権限）は「返金承認」のみ可能：参加者からのキャンセル希望に対する全額返金だけ許可。
+// 任意額（一部返金）・希望なしの返金は主催者本人のみ。
+if (is_staff($tenant)) {
+    if ($amountRaw !== '' || empty($participant['cancel_requested'])) {
+        audit_log('authz.staff_deny', ['action' => 'refund', 'auth' => (string) ($tenant['_auth_id'] ?? ''), 'event' => $eventId]);
+        back_to_admin($eventId, 'スタッフ権限では「キャンセル希望の承認（全額返金）」のみ行えます。一部返金は主催者にご依頼ください。', 'ng');
+    }
+}
+
 init_stripe();
 $opts = stripe_opts($account);
 

@@ -10,6 +10,7 @@ declare(strict_types=1);
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
 $tenant = require_tenant();
+$acct = auth_tenant($tenant); // 変更対象は「ログイン中の本人」（スタッフは owner ではなく本人）
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -20,9 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = '確認用パスワードが一致しません。';
     } else {
         try {
-            update_tenant_password($tenant['id'], $new); // 強度チェックは内部で実施
-            set_tenant_must_change_password($tenant['id'], false);
-            audit_log('account.first_password_set', ['tenant' => $tenant['id']]);
+            update_tenant_password($acct['id'], $new); // 強度チェックは内部で実施
+            set_tenant_must_change_password($acct['id'], false);
+            audit_log('account.first_password_set', ['tenant' => $acct['id']]);
             header('Location: dashboard.php');
             exit;
         } catch (\Throwable $e) {
