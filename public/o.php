@@ -35,8 +35,8 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($tenant['display_name']) ?> のイベント</title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .ev-price { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin: 10px 0; }
         .full { color: var(--dng); font-weight: 700; }
@@ -65,9 +65,13 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
                 <p class="muted"><?= e($ev['date']) ?>　<?= e($ev['place']) ?></p>
                 <p><?= e($ev['description']) ?></p>
                 <p class="ev-price">
-                    <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
-                    <?php if ($ev['allow_prepay'] && $ev['allow_onsite']): ?> ／ <?php endif; ?>
-                    <?php if ($ev['allow_onsite']): ?><span class="muted" style="font-size:.9rem;">当日 <?= e(format_amount($ev['amount_onsite'], $ev['currency'])) ?></span><?php endif; ?>
+                    <?php if (!empty($ev['tiers'])): ?>
+                        <?php foreach ($ev['tiers'] as $ti => $t): ?><?= $ti > 0 ? ' ／ ' : '' ?><?= e($t['label']) ?> <?= e(format_amount((int) $t['amount'], $ev['currency'])) ?><?php endforeach; ?>
+                    <?php else: ?>
+                        <?php if ($ev['allow_prepay']): ?>事前 <?= e(format_amount($ev['amount'], $ev['currency'])) ?><?php endif; ?>
+                        <?php if ($ev['allow_prepay'] && $ev['allow_onsite']): ?> ／ <?php endif; ?>
+                        <?php if ($ev['allow_onsite']): ?><span class="muted" style="font-size:.9rem;">当日 <?= e(format_amount($ev['amount_onsite'], $ev['currency'])) ?></span><?php endif; ?>
+                    <?php endif; ?>
                 </p>
                 <?php if ($cap > 0 && $remaining !== null): ?>
                     <p class="muted">定員 <?= $cap ?> 名　<?= $full ? '<span class="full">満員</span>' : '残り ' . $remaining . ' 名' ?></p>
@@ -83,7 +87,12 @@ $ownerReady = stripe_ready_for_tenant($tenant); // Stripe文脈が無いと残�
 
     <p class="muted" style="margin-top:24px; font-size:.85rem;">
         カード情報の入力は決済代行 Stripe 上で行われ、主催者・当サービスは決済情報を保持しません。
-        <a href="policy.php?t=<?= e(urlencode($tenantId)) ?>">キャンセル・返金ポリシー</a>
+    </p>
+    <p class="muted" style="margin-top:6px; font-size:.85rem;">
+        <a href="policy.php?t=<?= e(urlencode($tenantId)) ?>">キャンセル・返金ポリシー</a> ／
+        <a href="tokushoho.php?t=<?= e(urlencode($tenantId)) ?>">特定商取引法に基づく表記</a> ／
+        <a href="terms.php?t=<?= e(urlencode($tenantId)) ?>">利用規約</a> ／
+        <a href="privacy.php?t=<?= e(urlencode($tenantId)) ?>">プライバシーポリシー</a>
     </p>
     <p style="margin-top:8px;"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済について</button></p>
 </div>

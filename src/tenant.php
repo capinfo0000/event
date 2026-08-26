@@ -35,8 +35,14 @@ function session_boot(): void
     ]);
     session_start();
 
-    // ログイン中セッションのアイドルタイムアウト（最終操作から一定時間で強制ログアウト）
     if (!empty($_SESSION['tenant_id'])) {
+        // セッション固定化・窃取対策: ログイン時の User-Agent と不一致なら破棄
+        if (($_SESSION['ua'] ?? '') !== '' && !hash_equals((string) $_SESSION['ua'], session_ua_hash())) {
+            $_SESSION = [];
+            session_destroy();
+            return;
+        }
+        // アイドルタイムアウト（最終操作から一定時間で強制ログアウト）
         $now = time();
         $last = (int) ($_SESSION['last_activity'] ?? $now);
         if ($now - $last > SESSION_IDLE_TIMEOUT) {
@@ -46,6 +52,12 @@ function session_boot(): void
         }
         $_SESSION['last_activity'] = $now;
     }
+}
+
+/** セッション束縛用の User-Agent ハッシュ。 */
+function session_ua_hash(): string
+{
+    return hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
 }
 
 /* ------------------- ログイン試行の制限（総当たり対策） ------------------- */
@@ -215,9 +227,57 @@ function create_tenant(string $email, string $password, string $displayName, boo
 /** 主催者のキャンセル・返金ポリシー本文を保存する（空/null で既定文面に戻す）。 */
 function set_tenant_cancel_policy(string $tenantId, ?string $text): void
 {
+    set_tenant_policy_text($tenantId, 'cancel_policy', $text);
+}
+
+/**
+ * 主催者ごとの規約・表記テキストを保存する（空/null で既定テンプレートに戻す）。
+ * 対象カラムはキャンセルポリシー・特商法・利用規約・プライバシーの4種のみ。
+ * $field はホワイトリスト照合してから SQL に埋め込むため、外部入力でも安全。
+ */
+function set_tenant_policy_text(string $tenantId, string $field, ?string $text): void
+{
+    $allowed = ['cancel_policy', 'legal_tokushoho', 'legal_terms', 'legal_privacy'];
+    if (!in_array($field, $allowed, true)) {
+        throw new \InvalidArgumentException('unknown policy field: ' . $field);
+    }
     $text = ($text !== null && trim($text) !== '') ? $text : null;
-    $stmt = db()->prepare('UPDATE tenants SET cancel_policy = ? WHERE id = ?');
+    $stmt = db()->prepare("UPDATE tenants SET {$field} = ? WHERE id = ?");
     $stmt->execute([$text, $tenantId]);
+}
+
+/**
+ * プラットフォーム運営者（最初の管理者テナント）を返す。
+ * 主催者を特定できない全体向け法務ページ（TOP からのリンク等）の既定表示に使う。
+ */
+function platform_operator_tenant(): ?array
+{
+    $stmt = db()->query('SELECT * FROM tenants WHERE is_admin = 1 ORDER BY created_at ASC, id ASC LIMIT 1');
+    $row = $stmt !== false ? $stmt->fetch() : false;
+    return $row ?: null;
+}
+
+/**
+ * 公開の法務ページ（特商法・利用規約・プライバシー・キャンセルポリシー）で
+ * 表示対象の主催者を特定する。?event_id= か ?t= があればその主催者、
+ * 無ければプラットフォーム運営者（管理者）を返す。
+ *
+ * @return array<string,mixed>|null
+ */
+function resolve_legal_owner(): ?array
+{
+    $eventId = (string) ($_GET['event_id'] ?? '');
+    $t = (string) ($_GET['t'] ?? '');
+    if ($eventId !== '') {
+        $ev = find_event($eventId);
+        if ($ev !== null) {
+            return find_tenant_by_id((string) $ev['tenant_id']);
+        }
+    }
+    if ($t !== '') {
+        return find_tenant_by_id($t);
+    }
+    return platform_operator_tenant();
 }
 
 function set_tenant_stripe_account(string $tenantId, ?string $accountId): void
@@ -397,21 +457,77 @@ function find_tenant_by_billing_customer(string $customerId): ?array
 /**
  * メール＋パスワードでログイン。成功でセッションに保存し true。
  */
-function login_tenant(string $email, string $password): bool
+/**
+ * メール＋パスワードを検証し、一致したらテナント行を返す（セッションは張らない）。
+ * タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化。
+ */
+function tenant_check_password(string $email, string $password): ?array
 {
-    // タイミング攻撃によるアカウント列挙対策: 未知メールでも bcrypt 検証を1回行い応答時間を平準化する。
     $dummyHash = '$2y$12$iOI7xMnDX6U9v5ZKJ/SC1O4K8KEa/DBdKX6/VaaIg3PcM5nyTymFq';
     $tenant = find_tenant_by_email($email);
     if ($tenant === null) {
         password_verify($password, $dummyHash);
-        return false;
+        return null;
     }
     if (!password_verify($password, $tenant['password_hash'])) {
-        return false;
+        return null;
     }
+    return $tenant;
+}
+
+/** 認証成立後にログインセッションを確立する（ID再生成・UA束縛）。 */
+function complete_tenant_login(array $tenant): void
+{
     session_boot();
     session_regenerate_id(true);
     $_SESSION['tenant_id'] = $tenant['id'];
+    $_SESSION['ua'] = session_ua_hash();
+    $_SESSION['last_activity'] = time();
+    unset($_SESSION['2fa_pending'], $_SESSION['2fa_time']);
+}
+
+/** 2段階認証が有効なテナントか。 */
+function tenant_totp_enabled(array $tenant): bool
+{
+    return (int) ($tenant['totp_enabled'] ?? 0) === 1 && !empty($tenant['totp_secret']);
+}
+
+/** テナントの TOTP 秘密鍵（base32・復号済み）。無ければ null。 */
+function tenant_totp_secret(array $tenant): ?string
+{
+    $enc = (string) ($tenant['totp_secret'] ?? '');
+    if ($enc === '') {
+        return null;
+    }
+    $plain = app_decrypt($enc);
+    return ($plain === null || $plain === '') ? null : $plain;
+}
+
+/** TOTP 秘密鍵と有効フラグを保存（秘密鍵は APP_KEY で暗号化。$secretB32=null で解除）。 */
+function set_tenant_totp(string $tenantId, ?string $secretB32, bool $enabled): void
+{
+    ensure_app_key();
+    $enc = ($secretB32 !== null && $secretB32 !== '') ? app_encrypt($secretB32) : null;
+    $stmt = db()->prepare('UPDATE tenants SET totp_secret = ?, totp_enabled = ? WHERE id = ?');
+    $stmt->execute([$enc, $enabled ? 1 : 0, $tenantId]);
+}
+
+/** 初回パスワード変更の強制フラグを設定/解除。 */
+function set_tenant_must_change_password(string $tenantId, bool $flag): void
+{
+    db()->prepare('UPDATE tenants SET must_change_password = ? WHERE id = ?')->execute([$flag ? 1 : 0, $tenantId]);
+}
+
+/**
+ * 旧来の1段階ログイン（signup 直後の自動ログイン等・2FA非対象の経路で使用）。
+ */
+function login_tenant(string $email, string $password): bool
+{
+    $tenant = tenant_check_password($email, $password);
+    if ($tenant === null) {
+        return false;
+    }
+    complete_tenant_login($tenant);
     return true;
 }
 
@@ -422,7 +538,14 @@ function logout_tenant(): void
     session_destroy();
 }
 
-/** 現在ログイン中のテナント（未ログインなら null）。 */
+/**
+ * 現在ログイン中のテナント（未ログインなら null）。
+ *
+ * スタッフ（role=staff, parent_id あり）でログインした場合は、データ操作は
+ * 所属する主催者(owner)のものになるよう owner の行を返す。ただし本人の識別・権限は
+ * "_"接頭辞のキー（_role/_auth_id/_auth_email/_auth_display/_must_change_password）で保持する。
+ * owner にとっては _auth_id == id となり従来どおり。
+ */
 function current_tenant(): ?array
 {
     session_boot();
@@ -430,7 +553,95 @@ function current_tenant(): ?array
     if ($id === '') {
         return null;
     }
-    return find_tenant_by_id($id);
+    $auth = find_tenant_by_id($id);
+    if ($auth === null) {
+        return null;
+    }
+    $role = ((string) ($auth['role'] ?? 'owner')) === 'staff' ? 'staff' : 'owner';
+    $parentId = (string) ($auth['parent_id'] ?? '');
+
+    if ($role === 'staff' && $parentId !== '') {
+        $owner = find_tenant_by_id($parentId);
+        if ($owner === null) {
+            return null; // 所属主催者が存在しない＝無効なスタッフ
+        }
+        // データは owner の文脈。ただし権限はスタッフ相当に落とす（管理者権限は持たせない）。
+        $owner['is_admin'] = 0;
+        $owner['_role'] = 'staff';
+        $owner['_auth_id'] = (string) $auth['id'];
+        $owner['_auth_email'] = (string) $auth['email'];
+        $owner['_auth_display'] = (string) ($auth['display_name'] ?? $auth['email']);
+        $owner['_must_change_password'] = (int) ($auth['must_change_password'] ?? 0);
+        return $owner;
+    }
+
+    $auth['_role'] = 'owner';
+    $auth['_auth_id'] = (string) $auth['id'];
+    $auth['_auth_email'] = (string) $auth['email'];
+    $auth['_auth_display'] = (string) ($auth['display_name'] ?? $auth['email']);
+    $auth['_must_change_password'] = (int) ($auth['must_change_password'] ?? 0);
+    return $auth;
+}
+
+/** ログイン中がスタッフ（限定権限）か。 */
+function is_staff(array $tenant): bool
+{
+    return ($tenant['_role'] ?? 'owner') === 'staff';
+}
+
+/** 実際にログインしている本人の tenant 行（スタッフなら owner ではなく本人）を返す。 */
+function auth_tenant(array $tenant): array
+{
+    $aid = (string) ($tenant['_auth_id'] ?? $tenant['id']);
+    return find_tenant_by_id($aid) ?? $tenant;
+}
+
+/**
+ * 主催者(owner)専用の操作を保護する。スタッフ（限定アカウント）は 403。
+ * 主催者本人（is_admin でなくても）は通す。
+ */
+function require_owner_tenant(): array
+{
+    $tenant = require_tenant();
+    if (is_staff($tenant)) {
+        audit_log('authz.staff_deny', ['auth' => (string) ($tenant['_auth_id'] ?? ''), 'path' => (string) ($_SERVER['SCRIPT_NAME'] ?? '')]);
+        http_response_code(403);
+        exit('この操作は主催者本人のみが行えます（このアカウントは運営スタッフ用の限定権限です）。');
+    }
+    return $tenant;
+}
+
+/**
+ * スタッフ（限定運営）アカウントを作成する。owner に所属し、管理者権限は持たない。
+ */
+function create_staff_account(string $ownerId, string $email, string $password, string $displayName): string
+{
+    $email = strtolower(trim($email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new \InvalidArgumentException('メールアドレスの形式が正しくありません。');
+    }
+    assert_password_strength($password);
+    if (find_tenant_by_email($email) !== null) {
+        throw new \RuntimeException('このメールアドレスは既に登録されています。');
+    }
+    if (find_tenant_by_id($ownerId) === null) {
+        throw new \RuntimeException('所属する主催者アカウントが見つかりません。');
+    }
+    $id = generate_tenant_id();
+    $stmt = db()->prepare(
+        'INSERT INTO tenants (id, email, password_hash, display_name, is_admin, parent_id, role, created_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)'
+    );
+    $stmt->execute([
+        $id,
+        $email,
+        password_hash($password, PASSWORD_DEFAULT),
+        $displayName !== '' ? $displayName : $email,
+        $ownerId,
+        'staff',
+        time(),
+    ]);
+    return $id;
 }
 
 /** ログイン必須。未ログインならログイン画面へリダイレクト。 */
@@ -440,6 +651,14 @@ function require_tenant(): array
     if ($tenant === null) {
         header('Location: login.php');
         exit;
+    }
+    // 初回パスワード変更が必須の間は、変更ページ以外へ進ませない（スタッフは本人のフラグで判定）。
+    if ((int) ($tenant['_must_change_password'] ?? $tenant['must_change_password'] ?? 0) === 1) {
+        $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if (!in_array($script, ['password_change.php', 'logout.php'], true)) {
+            header('Location: password_change.php');
+            exit;
+        }
     }
     return $tenant;
 }

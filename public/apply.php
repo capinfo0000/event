@@ -65,6 +65,28 @@ if ($maxParty < 1) {
     $maxParty = 10;
 }
 $maxParty = min($maxParty, 20);
+
+// 料金区分（男性/女性等）。設定があれば「区分を1つ選ぶ・1申込=1名」の申込に切り替える。
+$tiers = $event['tiers'] ?? [];
+$hasTiers = !empty($tiers);
+if ($hasTiers) {
+    $defaultUnit = (int) $tiers[0]['amount']; // 初期表示は先頭区分
+    $maxParty = 1;
+}
+
+// 主催者が定義したカスタム入力項目。設定があれば固定の標準項目（氏名/電話/人数/備考）は出さず、
+// メール（固定）＋性別（＝料金区分・設定時）＋定義した項目のみにする。1申込=1名。
+$customFields = $event['custom_fields'] ?? [];
+$hasCustom = !empty($customFields);
+if ($hasCustom) {
+    $maxParty = 1;
+}
+$cfInputType = ['text' => 'text', 'number' => 'number', 'tel' => 'tel']; // textarea は別扱い
+
+// キャンセルポリシーは申込ページ内のモーダルで表示（別ページへ遷移させない）。
+$policyOwner = find_tenant_by_id((string) ($event['tenant_id'] ?? ''));
+$customPolicy = ($policyOwner !== null && trim((string) ($policyOwner['cancel_policy'] ?? '')) !== '')
+    ? (string) $policyOwner['cancel_policy'] : null;
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -72,8 +94,8 @@ $maxParty = min($maxParty, 20);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>参加申込 - <?= e($event['name'] ?? '') ?></title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <script src="/assets/app.js" defer></script>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
+    <script src="/assets/app.js?v=3" defer></script>
     <style nonce="<?= e(csp_nonce()) ?>">
         .pay-options { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
         .pay-options label { font-weight: 400; display: flex; gap: 8px; align-items: center; margin: 0; }
@@ -88,9 +110,13 @@ $maxParty = min($maxParty, 20);
         <p class="muted"><?= e($event['date'] ?? '') ?>　<?= e($event['place'] ?? '') ?></p>
         <p><?= e($event['description'] ?? '') ?></p>
         <p class="muted">
-            <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
-            <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
-            <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+            <?php if ($hasTiers): ?>
+                <?php foreach ($tiers as $ti => $t): ?><?= $ti > 0 ? '　／　' : '' ?><?= e($t['label']) ?>：<strong>事前 <?= e(format_amount((int) $t['amount'], $currency)) ?></strong><?php if ($allowOnsite): ?>／当日 <strong><?= e(format_amount((int) $t['amount_onsite'], $currency)) ?></strong><?php endif; ?><?php endforeach; ?>
+            <?php else: ?>
+                <?php if ($allowPrepay): ?>事前決済：<strong><?= e(format_amount($prepayUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+                <?php if ($allowPrepay && $allowOnsite): ?>　／　<?php endif; ?>
+                <?php if ($allowOnsite): ?>当日支払い：<strong><?= e(format_amount($onsiteUnit, $currency)) ?></strong> / 1名<?php endif; ?>
+            <?php endif; ?>
         </p>
         <?php if ($capacity > 0 && $remaining !== null): ?>
             <p class="muted">定員 <?= $capacity ?> 名　<?= $isFull ? '<strong style="color:#dc2626;">満員</strong>' : '残り <strong>' . $remaining . '</strong> 名' ?></p>
@@ -103,37 +129,52 @@ $maxParty = min($maxParty, 20);
     <form action="checkout.php" method="post" class="card">
         <input type="hidden" name="event_id" value="<?= e($event['id']) ?>">
 
-        <label for="name">お名前 <span class="req">必須</span></label>
-        <input type="text" id="name" name="name" required maxlength="100" autocomplete="name" placeholder="山田 太郎">
+        <?php
+        // 表示順（固定）: 氏名 → 氏名フリガナ → 年齢 →（性別）→ メール → 紹介者。
+        // 選択された項目（$customFields）を pre / post に振り分けて描画する。1申込＝1名。
+        $renderField = static function (int $ci, array $f) use ($cfInputType): void {
+            $req = !empty($f['required']); ?>
+            <label for="cf<?= $ci ?>"><?= e($f['label']) ?> <?php if ($req): ?><span class="req">必須</span><?php endif; ?></label>
+            <?php if (($f['type'] ?? 'text') === 'textarea'): ?>
+                <textarea id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="500" <?= $req ? 'required' : '' ?>></textarea>
+            <?php else: ?>
+                <input type="<?= e($cfInputType[$f['type'] ?? 'text'] ?? 'text') ?>" id="cf<?= $ci ?>" name="cf[<?= $ci ?>]" maxlength="200" <?= $req ? 'required' : '' ?>>
+            <?php endif; ?>
+        <?php }; ?>
+
+        <?php foreach ($customFields as $ci => $f): if (field_slot_for_label($f['label']) === 'pre') { $renderField($ci, $f); } endforeach; ?>
+
+        <?php if ($hasTiers): ?>
+            <label>性別 <span class="req">必須</span></label>
+            <div class="pay-options">
+                <?php foreach ($tiers as $ti => $t): ?>
+                    <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
+                        <input type="radio" name="tier" value="<?= e($t['label']) ?>" <?= $ti === 0 ? 'checked' : '' ?> style="width:auto;" required>
+                        <?= e($t['label']) ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
 
         <label for="email">メールアドレス <span class="req">必須</span></label>
         <input type="email" id="email" name="email" required maxlength="200" autocomplete="email" placeholder="taro@example.com">
 
-        <label for="phone">電話番号</label>
-        <input type="tel" id="phone" name="phone" maxlength="30" autocomplete="tel" placeholder="090-1234-5678">
+        <?php foreach ($customFields as $ci => $f): if (field_slot_for_label($f['label']) === 'post') { $renderField($ci, $f); } endforeach; ?>
 
-        <label for="party_size">参加人数（ご本人を含む） <span class="req">必須</span></label>
-        <select id="party_size" name="party_size" required>
-            <?php for ($i = 1; $i <= $maxParty; $i++): ?>
-                <option value="<?= $i ?>"><?= $i ?> 名</option>
-            <?php endfor; ?>
-        </select>
-
-        <label for="note">備考（アレルギー・ご要望など）</label>
-        <textarea id="note" name="note" maxlength="500" placeholder="例：エビ・カニアレルギーあり"></textarea>
+        <input type="hidden" name="party_size" value="1">
 
         <label>お支払い方法 <span class="req">必須</span></label>
         <div class="pay-options">
             <?php if ($allowPrepay): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                     <input type="radio" name="payment_type" value="prepay" <?= $defaultMethod === 'prepay' ? 'checked' : '' ?> style="width:auto;">
-                    事前決済（今すぐカード等で前払い・<?= e(format_amount($prepayUnit, $currency)) ?>/名）
+                    事前決済
                 </label>
             <?php endif; ?>
             <?php if ($allowOnsite): ?>
                 <label style="font-weight:400; display:flex; gap:8px; align-items:center; width:auto;">
                     <input type="radio" name="payment_type" value="onsite" <?= $defaultMethod === 'onsite' ? 'checked' : '' ?> style="width:auto;">
-                    当日支払い（会場で集金・<?= e(format_amount($onsiteUnit, $currency)) ?>/名）
+                    当日支払い
                 </label>
             <?php endif; ?>
         </div>
@@ -147,7 +188,9 @@ $maxParty = min($maxParty, 20);
             <p class="notice" id="prepayBlockNote" style="<?= $blockedInit ? '' : 'display:none;' ?>">⚠️ 現在この主催者は支払い口座の設定が完了していないため、<strong>事前決済（オンライン前払い）</strong>は利用できません。<?= $allowOnsite ? '「当日支払い」を選んでお申し込みください。' : '準備が整うまでお待ちください。' ?></p>
         <?php endif; ?>
         <p class="hint" id="methodNote"></p>
-        <p class="hint">キャンセル時の返金は<a href="policy.php?event_id=<?= e($event['id']) ?>" target="_blank">キャンセルポリシー</a>をご確認ください。</p>
+        <p class="hint">キャンセル時の返金は<button type="button" class="btn btn--ghost" data-modal-open="policyInfo" style="padding:3px 10px; font-size:.82rem; vertical-align:baseline;">キャンセルポリシー</button>をご確認ください。</p>
+        <p class="hint">ご参加いただけなくなった場合は、<strong>開催日前までに</strong>キャンセルのご連絡をお願いします。無断キャンセル（無連絡不参加）は、キャンセルポリシーに基づき<strong>キャンセル料</strong>が発生する場合があります。</p>
+        <p style="margin-top:6px;"><a class="btn btn--ghost" href="cancel_request.php?event_id=<?= e($event['id']) ?>">キャンセル連絡はこちら →</a></p>
         <?php if ($allowPrepay): ?>
             <p class="hint"><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済（カード）の安全性について</button></p>
         <?php endif; ?>
@@ -157,12 +200,64 @@ $maxParty = min($maxParty, 20);
 
 <?php require __DIR__ . '/_prepay_info_modal.php'; ?>
 
+<div class="modal" id="policyInfo" role="dialog" aria-modal="true">
+    <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">キャンセル・返金ポリシー</div>
+        <?php if ($customPolicy !== null): ?>
+            <p><?= nl2br(e($customPolicy)) ?></p>
+        <?php else: ?>
+            <p>本イベントの参加費は<strong>事前決済（前払い）</strong>または<strong>当日払い</strong>でお受けします。キャンセルの取り扱いは以下のとおりです。</p>
+            <p style="margin:8px 0 4px; font-weight:700;">事前決済のキャンセル・返金（開催日基準）</p>
+            <div class="table-wrap" style="margin:6px 0 12px;">
+                <table>
+                    <thead><tr><th>キャンセル時期</th><th>返金額</th></tr></thead>
+                    <tbody>
+                        <tr><td>開催 8 日前まで</td><td>Stripe手数料を差し引いた全額を返金</td></tr>
+                        <tr><td>開催 7〜2 日前</td><td>50% 返金</td></tr>
+                        <tr><td>開催前日・当日／無連絡不参加</td><td>返金なし</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted" style="font-size:.85rem;">※「全額返金」は、決済時にかかった Stripe 手数料を差し引いた全額（主催者の実受取額）の返金を指します。手数料は返金時に戻らないため、その分は差し引かれます。<br>※ 主催者都合での中止（荒天等）の場合も、Stripe手数料を差し引いた全額を返金します。</p>
+            <p style="margin:12px 0 4px; font-weight:700;">当日払いのキャンセル</p>
+            <p class="muted" style="font-size:.85rem; margin:0 0 6px;">当日払いは事前の決済は発生しませんが、キャンセルの場合は下記のキャンセル料を申し受けます（開催日基準）。</p>
+            <div class="table-wrap" style="margin:0 0 8px;">
+                <table>
+                    <thead><tr><th>キャンセル時期</th><th>キャンセル料</th></tr></thead>
+                    <tbody>
+                        <tr><td>開催 8 日前まで</td><td>無料</td></tr>
+                        <tr><td>開催 7〜2 日前</td><td>参加費の 50%</td></tr>
+                        <tr><td>開催前日・当日／無連絡不参加</td><td>参加費の全額</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="muted" style="font-size:.85rem; margin-top:0;">※ キャンセル料が発生する場合は、お支払い用のリンクをメールでお送りします。開催日前までにキャンセルのご連絡をお願いします。</p>
+        <?php endif; ?>
+        <p class="muted" style="font-size:.85rem;">カード情報の入力・処理は決済代行 Stripe 上で行われ、主催者は決済情報を受け取りません。</p>
+        <div class="modal__actions"><button type="button" class="btn" data-modal-close>閉じる</button></div>
+    </div>
+</div>
+
     <script nonce="<?= e(csp_nonce()) ?>">
         // 支払い方法・参加人数に応じて合計金額と案内文を更新（計算の正は決済時にサーバー側で再確定）
         const PREPAY_UNIT = <?= $prepayUnit ?>;
         const ONSITE_UNIT = <?= $onsiteUnit ?>;
         const CURRENCY = <?= json_encode(strtolower((string) $currency)) ?>;
         const STRIPE_READY = <?= $stripeReady ? 'true' : 'false' ?>;
+        const HAS_TIERS = <?= $hasTiers ? 'true' : 'false' ?>;
+        // {区分名: {prepay:事前額, onsite:当日額}}
+        const TIERS = <?= json_encode(array_reduce($tiers, function ($acc, $t) {
+            $acc[$t['label']] = ['prepay' => (int) $t['amount'], 'onsite' => (int) $t['amount_onsite']];
+            return $acc;
+        }, []), JSON_UNESCAPED_UNICODE) ?>;
+        function selectedTierUnit(method) {
+            const el = document.querySelector('input[name="tier"]:checked');
+            if (!el) return 0;
+            const t = TIERS[el.value];
+            if (!t) return 0;
+            return method === 'onsite' ? t.onsite : t.prepay;
+        }
         function formatAmount(total) {
             if (CURRENCY === 'jpy') {
                 return '¥' + total.toLocaleString('ja-JP');
@@ -174,12 +269,16 @@ $maxParty = min($maxParty, 20);
             return el ? el.value : 'prepay';
         }
         function updateTotal() {
-            const ps = document.getElementById('party_size');
-            if (!ps) return; // 満員などでフォーム非表示のとき
-            const qty = parseInt(ps.value, 10) || 1;
+            const totalEl = document.getElementById('total');
+            if (!totalEl) return; // 満員などでフォーム非表示のとき
             const method = selectedMethod();
-            const unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT;
-            document.getElementById('total').textContent = formatAmount(unit * qty);
+            let unit, qty = 1;
+            if (HAS_TIERS) {
+                unit = selectedTierUnit(method); // 1名・選んだ性別×支払い方法の金額
+            } else {
+                unit = method === 'onsite' ? ONSITE_UNIT : PREPAY_UNIT; // 一律・1名
+            }
+            totalEl.textContent = formatAmount(unit * qty);
 
             const btn = document.getElementById('submitBtn');
             const note = document.getElementById('methodNote');
@@ -207,6 +306,9 @@ $maxParty = min($maxParty, 20);
             const ps = document.getElementById('party_size');
             if (ps) { ps.addEventListener('change', updateTotal); }
             document.querySelectorAll('input[name="payment_type"]').forEach(function (r) {
+                r.addEventListener('change', updateTotal);
+            });
+            document.querySelectorAll('input[name="tier"]').forEach(function (r) {
                 r.addEventListener('change', updateTotal);
             });
             updateTotal();

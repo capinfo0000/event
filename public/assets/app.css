@@ -40,13 +40,33 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* ---------- 管理画面シェル（サイドバー） ---------- */
-.app { display: flex; min-height: 100vh; }
+/* 全体シェル: 最上部の横断ヘッダー + その下に（サイドバー + 本文） */
+.appshell { display: flex; flex-direction: column; min-height: 100vh; }
+.brandbar-top {
+  height: 64px; flex: 0 0 64px;
+  display: flex; align-items: stretch;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 30;
+}
+.brandbar-top__logo {
+  flex: 0 0 240px; display: flex; align-items: center;
+  padding: 0 20px; border-right: 1px solid var(--border);
+}
+.brandbar-top__logo img { height: 42px; width: auto; display: block; }
+.brandbar-top__page {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 28px;
+}
+
+.app { display: flex; flex: 1; min-height: 0; }
 
 .sidebar {
   width: 240px; flex: 0 0 240px;
   background: var(--navy); color: #e2e8f0;
   display: flex; flex-direction: column;
-  position: sticky; top: 0; height: 100vh;
+  position: sticky; top: 64px; height: calc(100vh - 64px);
 }
 .sidebar__brand {
   display: flex; align-items: center; gap: 10px;
@@ -74,7 +94,7 @@ a:hover { text-decoration: underline; }
 .topbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 16px 28px; position: sticky; top: 0; z-index: 5;
+  padding: 16px 28px; position: sticky; top: 64px; z-index: 5;
 }
 .topbar__title { font-size: 1.25rem; font-weight: 800; margin: 0; }
 .topbar__sub { font-size: .82rem; color: var(--muted); margin: 2px 0 0; }
@@ -175,16 +195,53 @@ tbody tr:hover { background: #fafbfc; }
 .total { font-size: 1.35rem; font-weight: 800; color: var(--accent); margin: 16px 0; }
 
 /* ---------- レスポンシブ ---------- */
+/* ---------- コピー用リンク（タップでコピー・全文折り返し） ---------- */
+.copy-link {
+  display: block; width: 100%; text-align: left; font-family: inherit;
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: .8rem; color: var(--text); cursor: pointer;
+  word-break: break-all; line-height: 1.5;
+}
+.copy-link:hover { border-color: var(--accent); }
+.copy-link .copy-fb { display: block; color: #16a34a; font-weight: 700; font-size: .74rem; min-height: 1em; margin-top: 2px; }
+
+/* ---------- 入力項目タグ（チップ） ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; margin: 0;
+  padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px;
+  background: #fff; font-weight: 600; font-size: .88rem; cursor: pointer; user-select: none;
+}
+.chip input { width: auto; margin: 0; }
+.chip:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* 自由項目の行 */
+.cf-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.cf-row input[type="text"] { flex: 2 1 140px; min-width: 0; }
+.cf-row select { flex: 1 1 90px; min-width: 0; }
+.cf-row .btn { flex: 0 0 auto; padding: 8px 12px; }
+
 @media (max-width: 720px) {
+  .brandbar-top { position: static; height: auto; flex-basis: auto; flex-direction: column; align-items: stretch; }
+  .brandbar-top__logo { flex-basis: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 10px 16px; }
+  .brandbar-top__logo img { height: 34px; }
+  .brandbar-top__page { padding: 10px 16px; }
   .app { flex-direction: column; }
-  .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: row;
-             align-items: center; overflow-x: auto; }
+  .sidebar { width: 100%; flex: none; height: auto; position: static;
+             flex-direction: row; align-items: center; overflow-x: auto; }
+  .topbar { top: 0; }
   .sidebar__brand { padding: 14px 16px; white-space: nowrap; }
   .nav { flex-direction: row; flex: 1; overflow-x: auto; padding: 8px; }
   .nav a { white-space: nowrap; }
   .nav .nav__sep, .sidebar__foot { display: none; }
   .topbar { padding: 14px 18px; }
   .page { padding: 18px; }
+  /* 横並びの入力（事前/当日の金額など）はスマホで縦積みにして枠の重なりを防ぐ */
+  .row { flex-direction: column; gap: 0; }
+  .row > div { min-width: 0; width: 100%; }
+  /* 自由項目の行もスマホでは縦積みに（枠の重なり防止） */
+  .cf-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .cf-row .btn { align-self: flex-start; }
 }
 
 /* ---------- モーダル（ポップアップ） ---------- */

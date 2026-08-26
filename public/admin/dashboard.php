@@ -16,6 +16,18 @@ $account = stripe_resolve_tenant($tenant);
 $hasOwnKey = tenant_has_stripe_key($tenant);     // 画面で自分の鍵を登録済みか
 $connected = $hasOwnKey || $account !== null;    // 自分の Stripe を使える状態か
 $stripeReady = stripe_ready_for_tenant($tenant); // 名簿取得・決済が可能な構成か
+
+// 案内バナー用: 登録キーの種別（フル/制限）・モード（test/live）を判定
+$keyIsFull = false;
+$keyIsTest = false;
+if ($hasOwnKey) {
+    $plainKey = (string) get_tenant_stripe_key($tenant);
+    if ($plainKey !== '') {
+        $keyIsFull = str_starts_with($plainKey, 'sk_');
+        $keyIsTest = str_contains($plainKey, '_test_');
+    }
+}
+
 $events = tenant_events($tenant['id']);
 $usedEvents = count($events);
 $publicUrl = base_url() . '/o.php?t=' . urlencode($tenant['id']);
@@ -66,14 +78,14 @@ foreach ($byDate as $day => $cnt) {
 }
 
 $pageTitle = 'ダッシュボード';
-$pageSub = 'ようこそ、' . $tenant['display_name'] . ' さん';
+$pageSub = 'ようこそ、' . ($tenant['_auth_display'] ?? $tenant['display_name']) . ' さん';
 $topActions = '<a class="btn" href="events.php">＋ イベントを作成</a>';
 require __DIR__ . '/_app_header.php';
 ?>
 <?php if ($flash !== ''): ?>
     <div class="flash <?= $flashType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($flash) ?></div>
 <?php endif; ?>
-<?php if (!$connected): ?>
+<?php if (!$connected && !is_staff($tenant)): // Stripe設定はスタッフには案内しない ?>
     <div class="modal is-open" id="setupModal" role="dialog" aria-modal="true">
         <div class="modal__box">
             <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
@@ -95,6 +107,54 @@ require __DIR__ . '/_app_header.php';
         </div>
     </div>
 <?php endif; ?>
+
+<?php
+// 上部の案内バナー（設定漏れ・注意喚起）。デモ／スタッフには出さない（本人が対処する設定のため）。
+$notices = [];
+if (!is_demo_tenant($tenant) && !is_staff($tenant)) {
+    if (!tenant_totp_enabled($tenant)) {
+        $notices[] = [
+            'type' => 'warn', 'icon' => '🔐',
+            'msg' => '<strong>2段階認証が未設定です。</strong>万一パスワードが漏れても不正ログインを防げます。設定をおすすめします。',
+            'href' => 'twofa_setup.php', 'label' => '2段階認証を設定',
+        ];
+    }
+    if ($keyIsFull) {
+        $notices[] = [
+            'type' => 'warn', 'icon' => '🔑',
+            'msg' => '<strong>フルアクセスキー（sk_）を使用中です。</strong>万一に備え、権限を絞った制限付きキー（rk_）への変更をおすすめします。',
+            'href' => 'stripe.php', 'label' => 'Stripe設定を開く',
+        ];
+    }
+    if ($keyIsTest) {
+        $notices[] = [
+            'type' => 'info', 'icon' => '🧪',
+            'msg' => '<strong>テストキー（test）を使用中です。</strong>テスト環境のため、実際のお支払いは受け取れません。本番で集金するには本番キー（live）に切り替えてください。',
+            'href' => 'stripe.php', 'label' => 'Stripe設定を開く',
+        ];
+    }
+}
+?>
+<?php if ($notices !== []): ?>
+<style nonce="<?= e(csp_nonce()) ?>">
+    .notice { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 16px; border-radius:10px; margin:0 0 10px; font-size:.92rem; line-height:1.6; }
+    .notice--warn { background:#fffbeb; border:1px solid #fde68a; color:#854d0e; }
+    .notice--info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a; }
+    .notice__ic { font-size:1.1rem; }
+    .notice__msg { flex:1; min-width:220px; }
+    .notice .btn { flex:none; }
+</style>
+<div style="margin-bottom:16px;">
+    <?php foreach ($notices as $n): ?>
+        <div class="notice notice--<?= e($n['type']) ?>">
+            <span class="notice__ic"><?= $n['icon'] ?></span>
+            <span class="notice__msg"><?= $n['msg'] ?></span>
+            <a class="btn btn--ghost" href="<?= e($n['href']) ?>"><?= e($n['label']) ?></a>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
 <div class="stat-grid">
     <div class="stat"><span class="stat__num accent"><?= $totalApplied ?></span><span class="stat__label">総申込数（事前<?= $prepayCount ?>・当日<?= $onsiteCount ?>）</span></div>
     <div class="stat"><span class="stat__num"><?= e(format_amount($collected, 'jpy')) ?></span><span class="stat__label">事前入金合計</span></div>
@@ -121,6 +181,7 @@ require __DIR__ . '/_app_header.php';
     </div>
 </div>
 
+<?php if (!is_staff($tenant)): // Stripe（決済）設定カードは主催者のみ ?>
 <div class="card">
     <div class="card__title">Stripe（決済）</div>
     <?php if ($hasOwnKey): ?>
@@ -141,6 +202,7 @@ require __DIR__ . '/_app_header.php';
         <p class="muted">未設定でも「当日支払い（現金）」のみのイベントは利用できます。</p>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <div class="card">
     <div class="card__title">公開イベントページ</div>

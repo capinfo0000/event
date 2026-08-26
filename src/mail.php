@@ -16,7 +16,7 @@ declare(strict_types=1);
 function send_mail(string $to, string $subject, string $body): bool
 {
     $fromAddr = env('MAIL_FROM', 'no-reply@' . ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    $fromName = env('MAIL_FROM_NAME', 'イベント事前決済');
+    $fromName = env('MAIL_FROM_NAME', '決済くん');
 
     $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
     $encodedFromName = '=?UTF-8?B?' . base64_encode($fromName) . '?=';
@@ -45,6 +45,27 @@ function send_mail(string $to, string $subject, string $body): bool
     }
 
     return $sent;
+}
+
+/**
+ * 重要なセキュリティ操作（鍵変更・2FA解除・パスワード変更等）を本人へ通知する（ベストエフォート）。
+ * 乗っ取り時に本人が気づけるようにするのが目的。秘密（鍵・コード）は本文に含めない。
+ */
+function notify_security_event(array $tenant, string $eventLabel): void
+{
+    $to = (string) ($tenant['email'] ?? '');
+    if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return;
+    }
+    $body = "アカウントで次のセキュリティ操作が行われました。\n\n"
+        . '操作: ' . $eventLabel . "\n"
+        . '日時: ' . date('Y-m-d H:i') . "\n"
+        . 'アクセス元IP: ' . client_ip() . "\n\n"
+        . "この操作に心当たりがない場合は、ただちに以下を行ってください:\n"
+        . " 1) パスワードを変更する\n"
+        . " 2) Stripe の APIキーを失効(Roll)し、登録し直す\n"
+        . " 3) 2段階認証を有効にする\n";
+    send_mail($to, '【セキュリティ通知】アカウント操作のお知らせ', $body);
 }
 
 /**

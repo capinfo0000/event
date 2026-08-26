@@ -83,6 +83,14 @@ function db_migrate(\PDO $pdo): void
     db_add_column_if_missing($pdo, 'tenants', 'stripe_customer_id', 'TEXT'); // プラン課金用（プラットフォーム本体の顧客）
     db_add_column_if_missing($pdo, 'tenants', 'stripe_secret_enc', 'TEXT');  // 主催者が画面登録した Stripe 秘密鍵（AES-256-GCM 暗号化）
     db_add_column_if_missing($pdo, 'tenants', 'cancel_policy', 'TEXT');      // 主催者ごとのキャンセル・返金ポリシー本文（未設定なら既定文面）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_tokushoho', 'TEXT');    // 特定商取引法に基づく表記（未設定なら既定テンプレート）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_terms', 'TEXT');        // 利用規約（未設定なら既定テンプレート）
+    db_add_column_if_missing($pdo, 'tenants', 'legal_privacy', 'TEXT');      // プライバシーポリシー（未設定なら既定テンプレート）
+    db_add_column_if_missing($pdo, 'tenants', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0'); // 初回ログイン時のパスワード強制変更フラグ
+    db_add_column_if_missing($pdo, 'tenants', 'totp_secret', 'TEXT');        // 2段階認証の秘密鍵（APP_KEY で暗号化。未設定なら NULL）
+    db_add_column_if_missing($pdo, 'tenants', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0'); // 2段階認証が有効か
+    db_add_column_if_missing($pdo, 'tenants', 'parent_id', 'TEXT'); // スタッフ用: 所属する主催者(owner)の tenant.id（owner は NULL）
+    db_add_column_if_missing($pdo, 'tenants', 'role', "TEXT NOT NULL DEFAULT 'owner'"); // owner | staff（権限）
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS invites (
@@ -114,6 +122,10 @@ function db_migrate(\PDO $pdo): void
         );
     SQL);
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);');
+    // 料金区分（男性/女性/学生等）を JSON 配列 [{label,amount}] で保存。空なら単一料金（従来動作）。
+    db_add_column_if_missing($pdo, 'events', 'price_tiers', "TEXT NOT NULL DEFAULT ''");
+    // 追加の入力項目（名前・年齢等）を主催者が定義。JSON 配列 [{label,type,required}]。空なら従来の標準項目。
+    db_add_column_if_missing($pdo, 'events', 'custom_fields', "TEXT NOT NULL DEFAULT ''");
 
     $pdo->exec(<<<'SQL'
         CREATE TABLE IF NOT EXISTS password_resets (

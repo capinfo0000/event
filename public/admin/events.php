@@ -24,7 +24,21 @@ $form = $editing ?? [
     'id' => '', 'name' => '', 'description' => '', 'date' => '',
     'place' => '', 'amount' => '', 'currency' => 'jpy', 'capacity' => '',
     'amount_onsite' => '', 'allow_prepay' => true, 'allow_onsite' => false,
+    'tiers' => [], 'custom_fields' => [],
 ];
+
+// 料金タイプ判定（区分があれば「男女別」、無ければ「一律」）。男性/女性の既存額を拾う。
+$formTiers = $form['tiers'] ?? [];
+$isGenderPricing = !empty($formTiers);
+$gMale = null;
+$gFemale = null;
+foreach ($formTiers as $t) {
+    if ($t['label'] === '男性') {
+        $gMale = $t;
+    } elseif ($t['label'] === '女性') {
+        $gFemale = $t;
+    }
+}
 
 $flash = (string) ($_GET['msg'] ?? '');
 $flashType = (string) ($_GET['type'] ?? '');
@@ -64,14 +78,34 @@ require __DIR__ . '/_app_header.php';
             </div>
         </div>
 
-        <div class="row">
-            <div>
-                <label>事前決済の参加費（1名・円） <span class="req">必須</span></label>
-                <input type="number" name="amount" required min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
+        <label style="margin-top:6px;">料金タイプ <span class="req">必須</span></label>
+        <div style="display:flex; gap:20px; margin-top:4px;">
+            <label style="font-weight:400; margin:0;"><input type="radio" name="pricing_mode" value="flat" <?= $isGenderPricing ? '' : 'checked' ?> class="js-pricing-mode" style="width:auto;"> 一律（全員同じ料金）</label>
+            <label style="font-weight:400; margin:0;"><input type="radio" name="pricing_mode" value="gender" <?= $isGenderPricing ? 'checked' : '' ?> class="js-pricing-mode" style="width:auto;"> 男女別（性別で料金を変える）</label>
+        </div>
+
+        <div id="flatPricing" style="<?= $isGenderPricing ? 'display:none;' : '' ?>">
+            <div class="row">
+                <div>
+                    <label>事前決済の参加費（1名・円）</label>
+                    <input type="number" name="amount" min="0" step="1" value="<?= e((string) $form['amount']) ?>" placeholder="3000">
+                </div>
+                <div>
+                    <label>当日支払いの参加費（1名）<span class="hint">空欄なら事前と同額</span></label>
+                    <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
+                </div>
             </div>
-            <div>
-                <label>当日支払いの参加費（1名）<span class="hint">空欄なら事前と同額</span></label>
-                <input type="number" name="amount_onsite" min="0" step="1" value="<?= e((string) $form['amount_onsite']) ?>" placeholder="4000">
+        </div>
+
+        <div id="genderPricing" style="<?= $isGenderPricing ? '' : 'display:none;' ?>">
+            <p class="hint" style="margin:6px 0;">性別ごとに、事前決済・当日支払いの金額を設定します（1申込＝1名）。当日を空欄にすると事前と同額になります。</p>
+            <div class="row">
+                <div><label>男性・事前決済（円）</label><input type="number" name="male_prepay" min="0" step="1" value="<?= $gMale ? e((string) $gMale['amount']) : '' ?>" placeholder="5000"></div>
+                <div><label>男性・当日支払い（円）</label><input type="number" name="male_onsite" min="0" step="1" value="<?= $gMale ? e((string) $gMale['amount_onsite']) : '' ?>" placeholder="5000"></div>
+            </div>
+            <div class="row">
+                <div><label>女性・事前決済（円）</label><input type="number" name="female_prepay" min="0" step="1" value="<?= $gFemale ? e((string) $gFemale['amount']) : '' ?>" placeholder="3000"></div>
+                <div><label>女性・当日支払い（円）</label><input type="number" name="female_onsite" min="0" step="1" value="<?= $gFemale ? e((string) $gFemale['amount_onsite']) : '' ?>" placeholder="3000"></div>
             </div>
         </div>
 
@@ -82,15 +116,71 @@ require __DIR__ . '/_app_header.php';
             </div>
             <div>
                 <label>定員目安（申込人数の上限にも使用）</label>
-                <input type="number" name="capacity" min="0" step="1" value="<?= e((string) $form['capacity']) ?>" placeholder="20">
+                <?php
+                $capCur = (int) ($form['capacity'] ?? 0);
+                $capOptions = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 300, 500];
+                if ($capCur > 0 && !in_array($capCur, $capOptions, true)) {
+                    $capOptions[] = $capCur; // 既存の任意値も選択肢に含める
+                    sort($capOptions);
+                }
+                ?>
+                <select name="capacity">
+                    <?php foreach ($capOptions as $c): ?>
+                        <option value="<?= $c ?>" <?= $capCur === $c ? 'selected' : '' ?>><?= $c === 0 ? '制限なし' : $c . ' 名' ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
         </div>
 
         <label>受け付ける支払い方法</label>
-        <div style="display:flex; gap:20px; margin-top:4px;">
-            <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_prepay" value="1" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?> style="width:auto;"> 事前決済（クレジットカードで前払い）</label>
-            <label style="font-weight:400; margin:0;"><input type="checkbox" name="allow_onsite" value="1" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?> style="width:auto;"> 当日支払い（現地で集金）</label>
+        <div class="chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">
+            <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" name="allow_prepay" value="1" style="width:auto; margin:0;" <?= !empty($form['allow_prepay']) ? 'checked' : '' ?>>
+                事前決済（クレジットカードで前払い）
+            </label>
+            <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" name="allow_onsite" value="1" style="width:auto; margin:0;" <?= !empty($form['allow_onsite']) ? 'checked' : '' ?>>
+                当日支払い（現地で集金）
+            </label>
         </div>
+
+        <label style="margin-top:18px;">入力項目（タグで選択）</label>
+        <?php
+        $selectedLabels = array_column($form['custom_fields'] ?? [], 'label');
+        $knownLabels = array_column(known_field_catalog(), 'label');
+        // 保存済みのうち、カタログに無いもの＝自由項目（末尾に表示される）
+        $freeFields = array_values(array_filter(($form['custom_fields'] ?? []), static fn ($f) => !in_array($f['label'], $knownLabels, true)));
+        $cfTypeLabels = ['text' => '文字', 'number' => '数値', 'tel' => '電話番号', 'textarea' => '長文'];
+        ?>
+        <div class="chips" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;">
+            <?php foreach (known_field_catalog() as $key => $def): ?>
+                <label class="chip" style="display:inline-flex; align-items:center; gap:6px; margin:0; padding:7px 12px; border:1px solid var(--border); border-radius:999px; cursor:pointer; white-space:nowrap;">
+                    <input type="checkbox" name="fields[]" value="<?= e($key) ?>" style="width:auto; margin:0;" <?= in_array($def['label'], $selectedLabels, true) ? 'checked' : '' ?>>
+                    <?= e($def['label']) ?>
+                </label>
+            <?php endforeach; ?>
+        </div>
+
+        <label style="margin-top:14px;">自由項目（上記以外を追加・任意）</label>
+        <p class="hint" style="margin-top:0;">ここで追加した項目は<strong>メール・紹介者の後</strong>に表示されます（自由な項目名・種別・必須/任意）。</p>
+        <div id="cfList">
+            <?php foreach ($freeFields as $f): ?>
+                <div class="cf-row">
+                    <input type="text" name="cf_label[]" maxlength="40" placeholder="例: 会社名" value="<?= e((string) $f['label']) ?>">
+                    <select name="cf_type[]">
+                        <?php foreach ($cfTypeLabels as $tv => $tl): ?>
+                            <option value="<?= e($tv) ?>" <?= ($f['type'] ?? 'text') === $tv ? 'selected' : '' ?>><?= e($tl) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <select name="cf_required[]">
+                        <option value="1" <?= !empty($f['required']) ? 'selected' : '' ?>>必須</option>
+                        <option value="0" <?= empty($f['required']) ? 'selected' : '' ?>>任意</option>
+                    </select>
+                    <button type="button" class="btn btn--ghost cf-del">削除</button>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <p><button type="button" class="btn btn--ghost" id="cfAdd">＋ 自由項目を追加</button></p>
 
         <p style="margin-top:18px;">
             <button type="submit" class="btn"><?= $editing ? '更新する' : '登録する' ?></button>
@@ -115,10 +205,23 @@ require __DIR__ . '/_app_header.php';
                             <td class="muted"><?= e($ev['date'] ?? '') ?></td>
                             <td class="muted"><?= e($ev['place'] ?? '') ?></td>
                             <td>
-                                事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
-                                <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
+                                <?php if (!empty($ev['tiers'])): ?>
+                                    <?php foreach ($ev['tiers'] as $t): ?>
+                                        <span class="muted"><?= e($t['label']) ?></span> 事前<?= e(format_amount((int) $t['amount'], $ev['currency'] ?? 'jpy')) ?><?php if (!empty($ev['allow_onsite'])): ?>/当日<?= e(format_amount((int) $t['amount_onsite'], $ev['currency'] ?? 'jpy')) ?><?php endif; ?><br>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    事前 <?= e(format_amount((int) ($ev['amount'] ?? 0), $ev['currency'] ?? 'jpy')) ?>
+                                    <?php if (!empty($ev['allow_onsite'])): ?><br><span class="muted">当日 <?= e(format_amount((int) ($ev['amount_onsite'] ?? 0), $ev['currency'] ?? 'jpy')) ?></span><?php endif; ?>
+                                <?php endif; ?>
                             </td>
-                            <td><input type="text" class="js-select" readonly value="<?= e($applyUrl) ?>" style="width:200px; font-size:.8rem; padding:5px 8px;"></td>
+                            <td style="min-width:220px; max-width:340px;">
+                                <button type="button" class="js-copy copy-link" data-copy="<?= e($applyUrl) ?>" title="タップでコピー"
+                                        style="display:block; width:100%; text-align:left; font-family:inherit; background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.78rem; color:var(--text); cursor:pointer; word-break:break-all; line-height:1.5;">
+                                    <span style="color:var(--accent); font-weight:700;">📋 タップでコピー</span><br>
+                                    <?= e($applyUrl) ?>
+                                    <span class="copy-fb" style="display:block; color:#16a34a; font-weight:700; font-size:.74rem; min-height:1em; margin-top:2px;"></span>
+                                </button>
+                            </td>
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center;">
                                     <a class="btn btn--ghost" href="events.php?edit=<?= e($ev['id']) ?>">編集</a>
@@ -137,4 +240,55 @@ require __DIR__ . '/_app_header.php';
         </div>
     <?php endif; ?>
 </div>
+<script nonce="<?= e(csp_nonce()) ?>">
+(function () {
+    // 料金タイプ（一律/男女別）で入力欄を出し分ける
+    var flat = document.getElementById('flatPricing');
+    var gender = document.getElementById('genderPricing');
+    var radios = document.querySelectorAll('.js-pricing-mode');
+    if (!flat || !gender || !radios.length) { return; }
+    function apply() {
+        var sel = document.querySelector('.js-pricing-mode:checked');
+        var mode = sel ? sel.value : 'flat';
+        flat.style.display = (mode === 'gender') ? 'none' : '';
+        gender.style.display = (mode === 'gender') ? '' : 'none';
+    }
+    radios.forEach(function (r) { r.addEventListener('change', apply); });
+    apply();
+})();
+(function () {
+    // 自由項目の行を追加/削除
+    var list = document.getElementById('cfList');
+    var add = document.getElementById('cfAdd');
+    if (!list || !add) { return; }
+    function wireDel(btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('.cf-row');
+            if (row) { row.remove(); }
+        });
+    }
+    add.addEventListener('click', function () {
+        var row = document.createElement('div');
+        row.className = 'cf-row';
+        var l = document.createElement('input');
+        l.type = 'text'; l.name = 'cf_label[]'; l.maxLength = 40; l.placeholder = '例: 会社名';
+        var ty = document.createElement('select');
+        ty.name = 'cf_type[]';
+        [['text', '文字'], ['number', '数値'], ['tel', '電話番号'], ['textarea', '長文']].forEach(function (o) {
+            var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; ty.appendChild(op);
+        });
+        var rq = document.createElement('select');
+        rq.name = 'cf_required[]';
+        [['1', '必須'], ['0', '任意']].forEach(function (o) {
+            var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; rq.appendChild(op);
+        });
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn btn--ghost cf-del'; b.textContent = '削除';
+        row.appendChild(l); row.appendChild(ty); row.appendChild(rq); row.appendChild(b);
+        list.appendChild(row);
+        wireDel(b);
+    });
+    document.querySelectorAll('#cfList .cf-del').forEach(wireDel);
+})();
+</script>
 <?php require __DIR__ . '/_app_footer.php'; ?>

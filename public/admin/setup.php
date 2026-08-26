@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-$tenant = require_tenant();
+$tenant = require_owner_tenant();
 
 $hasKey = tenant_has_stripe_key($tenant) || ($tenant['stripe_account_id'] ?? '') !== '';
 $events = tenant_events($tenant['id']);

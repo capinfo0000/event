@@ -43,6 +43,70 @@ $capacity = trim((string) ($_POST['capacity'] ?? ''));
 $allowPrepay = !empty($_POST['allow_prepay']);
 $allowOnsite = !empty($_POST['allow_onsite']);
 
+// 料金タイプ: flat（一律）/ gender（男女別）。
+$pricingMode = ((string) ($_POST['pricing_mode'] ?? 'flat')) === 'gender' ? 'gender' : 'flat';
+$priceTiersJson = '';
+
+/** 男女別の1性別ぶんの金額を検証して返す（当日空欄は事前と同額）。 */
+$parseGender = static function (string $label, string $prepayKey, string $onsiteKey) use ($id): array {
+    $prepayRaw = trim((string) ($_POST[$prepayKey] ?? ''));
+    $onsiteRaw = trim((string) ($_POST[$onsiteKey] ?? ''));
+    if (!ctype_digit($prepayRaw)) {
+        back_to_events($label . 'の事前決済の金額は0以上の整数で入力してください。', 'ng', $id);
+    }
+    if ($onsiteRaw !== '' && !ctype_digit($onsiteRaw)) {
+        back_to_events($label . 'の当日支払いの金額は0以上の整数で入力してください。', 'ng', $id);
+    }
+    $prepay = (int) $prepayRaw;
+    $onsite = $onsiteRaw !== '' ? (int) $onsiteRaw : $prepay;
+    return ['label' => $label, 'amount' => $prepay, 'amount_onsite' => $onsite];
+};
+
+if ($pricingMode === 'gender') {
+    $tiers = [
+        $parseGender('男性', 'male_prepay', 'male_onsite'),
+        $parseGender('女性', 'female_prepay', 'female_onsite'),
+    ];
+    $priceTiersJson = json_encode($tiers, JSON_UNESCAPED_UNICODE);
+    // 男女別のときは単一料金は使わないが、NOT NULL 列のため 0 を入れておく。
+    $amount = '0';
+    $amountOnsite = '';
+}
+
+// 入力項目（タグ選択式）。選ばれたキーだけを、カタログの並び順（氏名→フリガナ→年齢→紹介者）で
+// 保存する。選択された項目は必須。性別・メールは固定なのでここには含めない。
+$selectedKeys = (array) ($_POST['fields'] ?? []);
+$customFields = [];
+foreach (known_field_catalog() as $key => $def) {
+    if (in_array($key, $selectedKeys, true)) {
+        $customFields[] = ['label' => $def['label'], 'type' => $def['type'], 'required' => true];
+    }
+}
+// 自由項目（カタログ外）を末尾に追加。ラベル・種別・必須を対で受け取る。
+$cfLabels = (array) ($_POST['cf_label'] ?? []);
+$cfTypes  = (array) ($_POST['cf_type'] ?? []);
+$cfReqs   = (array) ($_POST['cf_required'] ?? []);
+$knownLabels = array_column(known_field_catalog(), 'label');
+foreach ($cfLabels as $i => $rawLabel) {
+    $label = trim((string) $rawLabel);
+    if ($label === '' || in_array($label, $knownLabels, true)) {
+        continue; // 空・カタログと重複するラベルは無視
+    }
+    $type = (string) ($cfTypes[$i] ?? 'text');
+    if (!in_array($type, ['text', 'number', 'tel', 'textarea'], true)) {
+        $type = 'text';
+    }
+    $customFields[] = [
+        'label'    => mb_substr($label, 0, 40),
+        'type'     => $type,
+        'required' => ((string) ($cfReqs[$i] ?? '0')) === '1',
+    ];
+    if (count($customFields) >= 25) {
+        break;
+    }
+}
+$customFieldsJson = $customFields !== [] ? json_encode($customFields, JSON_UNESCAPED_UNICODE) : null;
+
 // 入力チェック
 if ($name === '' || $date === '' || $place === '') {
     back_to_events('イベント名・日時・場所は必須です。', 'ng', $id);
@@ -74,6 +138,8 @@ $data = [
     'capacity'      => ($capacity !== '' && ctype_digit($capacity)) ? (int) $capacity : 0,
     'allow_prepay'  => $allowPrepay,
     'allow_onsite'  => $allowOnsite,
+    'price_tiers'   => $priceTiersJson,
+    'custom_fields' => $customFieldsJson,
 ];
 
 try {

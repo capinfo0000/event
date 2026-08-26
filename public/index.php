@@ -15,23 +15,22 @@ require dirname(__DIR__) . '/src/bootstrap.php';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>イベント事前決済サービス</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <title>決済くん｜イベントの事前決済・当日払い</title>
+    <link rel="stylesheet" href="/assets/app.css?v=3">
 </head>
 <body>
 <div class="container">
-    <div class="brandbar">イベント事前決済</div>
-    <h1>イベント事前決済サービス</h1>
-    <p class="muted">小規模イベントの参加費を、事前決済（前払い）または当日支払いで集められるサービスです。</p>
+    <div class="brandbar">決済くん</div>
+    <h1>決済くん</h1>
+    <p class="muted">小規模イベントの参加費を、事前決済（前払い）または当日支払いでかんたんに集められるサービスです。</p>
 
     <div class="card">
         <div class="card__title">主催者の方へ</div>
         <p>イベントの作成・参加者管理・返金は主催者ページから行えます。</p>
         <p>
-            <a class="btn" href="admin/signup.php">無料で新規登録</a>
-            <a href="admin/login.php" style="margin-left:10px;">ログイン</a>
+            <a class="btn" href="admin/login.php">ログイン</a>
         </p>
-        <p class="muted">メールアドレスとパスワードだけで、すぐに始められます。</p>
+        <p class="muted">アカウント登録は招待制です。ご利用には管理者が発行するアカウント／招待が必要です。</p>
     </div>
 
     <p class="muted" style="margin-top:24px; border-top:1px solid var(--border); padding-top:14px;">

@@ -38,7 +38,7 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 $out = fopen('php://output', 'w');
 fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM（Excel 文字化け対策）
 
-fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '支払方法', '支払額', '返金額', '状態', '出席', '備考', 'ID']);
+fputcsv($out, ['申込日時', 'お名前', 'メール', '電話', '人数', '区分', '追加項目', '支払方法', '支払額', '返金額', '状態', '出席', '備考', 'ID']);
 
 foreach ($participants as $p) {
     $isOnsite = ($p['payment_type'] ?? 'prepay') === 'onsite';
@@ -58,6 +58,12 @@ foreach ($participants as $p) {
         $idRef = $p['payment_intent'];
     }
 
+    // 追加項目は「ラベル: 値 / ラベル: 値」でまとめる（氏名は重複排除済み）。
+    $customPairs = [];
+    foreach (($p['custom'] ?? []) as $lab => $val) {
+        $customPairs[] = ($lab !== '' ? $lab . ': ' : '') . $val;
+    }
+
     // 参加者由来の文字列（氏名・メール・電話・備考）は数式インジェクション対策で無害化する。
     fputcsv($out, [
         date('Y-m-d H:i', $p['created']),
@@ -65,6 +71,8 @@ foreach ($participants as $p) {
         csv_cell($p['email']),
         csv_cell($p['phone']),
         (int) $p['party_size'] . '名',
+        csv_cell($p['category'] ?? ''),
+        csv_cell(implode(' / ', $customPairs)),
         $method,
         format_amount($p['amount'], $p['currency']),
         format_amount($p['amount_refunded'], $p['currency']),

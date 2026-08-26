@@ -40,15 +40,39 @@ if ($event === null) {
 $account = stripe_resolve_event($event);
 
 // 申込フォームの入力を受け取り・検証する（金額は必ずサーバー側のイベント定義から確定）
-$name  = trim((string)($_POST['name'] ?? ''));
 $email = trim((string)($_POST['email'] ?? ''));
 $phone = trim((string)($_POST['phone'] ?? ''));
 $note  = trim((string)($_POST['note'] ?? ''));
 $partySize = (int)($_POST['party_size'] ?? 1);
 
-if ($name === '' || $email === '') {
+// 主催者が定義したカスタム入力項目がある場合は、標準項目（氏名/電話/備考）ではなく
+// 定義された項目を受け取る。メールは常に必須（領収書・確認メールに使用）。
+// 入力項目（タグ選択式）は cf[] で届く。選択された項目は必須。メールは常に必須。
+// 標準の氏名/電話/人数/備考は廃止（1申込=1名）。氏名相当の項目があれば顧客名に採用する。
+$customDefs = $event['custom_fields'] ?? [];
+$customMeta = [];  // Stripe metadata 用（cf0,cf1,... = "ラベル: 値"）
+$name = '';
+$partySize = 1;
+$phone = '';
+$note = '';
+$cf = (array)($_POST['cf'] ?? []);
+foreach ($customDefs as $i => $def) {
+    $val = trim((string)($cf[$i] ?? ''));
+    if (!empty($def['required']) && $val === '') {
+        http_response_code(400);
+        exit('「' . $def['label'] . '」は必須です。前の画面に戻って入力してください。');
+    }
+    $val = mb_substr($val, 0, 200);
+    $customMeta['cf' . $i] = mb_substr($def['label'] . ': ' . $val, 0, 490);
+    // 氏名に相当する項目があれば Stripe 顧客名に採用（名簿表示用）
+    if ($name === '' && $val !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $def['label'])) {
+        $name = mb_substr($val, 0, 100);
+    }
+}
+
+if ($email === '') {
     http_response_code(400);
-    exit('お名前とメールアドレスは必須です。フォームに戻って入力してください。');
+    exit('メールアドレスは必須です。フォームに戻って入力してください。');
 }
 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
@@ -97,6 +121,22 @@ $onsiteUnit = (isset($event['amount_onsite']) && $event['amount_onsite'] !== '')
     ? (int)$event['amount_onsite']
     : $prepayUnit;
 
+// 料金区分（男性/女性等）が設定されたイベントは、選択区分の金額をサーバー側の定義から確定する。
+// これにより金額の改ざんを防ぐ。区分制は 1申込 = 1名。
+$tierLabel = '';
+if (event_has_tiers($event)) {
+    $tierLabel = trim((string)($_POST['tier'] ?? ''));
+    $tier = event_tier($event, $tierLabel);
+    if ($tier === null) {
+        http_response_code(400);
+        exit('区分の選択が正しくありません。前の画面に戻って選び直してください。');
+    }
+    // 選択区分（例: 男性/女性）ごとに、事前決済・当日支払いそれぞれの金額を採用する。
+    $prepayUnit = (int) $tier['amount'];
+    $onsiteUnit = (int) $tier['amount_onsite'];
+    $partySize = 1;
+}
+
 // 長すぎる入力は Stripe metadata 制限（値は最大500文字）に合わせて切り詰める
 $metaName = mb_substr($name, 0, 100);
 $metaPhone = mb_substr($phone, 0, 30);
@@ -125,25 +165,37 @@ if ($capacity > 0) {
 // ---- 当日支払い: 決済は発生させず、課金なしの Stripe 顧客として申込を記録 ----
 if ($paymentType === 'onsite') {
     $onsiteTotal = $onsiteUnit * $partySize;
-    // 課金なしの Stripe 顧客として、運営者のアカウントに名簿を記録する。
-    try {
-        \Stripe\Customer::create([
-            'name' => $metaName,
-            'email' => $email,
+    $custData = [
+        'name' => $metaName,
+        'email' => $email,
+        'phone' => $metaPhone,
+        'metadata' => array_merge([
+            'event_id' => $event['id'],
+            'event_name' => $event['name'] ?? '',
+            'participant_name' => $metaName,
             'phone' => $metaPhone,
-            'metadata' => [
-                'event_id' => $event['id'],
-                'event_name' => $event['name'] ?? '',
-                'participant_name' => $metaName,
-                'phone' => $metaPhone,
-                'party_size' => (string)$partySize,
-                'note' => $metaNote,
-                'payment_type' => 'onsite',
-                'onsite_unit' => (string)$onsiteUnit,
-                'onsite_total' => (string)$onsiteTotal,
-                'currency' => $currency,
-            ],
-        ], $opts);
+            'party_size' => (string)$partySize,
+            'note' => $metaNote,
+            'payment_type' => 'onsite',
+            'onsite_unit' => (string)$onsiteUnit,
+            'onsite_total' => (string)$onsiteTotal,
+            'currency' => $currency,
+            'participant_category' => $tierLabel,
+            // 再申込は「参加に戻す」動作。以前キャンセル済み／キャンセル希望だった場合は解除し、
+            // この時刻より前のキャンセル料履歴は無効化する（再申込者を通常の未収として扱う）。
+            'cancelled' => '',
+            'cancel_requested' => '',
+            'reactivated_at' => (string) time(),
+        ], $customMeta),
+    ];
+    // 二重防止: 同一イベント・同一メールの当日払いが既にあれば、新規作成せず既存を更新する。
+    $existingOnsite = find_onsite_customer_id_by_email($event['id'], $account, $email);
+    try {
+        if ($existingOnsite !== null) {
+            \Stripe\Customer::update($existingOnsite, $custData, $opts);
+        } else {
+            \Stripe\Customer::create($custData, $opts);
+        }
     } catch (\Throwable $e) {
         http_response_code(502);
         error_log('当日申込の記録失敗: ' . $e->getMessage());
@@ -155,6 +207,7 @@ if ($paymentType === 'onsite') {
         . "下記のお申し込みを受け付けました（当日支払い）。\n\n"
         . 'イベント：' . ($event['name'] ?? '') . "\n"
         . '日時・場所：' . trim(($event['date'] ?? '') . '　' . ($event['place'] ?? '')) . "\n"
+        . ($tierLabel !== '' ? '区分：' . $tierLabel . "\n" : '')
         . '参加人数：' . $partySize . " 名\n"
         . '当日お支払い額：' . format_amount($onsiteTotal, $currency) . "\n\n"
         . "当日、会場で上記金額をお支払いください。今回はまだお支払いは発生していません。\n";
@@ -165,8 +218,24 @@ if ($paymentType === 'onsite') {
         'party_size' => $partySize,
         'total' => $onsiteTotal,
     ]);
-    header('Location: ' . base_url() . '/onsite.php?' . $q, true, 303);
+    // 同一オリジンのルート相対で遷移（APP_BASE_URL の設定差や form-action の影響を受けない）。
+    header('Location: /onsite.php?' . $q, true, 303);
     exit;
+}
+
+// 二重決済の防止: 同一イベント・同一メールで既に支払い済み（全額返金を除く）なら、
+// 新しい決済を作らず、既存の完了ページへ戻す（重複請求・名簿重複を防ぐ。画面追加なし）。
+$emailLower = strtolower(trim($email));
+foreach (fetch_event_participants($event['id'], $account) as $p) {
+    if (($p['payment_type'] ?? '') === 'prepay'
+        && empty($p['fully_refunded'])
+        && strtolower(trim((string) ($p['email'] ?? ''))) === $emailLower
+        && ($p['session_id'] ?? '') !== ''
+    ) {
+        header('Location: ' . base_url() . '/success.php?event_id=' . urlencode($event['id'])
+            . '&session_id=' . urlencode((string) $p['session_id']), true, 303);
+        exit;
+    }
 }
 
 // ---- 事前決済: Stripe Checkout で前払い ----
@@ -178,7 +247,7 @@ try {
                 'currency' => $currency,
                 'unit_amount' => $prepayUnit,
                 'product_data' => [
-                    'name' => $event['name'] ?? 'イベント参加費',
+                    'name' => ($event['name'] ?? 'イベント参加費') . ($tierLabel !== '' ? '（' . $tierLabel . '）' : ''),
                     'description' => trim(($event['date'] ?? '') . ' / ' . ($event['place'] ?? '')),
                 ],
             ],
@@ -188,7 +257,7 @@ try {
         'customer_creation' => 'always',
         'customer_email' => $email,
         // 集めた情報は Stripe の決済データに metadata として保管（当サーバーのDBは持たない）
-        'metadata' => [
+        'metadata' => array_merge([
             'event_id' => $event['id'],
             'event_name' => $event['name'] ?? '',
             'participant_name' => $metaName,
@@ -196,15 +265,17 @@ try {
             'party_size' => (string)$partySize,
             'note' => $metaNote,
             'payment_type' => 'prepay',
-        ],
+            'participant_category' => $tierLabel,
+        ], $customMeta),
         'payment_intent_data' => [
-            'metadata' => [
+            'metadata' => array_merge([
                 'event_id' => $event['id'],
                 'event_name' => $event['name'] ?? '',
                 'participant_name' => $metaName,
                 'phone' => $metaPhone,
                 'party_size' => (string)$partySize,
-            ],
+                'participant_category' => $tierLabel,
+            ], $customMeta),
         ],
         // キャンセルポリシーを決済画面のボタン直上に明示（前払い＝後から取り立て不要にする要）
         'custom_text' => [
@@ -213,7 +284,7 @@ try {
             ],
         ],
         'success_url' => base_url() . '/success.php?event_id=' . urlencode($event['id']) . '&session_id={CHECKOUT_SESSION_ID}',
-        'cancel_url' => base_url() . '/cancel.php?event_id=' . urlencode($event['id']),
+        'cancel_url' => base_url() . '/cancel.php?event_id=' . urlencode($event['id']) . '&session_id={CHECKOUT_SESSION_ID}',
     ], $opts);
 } catch (\Throwable $e) {
     // 認証エラー・通信エラー・予期しない応答など、あらゆる決済作成失敗をここで受ける

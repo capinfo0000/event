@@ -22,6 +22,7 @@ require __DIR__ . '/tenant.php';
 require __DIR__ . '/mail.php';
 require __DIR__ . '/captcha.php';
 require __DIR__ . '/crypto.php';
+require __DIR__ . '/totp.php';
 
 /**
  * .env を読み込んで getenv() / $_ENV から参照できるようにする簡易ローダー。
@@ -55,6 +56,25 @@ function load_env(string $path): void
 }
 
 load_env(APP_ROOT . '/.env');
+
+// 本番ではエラー詳細を画面に出さない。スタックトレースには復号済みの Stripe 鍵などが
+// 引数として載りうるため、画面表示は汎用メッセージのみ・詳細はサーバーログへ。
+// ローカル開発では .env に APP_DEBUG=1 を置けば従来どおり詳細表示。
+if (getenv('APP_DEBUG') === '1') {
+    ini_set('display_errors', '1');
+    error_reporting(E_ALL);
+} elseif (PHP_SAPI !== 'cli') {
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    error_reporting(E_ALL);
+    set_exception_handler(static function (\Throwable $e): void {
+        error_log('Uncaught: ' . $e->getMessage());
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
+        echo 'エラーが発生しました。時間をおいて再度お試しください。';
+    });
+}
 
 /**
  * このリクエスト用の CSP nonce（1リクエストにつき1つ）。
@@ -102,12 +122,16 @@ function send_baseline_security_headers(): void
     $nonce = "'nonce-" . csp_nonce() . "'";
     // script はインラインを禁止し、自ホスト＋nonce のみ許可（XSS耐性）。
     // style は <style nonce> と style属性の両方を許可するため style-src-attr 'unsafe-inline' を併用。
+    // 事前決済は checkout.php から Stripe Checkout（checkout.stripe.com）へサーバーリダイレクトする。
+    // ブラウザ(Chrome/Safari)は form-action をリダイレクト先にも適用するため、Stripe を許可しないと
+    // 「事前決済ボタンを押しても遷移しない（CSP でブロック）」が起きる。form-action に Stripe を追加。
     header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; "
         . "style-src 'self' $nonce; style-src-attr 'unsafe-inline'; "
         . "script-src 'self' $nonce" . $captchaHost . "; "
         . "connect-src 'self'" . $captchaHost . "; "
         . "frame-src" . ($captchaHost !== '' ? $captchaHost : " 'none'") . "; "
-        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        . "object-src 'none'; frame-ancestors 'none'; base-uri 'self'; "
+        . "form-action 'self' https://checkout.stripe.com https://*.stripe.com");
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: same-origin');
@@ -163,8 +187,493 @@ function event_normalize(array $row): array
         'allow_prepay'      => (int) ($row['allow_prepay'] ?? 1) === 1,
         'allow_onsite'      => (int) ($row['allow_onsite'] ?? 0) === 1,
         'stripe_account_id' => $row['stripe_account_id'] ?? null,
+        'tiers'             => decode_price_tiers($row['price_tiers'] ?? null),
+        'custom_fields'     => decode_custom_fields($row['custom_fields'] ?? null),
         'created_at'        => (int) ($row['created_at'] ?? 0),
     ];
+}
+
+/**
+ * custom_fields（JSON）を安全に配列 [ ['label'=>string,'type'=>string,'required'=>bool], ... ] へ復元。
+ * type は text/number/tel/textarea のみ許可。不正・空なら空配列（＝従来の標準項目を使う）。
+ */
+function decode_custom_fields(?string $json): array
+{
+    if ($json === null || trim($json) === '') {
+        return [];
+    }
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $f) {
+        if (!is_array($f)) {
+            continue;
+        }
+        $label = trim((string) ($f['label'] ?? ''));
+        if ($label === '') {
+            continue;
+        }
+        $type = (string) ($f['type'] ?? 'text');
+        if (!in_array($type, ['text', 'number', 'tel', 'textarea'], true)) {
+            $type = 'text';
+        }
+        $out[] = ['label' => mb_substr($label, 0, 40), 'type' => $type, 'required' => !empty($f['required'])];
+        if (count($out) >= 20) {
+            break;
+        }
+    }
+    return $out;
+}
+
+/** イベントに主催者定義のカスタム入力項目があるか。 */
+function event_has_custom_fields(array $event): bool
+{
+    return !empty($event['custom_fields']);
+}
+
+/**
+ * 申込フォームで選べる「タグ（入力項目）」のカタログ。
+ * 表示順は 氏名 → 氏名フリガナ → 年齢 →（性別・メール＝固定）→ 紹介者。
+ * slot: 'pre' は性別・メールより前、'post' は後に表示する。
+ *
+ * @return array<string, array{label:string, type:string, slot:string}>
+ */
+function known_field_catalog(): array
+{
+    return [
+        'name'     => ['label' => '氏名',         'type' => 'text',   'slot' => 'pre'],
+        'kana'     => ['label' => '氏名フリガナ', 'type' => 'text',   'slot' => 'pre'],
+        'age'      => ['label' => '年齢',         'type' => 'number', 'slot' => 'pre'],
+        'referrer' => ['label' => '紹介者',       'type' => 'text',   'slot' => 'post'],
+    ];
+}
+
+/** ラベルから既知フィールドの slot（pre/post）を返す。未知（自由項目）は 'post'（メール・紹介者の後）。 */
+function field_slot_for_label(string $label): string
+{
+    foreach (known_field_catalog() as $def) {
+        if ($def['label'] === $label) {
+            return $def['slot'];
+        }
+    }
+    return 'post';
+}
+
+/** イベントの日時文字列（datetime-local 等）を UNIX 時刻へ。解釈できなければ null。 */
+function event_datetime_ts(string $date): ?int
+{
+    $date = trim($date);
+    if ($date === '') {
+        return null;
+    }
+    $ts = strtotime(str_replace('T', ' ', $date));
+    return $ts !== false ? $ts : null;
+}
+
+/**
+ * キャンセルポリシー（既定の区分）に基づき、開催日からの逆算でキャンセル料率を返す。
+ * 既定区分: 開催8日以上前=0%（全額返金相当）／7〜2日前=50%／前日・当日以降・無連絡=100%。
+ * ※ 主催者が独自の日数・率でポリシーを定めている場合は一致しません（既定区分での自動算定）。
+ *
+ * @return array{days:int|null, rate:float, label:string}
+ */
+function cancellation_fee_rate_for_event(string $eventDate, ?int $nowTs = null): array
+{
+    $nowTs = $nowTs ?? time();
+    $ts = event_datetime_ts($eventDate);
+    if ($ts === null) {
+        return ['days' => null, 'rate' => 1.0, 'label' => '開催日時が不明のため満額（100%）'];
+    }
+    $days = (int) floor(($ts - $nowTs) / 86400); // 開催まで残り日数（切り捨て）
+    if ($days >= 8) {
+        return ['days' => $days, 'rate' => 0.0, 'label' => '開催8日以上前のためキャンセル料なし（0%）'];
+    }
+    if ($days >= 2) {
+        return ['days' => $days, 'rate' => 0.5, 'label' => '開催7〜2日前のため50%'];
+    }
+    return ['days' => $days, 'rate' => 1.0, 'label' => '開催前日・当日以降／無連絡のため満額（100%）'];
+}
+
+/**
+ * 名簿から「メール＋氏名の両方一致」の参加者を返す（公開キャンセル手続きの本人確認）。
+ * 既に全額返金済み（キャンセル済）の行は対象外。無ければ null。
+ *
+ * @return array<string,mixed>|null
+ */
+function find_event_participant_by_email_name(string $eventId, ?string $account, string $email, string $name): ?array
+{
+    $email = strtolower(trim($email));
+    $name = trim($name);
+    if ($email === '' || $name === '') {
+        return null;
+    }
+    foreach (fetch_event_participants($eventId, $account) as $p) {
+        if (!empty($p['fully_refunded'])) {
+            continue;
+        }
+        if (strtolower(trim((string) ($p['email'] ?? ''))) === $email
+            && trim((string) ($p['name'] ?? '')) === $name) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+/** 参加者（Stripe顧客）に「キャンセル希望」の印を付ける（主催者の承認待ちの目印）。 */
+function mark_cancel_requested(?string $account, string $customerId): void
+{
+    if ($customerId === '') {
+        return;
+    }
+    init_stripe();
+    try {
+        \Stripe\Customer::update(
+            $customerId,
+            ['metadata' => ['cancel_requested' => '1', 'cancel_requested_at' => (string) time()]],
+            stripe_opts($account)
+        );
+    } catch (\Throwable $e) {
+        error_log('キャンセル希望マーク失敗: ' . $e->getMessage());
+    }
+}
+
+/**
+ * キャンセル料の支払い用 Checkout を作成する（当日払いのキャンセル料に使用）。
+ * 名簿には載せない支払い（metadata.payment_type=cancel_fee）。失敗時 null。
+ */
+function create_cancel_fee_checkout(?string $account, array $event, string $email, string $name, string $customerId, int $fee): ?\Stripe\Checkout\Session
+{
+    if ($fee <= 0) {
+        return null;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    $currency = strtolower((string) ($event['currency'] ?? 'jpy'));
+    try {
+        return \Stripe\Checkout\Session::create([
+            'mode' => 'payment',
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => $currency,
+                    'unit_amount' => $fee,
+                    'product_data' => [
+                        'name' => '【キャンセル料】' . ($event['name'] ?? 'イベント'),
+                        'description' => trim(((string) ($event['date'] ?? '')) . ' / ' . ((string) ($event['place'] ?? ''))),
+                    ],
+                ],
+                'quantity' => 1,
+            ]],
+            'customer_email' => $email,
+            'metadata' => [
+                'payment_type'     => 'cancel_fee',
+                'fee_event_id'     => (string) ($event['id'] ?? ''),
+                'fee_event_name'   => (string) ($event['name'] ?? ''),
+                'participant_name' => $name,
+                'orig_customer'    => $customerId,
+            ],
+            'payment_intent_data' => [
+                'metadata' => [
+                    'payment_type'  => 'cancel_fee',
+                    'fee_event_id'  => (string) ($event['id'] ?? ''),
+                    'orig_customer' => $customerId,
+                ],
+            ],
+            'custom_text' => [
+                'submit' => ['message' => 'キャンセルポリシーに基づくキャンセル料のお支払いです。'],
+            ],
+            'success_url' => base_url() . '/cancelfee_done.php',
+            'cancel_url'  => base_url() . '/cancelfee_done.php?canceled=1',
+        ], $opts);
+    } catch (\Throwable $e) {
+        error_log('キャンセル料Checkout作成失敗: ' . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Stripe のカード拒否コードを、参加者向けの日本語説明に変換する。分からなければ null。
+ * 不正・紛失・盗難など機微な拒否は、具体的な理由を伏せて汎用文言を返す。
+ */
+function decline_reason_ja(?string $declineCode, ?string $code): ?string
+{
+    $dc = (string) $declineCode;
+    $c  = (string) $code;
+
+    $sensitive = ['lost_card', 'stolen_card', 'fraudulent', 'pickup_card', 'merchant_blacklist', 'security_violation', 'restricted_card', 'revocation_of_authorization', 'stop_payment_order'];
+    if ($dc !== '' && in_array($dc, $sensitive, true)) {
+        return 'このカードは使用できませんでした。お手数ですがカード発行会社へお問い合わせいただくか、別のカードをお試しください。';
+    }
+
+    $map = [
+        'insufficient_funds'               => '残高不足、または利用限度額を超えている可能性があります。',
+        'card_velocity_exceeded'           => '短時間での利用回数・金額の上限を超えた可能性があります。時間をおいてお試しください。',
+        'withdrawal_count_limit_exceeded'  => '利用回数・金額の上限を超えた可能性があります。',
+        'do_not_honor'                     => 'カード発行会社が承認しませんでした（理由は開示されていません）。',
+        'generic_decline'                  => 'カード発行会社が理由を明示せずに拒否しました。',
+        'transaction_not_allowed'          => 'このカードでは、この取引が許可されていない可能性があります（ネット決済の制限など）。',
+        'currency_not_supported'           => 'このカードは、この通貨での支払いに対応していない可能性があります。',
+        'card_not_supported'               => 'このカードは対応していない可能性があります。別のカードをお試しください。',
+        'expired_card'                     => 'カードの有効期限が切れている可能性があります。',
+        'incorrect_cvc'                    => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'invalid_cvc'                      => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'incorrect_number'                 => 'カード番号が正しくない可能性があります。',
+        'invalid_expiry_month'             => '有効期限（月）が正しくない可能性があります。',
+        'invalid_expiry_year'              => '有効期限（年）が正しくない可能性があります。',
+        'processing_error'                 => '処理中に一時的なエラーが発生しました。時間をおいてお試しください。',
+        'try_again_later'                  => '一時的に処理できませんでした。時間をおいて再度お試しください。',
+        'authentication_required'          => '本人認証（3Dセキュア）が必要です。認証のうえ再度お試しください。',
+        'call_issuer'                      => 'カード発行会社への確認が必要です。発行会社へお問い合わせください。',
+    ];
+    if ($dc !== '' && isset($map[$dc])) {
+        return $map[$dc];
+    }
+
+    $codeMap = [
+        'card_declined'           => 'カードが拒否されました。',
+        'expired_card'            => 'カードの有効期限が切れている可能性があります。',
+        'incorrect_cvc'           => 'セキュリティコード（CVC）が正しくない可能性があります。',
+        'incorrect_number'        => 'カード番号が正しくない可能性があります。',
+        'processing_error'        => '処理中に一時的なエラーが発生しました。時間をおいてお試しください。',
+        'authentication_required' => '本人認証（3Dセキュア）が必要です。',
+        // カード以外（PayPay等）でも起こりうるコード
+        'payment_method_provider_decline'      => '決済サービス（提供元）側で承認されませんでした。',
+        'payment_intent_authentication_failure' => '認証が完了しませんでした。もう一度お試しください。',
+        'payment_method_provider_timeout'       => '認証・通信がタイムアウトした可能性があります。時間をおいてお試しください。',
+    ];
+    if ($c !== '' && isset($codeMap[$c])) {
+        return $codeMap[$c];
+    }
+    return null; // 不明
+}
+
+/** Stripe の支払い方法タイプを日本語ラベルに。未知はそのまま/汎用。 */
+function payment_method_label_ja(string $type): string
+{
+    $m = [
+        'card' => 'クレジットカード', 'paypay' => 'PayPay', 'konbini' => 'コンビニ決済',
+        'customer_balance' => '銀行振込', 'wechat_pay' => 'WeChat Pay', 'alipay' => 'Alipay',
+        'link' => 'Link', 'au_becs_debit' => '口座振替',
+    ];
+    return $m[$type] ?? ($type !== '' ? $type : '選択されたお支払い方法');
+}
+
+/**
+ * 各種ポリシー・規約の既定文面（プレーンテキスト）を返す。
+ * 管理画面「規約・ポリシー」の編集欄に初期表示し、主催者がこれを土台に編集できるようにする。
+ * 未対応のキーは空文字。
+ */
+function default_policy_text(string $field): string
+{
+    switch ($field) {
+        case 'cancel_policy':
+            return <<<'TXT'
+本イベントの参加費は、事前決済（前払い）または当日払い（現地でのお支払い）でお受けします。キャンセルの取り扱いは、お支払い方法により以下のとおりです。
+
+【事前決済（前払い）のキャンセル・返金】
+お支払い後のキャンセルについては、以下の返金規定を適用します（開催日基準）。
+・開催8日前まで：Stripe手数料を差し引いた全額を返金
+・開催7〜2日前：50%返金
+・開催前日・当日／無連絡不参加：返金なし
+
+※ 本ポリシーでの「全額返金」とは、決済時にかかった Stripe 手数料を差し引いた全額（主催者の実受取額）の返金を指します。Stripe 手数料は返金時に返還されないため、その分は差し引かれます。
+※ 一部返金（50% 等）は、決済額に対する割合の金額を返金します。
+※ 返金は Stripe を通じて、お支払いに使用されたカードへ行います。
+※ 主催者都合での中止（荒天等）の場合も、Stripe手数料を差し引いた全額を返金します。
+
+【当日払いのキャンセル】
+当日払いは事前の決済は発生しませんが、キャンセルの場合は下記のキャンセル料を申し受けます（開催日基準）。
+・開催8日前まで：無料
+・開催7〜2日前：参加費の50%
+・開催前日・当日／無連絡不参加：参加費の全額
+キャンセル料が発生する場合は、お支払い用のリンクをメールでお送りします。ご参加いただけなくなった場合は、開催日前までにキャンセルのご連絡をお願いします。
+
+【お支払い・カード情報の取り扱い】
+カード情報の入力・処理は決済代行サービス Stripe 上で安全に行われます。主催者はカード番号・有効期限・セキュリティコード等の決済情報を一切受け取らず、保管・閲覧もできません。
+TXT;
+
+        case 'legal_tokushoho':
+            return <<<'TXT'
+本表記は、特定商取引法第11条に基づき、決済くんを通じて提供されるサービスおよびイベント参加費の販売について表示するものです。
+
+販売事業者：［事業者名 / 屋号を記載］
+運営統括責任者：［氏名を記載］
+所在地：［住所を記載］（本表記に記載のない事項は、請求があれば遅滞なく開示します）
+電話番号：［電話番号を記載］（受付時間：平日〇〇:〇〇〜〇〇:〇〇。請求があれば遅滞なく開示します）
+メールアドレス：［連絡先メールアドレスを記載］
+販売価格：各イベントの申込ページに表示する参加費（税込）。プラン利用料がある場合は各プランのページに表示する金額（税込）。
+商品代金以外の必要料金：インターネット接続にかかる通信料等はお客様のご負担となります。当サービスの利用にあたり別途手数料は申し受けません。
+支払方法：クレジットカード（決済代行：Stripe Inc.）。イベントによっては当日現地でのお支払い（当日払い）を選択できます。
+支払時期：事前決済＝お申し込み時にクレジットカードへ課金します。当日払い＝イベント当日に会場でお支払いいただきます。プラン利用料＝お申し込み時および以後の各更新日に課金します。
+役務の提供時期：事前決済＝決済完了をもってお申し込みが確定します（提供日時は各イベントページに表示）。当日払い＝お申し込み受付をもって確定します。
+返品・キャンセル（返金）：イベント参加費のキャンセル・返金の可否および条件は、各イベント主催者が定めるキャンセル・返金ポリシーに準じます。プラン利用料は日割り返金を行いません（解約後は次回更新を停止します）。
+動作環境：最新のブラウザ（Google Chrome、Safari、Microsoft Edge 等）およびインターネット接続環境。
+TXT;
+
+        case 'legal_terms':
+            return <<<'TXT'
+本規約は、［事業者名］（以下「当社」といいます）が提供するイベント参加費の決済・受付サービス「決済くん」（以下「本サービス」といいます）の利用条件を定めるものです。イベントを主催する方（以下「主催者」）およびイベントに申し込む方（以下「参加者」、主催者と併せて「利用者」）は、本規約に同意のうえ本サービスを利用するものとします。
+
+第1条（適用）
+1. 本規約は、本サービスの提供条件および当社と利用者との間の権利義務関係を定めるものであり、本サービスの利用に関わる一切の関係に適用されます。
+2. 当社が本サービス上に掲載する個別の注意事項・ガイドライン等は、本規約の一部を構成します。
+
+第2条（本サービスの内容）
+1. 本サービスは、主催者がイベント参加費を「事前決済（前払い）」または「当日払い」で受け付けるための仕組みを提供します。
+2. クレジットカードによる決済は、決済代行事業者である Stripe, Inc.（以下「Stripe」）を通じて行われます。カード情報は Stripe が取得・管理し、当社および主催者はカード番号等の決済情報を保持しません。
+3. 参加費の入金は、各主催者が接続した Stripe アカウントに対して行われます。
+
+第3条（アカウント）
+1. 主催者アカウントは、当社が発行する招待に基づき、メールアドレスとパスワードで登録できます。利用者は登録情報を正確かつ最新の内容に保つものとします。
+2. 利用者は、パスワードおよび二段階認証情報を自己の責任で管理し、第三者に開示・貸与・共有してはなりません。
+3. アカウントの管理不十分、第三者の使用等による損害の責任は利用者が負うものとします。
+
+第4条（料金・支払い）
+1. イベント参加費の金額・徴収・返金の条件は、各主催者が定めるものとします。
+2. 主催者が本サービスの有料プランを利用する場合、主催者は所定の利用料を当社に支払うものとします。
+3. 決済に伴い決済代行事業者所定の手数料が発生する場合があり、当該手数料は返金時にも返還されません。
+
+第5条（禁止事項）
+利用者は、本サービスの利用にあたり、次の行為をしてはなりません。
+1. 法令または公序良俗に違反する行為
+2. 虚偽のイベント情報の掲載、実体のない集金、その他参加者を誤認させる行為
+3. 第三者の知的財産権、プライバシー、名誉その他の権利・利益を侵害する行為
+4. 本サービスのサーバー・ネットワークへの不正アクセス、過度な負荷を与える行為
+5. マネー・ローンダリング、反社会的勢力への利益供与、その他犯罪に関与する行為
+6. その他、当社が不適切と合理的に判断する行為
+
+第6条（利用停止・登録抹消）
+当社は、利用者が本規約に違反した場合、または本サービスの運営上必要と合理的に判断した場合、事前の通知なく当該利用者の本サービスの利用を停止し、またはアカウントを削除することができます。
+
+第7条（サービスの変更・中断・終了）
+当社は、利用者への事前の通知なく本サービスの内容を変更し、またはその提供を中断・終了することができます。これにより利用者に生じた損害について、当社は本規約に定めるほか責任を負いません。
+
+第8条（利用者の自己責任）
+1. 利用者は、本サービスの利用（イベントの企画・開催・集金・参加、参加者との連絡等を含みます）を、自己の判断と責任において行うものとします。
+2. 主催者と参加者との間で生じた一切のトラブル（イベントの中止・変更・内容・品質、返金の要否、参加者間の紛争等）は、当該当事者間で自己の責任と費用において解決するものとし、当社は一切関与せず、責任を負いません。
+3. 利用者は、本サービスの利用に関して第三者との間で紛争が生じた場合、自己の責任と費用でこれを解決し、当社に損害・負担を与えないものとします。
+
+第9条（免責・責任の制限）
+1. 当社は、本サービスが利用者の特定の目的に適合すること、期待する機能・正確性・有用性・継続性を有すること、および不具合が生じないことについて、明示・黙示を問わず一切保証しません。利用者は、本サービスを現状有姿（AS IS）で、自己の責任において利用するものとします。
+2. 当社は、本サービスの提供の中断・停止・変更・終了、通信回線・機器・ソフトウェアの障害、決済代行事業者に起因する事象、データの消失・改ざん等により利用者に生じた損害について、責任を負いません。
+3. 本規約の免責規定にかかわらず、当社の責任を免除する規定が消費者契約法その他の法令により無効とされる場合であっても、当社は、当社の故意または重過失による場合を除き、責任を負いません。
+4. 前項により当社が責任を負う場合であっても、当社が賠償する損害は、当社の債務不履行または不法行為により通常生じる直接かつ現実の損害に限られ、逸失利益・特別損害・間接損害・付随的損害・データの消失に関する損害は含まれないものとします。
+5. 当社が利用者に対して負う損害賠償責任の総額は、法令上許容される範囲において、損害の原因となった事象が生じた時点から遡って過去12か月間に利用者が当社に対して現実に支払った利用料の総額を上限とします。
+
+第10条（個人情報の取扱い）
+当社は、本サービスの利用により取得する個人情報を、別途定めるプライバシーポリシーに従って適切に取り扱います。
+
+第11条（規約の変更）
+当社は、必要と判断した場合、利用者への個別の通知を要することなく本規約を変更することができます。変更後の規約は、本ページに掲示した時点から効力を生じます。
+
+制定日：［YYYY年MM月DD日］
+TXT;
+
+        case 'legal_privacy':
+            return <<<'TXT'
+［事業者名］（以下「当社」といいます）は、イベント参加費の決済・受付サービス「決済くん」（以下「本サービス」）における個人情報を、個人情報の保護に関する法律その他の関係法令を遵守し、以下のとおり取り扱います。
+
+1. 取得する情報
+・主催者に関する情報：メールアドレス、表示名、ログイン情報（パスワードはハッシュ化して保管）、二段階認証設定、決済アカウントの接続情報。
+・参加者に関する情報：お名前、メールアドレス、電話番号、参加人数、および主催者が申込フォームで設定した項目（年齢・フリガナ・紹介者等）、備考。
+・決済に関する情報：クレジットカード番号・有効期限等の決済情報は、決済代行事業者である Stripe, Inc.（以下「Stripe」）が直接取得・保管します。当社および主催者は、カード番号等の決済情報を保持しません。
+・アクセスに関する情報：IPアドレス、ブラウザの種類、アクセス日時、操作ログ等（不正防止・安全管理のため）。
+
+2. 利用目的
+取得した情報は、次の目的の範囲で利用します。
+1. イベントの申込受付、参加者名簿の管理、参加者・主催者への連絡のため
+2. 参加費の決済、領収・返金その他の取引処理のため
+3. 本サービスの提供・維持・改善、および不正利用の防止のため
+4. 本サービスに関するお問い合わせ対応のため
+5. 法令に基づく対応のため
+
+3. 第三者提供・委託
+1. 当社は、法令に基づく場合を除き、あらかじめご本人の同意を得ることなく個人情報を第三者に提供しません。
+2. 決済処理のため、決済に必要な情報を決済代行事業者（Stripe）に提供・委託します。Stripe における個人情報の取扱いは、同社のプライバシーポリシーに従います。
+3. 参加者が申し込んだ情報（名簿）は、当該イベントの主催者に提供され、主催者の責任のもとで参加者管理の目的に利用されます。
+
+4. 安全管理措置および情報の保管場所
+当社は、個人情報の漏えい・滅失・毀損を防止するため、通信の暗号化（HTTPS）、保管情報の暗号化、アクセス制限、二段階認証等の適切な安全管理措置を講じます。
+参加者の申込情報（氏名・メールアドレス・電話番号・申込項目等）は、決済代行事業者（Stripe）のシステム上で管理され、当社のサーバーには保存しません。参加者名簿は、当社が都度 Stripe から取得して表示するものです。
+当社のサーバーが保持する情報は、主催者のアカウント情報・イベント情報、および決済連携に用いる認証情報（APIキー）に限られます。当該APIキーは、権限を限定した制限付きキーのみを利用し、暗号化して保管します。カード情報その他の決済情報、および全権限を持つ認証情報は一切保持しません。
+
+5. 保有期間
+個人情報は、利用目的の達成に必要な期間、および法令で保存が義務付けられる期間に限り保有し、不要となった情報は適切に消去します。
+
+6. 開示・訂正・利用停止等の請求
+ご本人からの求めに応じ、法令に従い、保有個人データの開示・訂正・追加・削除・利用停止等に対応します。お問い合わせ先：［連絡先メールアドレスを記載］
+
+7. Cookie 等の利用
+本サービスは、ログイン状態の維持等のために Cookie を使用します。Cookie の受け入れはブラウザの設定で拒否できますが、その場合本サービスの一部機能が利用できないことがあります。
+
+8. 改定
+本ポリシーは、必要に応じて改定し、変更後の内容を本ページに掲示します。掲示した時点から効力を生じます。
+
+制定日：［YYYY年MM月DD日］
+TXT;
+    }
+    return '';
+}
+
+/**
+ * price_tiers（JSON）を安全に配列へ復元する。
+ * 各区分は ['label'=>string, 'amount'=>int(事前), 'amount_onsite'=>int(当日)]。
+ * 旧形式（amount_onsite なし）は当日=事前として補完。不正・空なら空配列（＝単一料金の従来動作）。
+ */
+function decode_price_tiers(?string $json): array
+{
+    if ($json === null || trim($json) === '') {
+        return [];
+    }
+    $data = json_decode($json, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    $out = [];
+    foreach ($data as $t) {
+        if (!is_array($t)) {
+            continue;
+        }
+        $label = trim((string) ($t['label'] ?? ''));
+        if ($label === '') {
+            continue;
+        }
+        $prepay = max(0, (int) ($t['amount'] ?? 0));
+        $onsite = array_key_exists('amount_onsite', $t) ? max(0, (int) $t['amount_onsite']) : $prepay;
+        $out[] = ['label' => mb_substr($label, 0, 40), 'amount' => $prepay, 'amount_onsite' => $onsite];
+    }
+    return $out;
+}
+
+/** イベントに料金区分（男性/女性等）が設定されているか。 */
+function event_has_tiers(array $event): bool
+{
+    return !empty($event['tiers']);
+}
+
+/** 指定ラベルの区分（label/amount/amount_onsite）を返す。無ければ null。 */
+function event_tier(array $event, string $label): ?array
+{
+    foreach (($event['tiers'] ?? []) as $t) {
+        if ($t['label'] === $label) {
+            return $t;
+        }
+    }
+    return null;
+}
+
+/**
+ * 指定ラベル・支払い方法の金額を返す（サーバー側の定義から確定＝改ざん防止）。無ければ null。
+ */
+function event_tier_amount(array $event, string $label, string $paymentType = 'prepay'): ?int
+{
+    foreach (($event['tiers'] ?? []) as $t) {
+        if ($t['label'] === $label) {
+            return $paymentType === 'onsite' ? (int) $t['amount_onsite'] : (int) $t['amount'];
+        }
+    }
+    return null;
 }
 
 /**
@@ -214,14 +723,16 @@ function create_event(string $tenantId, array $d): string
 {
     $id = generate_event_id();
     $stmt = db()->prepare(
-        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, created_at)
-         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:ts)'
+        'INSERT INTO events (id, tenant_id, name, description, date, place, amount, amount_onsite, currency, capacity, allow_prepay, allow_onsite, price_tiers, custom_fields, created_at)
+         VALUES (:id,:tenant,:name,:desc,:date,:place,:amount,:onsite,:cur,:cap,:ap,:ao,:tiers,:cf,:ts)'
     );
     $stmt->execute([
         ':id' => $id, ':tenant' => $tenantId,
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
-        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0, ':ts' => time(),
+        ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
+        // 未設定は NULL ではなく空文字で保存（列が NOT NULL でも通す。読み取りでは [] 扱い）。
+        ':tiers' => $d['price_tiers'] ?? '', ':cf' => $d['custom_fields'] ?? '', ':ts' => time(),
     ]);
     return $id;
 }
@@ -234,13 +745,14 @@ function update_event(string $tenantId, string $id, array $d): bool
     $stmt = db()->prepare(
         'UPDATE events SET name=:name, description=:desc, date=:date, place=:place,
                 amount=:amount, amount_onsite=:onsite, currency=:cur, capacity=:cap,
-                allow_prepay=:ap, allow_onsite=:ao
+                allow_prepay=:ap, allow_onsite=:ao, price_tiers=:tiers, custom_fields=:cf
           WHERE id=:id AND tenant_id=:tenant'
     );
     $stmt->execute([
         ':name' => $d['name'], ':desc' => $d['description'], ':date' => $d['date'], ':place' => $d['place'],
         ':amount' => $d['amount'], ':onsite' => $d['amount_onsite'], ':cur' => $d['currency'], ':cap' => $d['capacity'],
         ':ap' => $d['allow_prepay'] ? 1 : 0, ':ao' => $d['allow_onsite'] ? 1 : 0,
+        ':tiers' => $d['price_tiers'] ?? '', ':cf' => $d['custom_fields'] ?? '',
         ':id' => $id, ':tenant' => $tenantId,
     ]);
     return $stmt->rowCount() > 0;
@@ -398,7 +910,28 @@ function event_headcount_cached(string $eventId, ?string $account, int $ttl = 60
  */
 function base_url(): string
 {
-    return rtrim(env('APP_BASE_URL', 'http://localhost:8000'), '/');
+    // 明示設定を優先（本番はこれを設定するのが推奨）。
+    // ただし localhost 系の値は本番では無効とみなし、リクエストから推定する
+    // （.env の既定 http://localhost:8000 が残っていて申込リンクや戻り先が localhost に
+    //   なるのを防ぐ）。
+    $configured = env('APP_BASE_URL');
+    if ($configured !== null && trim($configured) !== '') {
+        $c = rtrim(trim($configured), '/');
+        if (!preg_match('#^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$#i', $c)) {
+            return $c;
+        }
+    }
+    // 未設定時はリクエストから推定する。APP_BASE_URL の設定漏れで success/cancel が
+    // http://localhost に落ち、決済後に「接続拒否」になるのを防ぐ。
+    $https = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (($_SERVER['SERVER_PORT'] ?? '') === '443')
+        || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https');
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    // ヘッダ由来の host は許可文字のみ通す（不正な戻り先URL生成を防ぐ）。
+    if (!preg_match('/^[A-Za-z0-9.\-:]+$/', $host)) {
+        $host = 'localhost';
+    }
+    return ($https ? 'https' : 'http') . '://' . $host;
 }
 
 /**
@@ -830,18 +1363,76 @@ function stripe_opts(?string $account): array
  * @param string|null $account テナントの Stripe 接続アカウント（acct_...）。null なら自アカウント
  * @return array<int, array<string, mixed>>
  */
+/**
+ * Stripe metadata の cf0,cf1,... （"ラベル: 値" 形式）を「ラベル => 値」の連想配列で取り出す。
+ * 表示・CSV で項目ごとに列を分けられるようにする。
+ * 氏名相当（お名前列に採用済み）の最初の1項目は重複するため除外する。
+ * @return array<string,string>  ラベル => 値（cf の並び順を保持）
+ */
+function extract_custom_meta($meta): array
+{
+    $out = [];
+    $nameTaken = false; // 氏名相当の先頭1件は participant_name（お名前列）と重複するので落とす
+    if ($meta) {
+        for ($i = 0; $i < 20; $i++) {
+            $v = $meta['cf' . $i] ?? null;
+            if ($v === null || $v === '') {
+                continue;
+            }
+            $v = (string) $v;
+            // "ラベル: 値" を分解（区切りが無ければ全体を値として扱う）
+            $pos = mb_strpos($v, ': ');
+            if ($pos !== false) {
+                $label = mb_substr($v, 0, $pos);
+                $value = mb_substr($v, $pos + 2);
+            } else {
+                $label = '';
+                $value = $v;
+            }
+            if ($value === '') {
+                continue;
+            }
+            // お名前列に採用された氏名相当の最初の1件だけ除外（checkout の名前採用と同じ規則）。
+            if (!$nameTaken && $label !== '' && preg_match('/(名前|氏名|なまえ|name)/ui', $label)) {
+                $nameTaken = true;
+                continue;
+            }
+            $key = $label !== '' ? $label : ('項目' . ($i + 1));
+            $out[$key] = $value;
+        }
+    }
+    return $out;
+}
+
 function fetch_event_participants(string $eventId, ?string $account = null): array
 {
     init_stripe();
     $opts = stripe_opts($account);
 
     $participants = [];
+    $cancelFeePaid = []; // orig_customer => 最新のキャンセル料セッション created（支払い済み）
+    $cancelFeeAny  = []; // orig_customer => 最新のキャンセル料セッション created（発行済み・未払い含む）
     $params = [
         'limit' => 100,
-        'expand' => ['data.payment_intent.latest_charge', 'data.customer'],
+        // balance_transaction まで展開して Stripe 手数料（fee）・実受取額（net）を取得する。
+        'expand' => ['data.payment_intent.latest_charge.balance_transaction', 'data.customer'],
     ];
 
     foreach (\Stripe\Checkout\Session::all($params, $opts)->autoPagingIterator() as $session) {
+        if (($session->metadata['payment_type'] ?? '') === 'cancel_fee') {
+            // キャンセル料の支払いは名簿に載せないが、支払い状況は元の参加者に紐づけて記録する。
+            $oc = (string) ($session->metadata['orig_customer'] ?? '');
+            if ($oc !== '') {
+                $sc = (int) ($session->created ?? 0);
+                if (!isset($cancelFeeAny[$oc]) || $sc > $cancelFeeAny[$oc]) {
+                    $cancelFeeAny[$oc] = $sc;
+                }
+                if ($session->payment_status === 'paid' && (!isset($cancelFeePaid[$oc]) || $sc > $cancelFeePaid[$oc])) {
+                    $cancelFeePaid[$oc] = $sc;
+                }
+            }
+            continue;
+        }
         if (($session->metadata['event_id'] ?? null) !== $eventId) {
             continue;
         }
@@ -873,17 +1464,28 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
         $piId = is_object($pi) ? ($pi->id ?? '') : (string) $pi;
         $charge = is_object($pi) ? ($pi->latest_charge ?? null) : null;
 
+        $amountTotal = (int) ($session->amount_total ?? 0);
         $amountRefunded = 0;
-        $fullyRefunded = false;
+        $stripeFee = 0;
         if (is_object($charge)) {
             $amountRefunded = (int) ($charge->amount_refunded ?? 0);
-            $fullyRefunded = (bool) ($charge->refunded ?? false);
+            $bt = $charge->balance_transaction ?? null;
+            $stripeFee = is_object($bt) ? (int) ($bt->fee ?? 0) : 0;
+        }
+        // 主催者の実受取額（手数料控除後）。全額返金はこの額を上限に返金し、主催者が手数料を負担しないようにする。
+        $netAmount = max(0, $amountTotal - $stripeFee);
+        // 「実質キャンセル」＝実受取額をすべて返金済み（Stripe の refunded フラグ、または実受取額に達する返金）。
+        $fullyRefunded = false;
+        if (is_object($charge)) {
+            $fullyRefunded = (bool) ($charge->refunded ?? false)
+                || ($netAmount > 0 && $amountRefunded >= $netAmount);
         }
 
         // 出席チェックは顧客の metadata.attended に保存する（事前・当日で共通）
         $customerObj = is_object($session->customer) ? $session->customer : null;
         $customerId = $customerObj ? ($customerObj->id ?? '') : (string) $session->customer;
         $attended = $customerObj ? (($customerObj->metadata['attended'] ?? '') === '1') : false;
+        $cancelReq = $customerObj ? (($customerObj->metadata['cancel_requested'] ?? '') === '1') : false;
 
         $participants[] = [
             'payment_type'    => 'prepay',   // 事前決済
@@ -894,13 +1496,19 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'email'           => $session->customer_details->email ?? '',
             'phone'           => $phone,
             'party_size'      => $partySize,
+            'category'        => (string) ($meta['participant_category'] ?? ''),
+            'custom'          => extract_custom_meta($meta),
             'note'            => $note,
-            'amount'          => (int) ($session->amount_total ?? 0),
+            'amount'          => $amountTotal,
+            'fee'             => $stripeFee,   // Stripe 手数料
+            'net'             => $netAmount,   // 主催者の実受取額（＝amount − fee）
             'currency'        => (string) ($session->currency ?? 'jpy'),
             'amount_refunded' => $amountRefunded,
             'fully_refunded'  => $fullyRefunded,
             'collected'       => false, // 事前決済では使わない（当日支払い用）
             'attended'        => $attended,
+            'cancel_requested' => $cancelReq,
+            'cancelled'       => false, // 事前決済のキャンセルは返金で表す（当日払い用フラグ）
             'created'         => (int) ($session->created ?? 0),
         ];
     }
@@ -925,18 +1533,91 @@ function fetch_event_participants(string $eventId, ?string $account = null): arr
             'email'           => $customer->email ?? '',
             'phone'           => $meta['phone'] ?? ($customer->phone ?? ''),
             'party_size'      => max(1, (int) ($meta['party_size'] ?? 1)),
+            'category'        => (string) ($meta['participant_category'] ?? ''),
+            'custom'          => extract_custom_meta($meta),
             'note'            => $meta['note'] ?? '',
             'amount'          => (int) ($meta['onsite_total'] ?? 0),
+            'fee'             => 0, // 当日払いは未課金のため手数料なし
+            'net'             => (int) ($meta['onsite_total'] ?? 0),
             'currency'        => (string) ($meta['currency'] ?? 'jpy'),
             'amount_refunded' => 0,
             'fully_refunded'  => false,
             'collected'       => (($meta['collected'] ?? '') === '1'), // 当日分の受領（集金）済みか
             'attended'        => (($meta['attended'] ?? '') === '1'),  // 出席確認済みか
+            'cancel_requested' => (($meta['cancel_requested'] ?? '') === '1'), // 参加者からのキャンセル希望
+            'cancelled'       => (($meta['cancelled'] ?? '') === '1'),  // 主催者がキャンセル確定（名簿には残す）
+            'reactivated_at'  => (int) ($meta['reactivated_at'] ?? 0),  // 再申込時刻（これ以前のキャンセル料履歴は無効化）
             'created'         => (int) ($customer->created ?? 0),
         ];
     }
 
     // 申込日時の新しい順
+    // 重複排除: 同じイベントで「当日払い(未課金)」→ 後から「事前決済(支払い済み)」に切り替えた場合、
+    // 同一メールなら事前決済を正として当日払いの行を落とす（名簿・定員の二重計上を防ぐ）。
+    $paidEmails = [];
+    foreach ($participants as $p) {
+        if (($p['payment_type'] ?? '') === 'prepay') {
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            if ($em !== '') {
+                $paidEmails[$em] = true;
+            }
+        }
+    }
+    if ($paidEmails !== []) {
+        $participants = array_values(array_filter($participants, static function ($p) use ($paidEmails) {
+            if (($p['payment_type'] ?? '') !== 'onsite') {
+                return true;
+            }
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            return $em === '' || !isset($paidEmails[$em]); // 事前決済済みの同一メールの当日払いは非表示
+        }));
+    }
+
+    // 重複排除(当日払い同士): 万一同一メールの当日払いが複数記録されていても、
+    // 名簿・定員では最新の1件だけを残す（申込側でも既存更新にしているが、過去データの保険）。
+    $bestOnsite = [];   // email => 採用中の当日払い行の created
+    foreach ($participants as $p) {
+        if (($p['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        $em = strtolower(trim((string) ($p['email'] ?? '')));
+        if ($em === '') {
+            continue;
+        }
+        $c = (int) ($p['created'] ?? 0);
+        if (!isset($bestOnsite[$em]) || $c > $bestOnsite[$em]) {
+            $bestOnsite[$em] = $c;
+        }
+    }
+    if ($bestOnsite !== []) {
+        $keptOnsite = [];   // email => 既に1件残したか
+        $participants = array_values(array_filter($participants, static function ($p) use ($bestOnsite, &$keptOnsite) {
+            if (($p['payment_type'] ?? '') !== 'onsite') {
+                return true;
+            }
+            $em = strtolower(trim((string) ($p['email'] ?? '')));
+            if ($em === '') {
+                return true;
+            }
+            // 最新 created の1件だけ残す（同着は最初の1件）。
+            if ((int) ($p['created'] ?? 0) === $bestOnsite[$em] && !isset($keptOnsite[$em])) {
+                $keptOnsite[$em] = true;
+                return true;
+            }
+            return false;
+        }));
+    }
+
+    // キャンセル料の支払い状況を各参加者へ付与（当日払いの状態表示に使用）。
+    // 再申込した場合（reactivated_at）は、それ以前のキャンセル料履歴は無効化して「参加に戻す」。
+    foreach ($participants as &$pp) {
+        $cid = (string) ($pp['customer_id'] ?? '');
+        $reAt = (int) ($pp['reactivated_at'] ?? 0);
+        $pp['fee_paid']      = $cid !== '' && isset($cancelFeePaid[$cid]) && $cancelFeePaid[$cid] > $reAt;
+        $pp['fee_link_sent'] = $cid !== '' && isset($cancelFeeAny[$cid]) && $cancelFeeAny[$cid] > $reAt;
+    }
+    unset($pp);
+
     usort($participants, static fn ($a, $b) => $b['created'] <=> $a['created']);
 
     return $participants;
@@ -958,6 +1639,69 @@ function find_event_participant_by_customer(string $eventId, ?string $account, s
         if (($p['customer_id'] ?? '') === $customerId) {
             return $p;
         }
+    }
+    return null;
+}
+
+/**
+ * 事前決済に切り替えた参加者の「以前の当日払い申込(未課金Customer)」を削除して掃除する。
+ * 同一イベント・同一メールの payment_type=onsite の顧客を対象。削除件数を返す。
+ * 名簿の重複表示は fetch 側でも排除しているが、これで Stripe 上の残骸も消す。
+ */
+function delete_onsite_customer_by_email(string $eventId, ?string $account, string $email): int
+{
+    $email = strtolower(trim($email));
+    if ($eventId === '' || $email === '') {
+        return 0;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    $deleted = 0;
+    foreach (\Stripe\Customer::all(['limit' => 100], $opts)->autoPagingIterator() as $customer) {
+        $meta = $customer->metadata ?? null;
+        if (($meta['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if (($meta['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        if (strtolower(trim((string) ($customer->email ?? ''))) !== $email) {
+            continue;
+        }
+        try {
+            \Stripe\Customer::delete($customer->id, [], $opts);
+            $deleted++;
+        } catch (\Throwable $e) {
+            error_log('当日払い顧客の削除失敗: ' . $e->getMessage());
+        }
+    }
+    return $deleted;
+}
+
+/**
+ * 同一イベント・同一メールの「当日払い申込(未課金Customer)」が既にあれば、その Customer ID を返す。
+ * 無ければ null。当日払いの二重申込を防ぐため、checkout 側で「既存があれば更新・無ければ新規作成」に使う。
+ */
+function find_onsite_customer_id_by_email(string $eventId, ?string $account, string $email): ?string
+{
+    $email = strtolower(trim($email));
+    if ($eventId === '' || $email === '') {
+        return null;
+    }
+    init_stripe();
+    $opts = stripe_opts($account);
+    foreach (\Stripe\Customer::all(['limit' => 100], $opts)->autoPagingIterator() as $customer) {
+        $meta = $customer->metadata ?? null;
+        if (($meta['event_id'] ?? null) !== $eventId) {
+            continue;
+        }
+        if (($meta['payment_type'] ?? '') !== 'onsite') {
+            continue;
+        }
+        if (strtolower(trim((string) ($customer->email ?? ''))) !== $email) {
+            continue;
+        }
+        return (string) $customer->id;
     }
     return null;
 }

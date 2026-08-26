@@ -10,7 +10,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-$tenant = require_tenant();
+$tenant = require_owner_tenant();
 $msg = '';
 $msgType = 'ok';
 
@@ -45,23 +45,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 手動登録は無効化し、ダッシュボードの「Stripe を接続」（OAuth）へ誘導する。
         $msg = 'この環境は Stripe 接続（Connect）必須モードです。秘密鍵の手動登録はできません。ダッシュボードの「Stripe を接続する」から連携してください（サーバーは秘密鍵を保存しません）。';
         $msgType = 'ng';
+    } elseif ($action === 'save' && trim((string) ($_POST['stripe_key'] ?? '')) !== '' && !request_is_https()) {
+        // 平文送信防止: 鍵の登録は HTTPS でのみ受け付ける。
+        $msg = 'セキュリティのため、APIキーの登録は HTTPS 接続でのみ行えます。https:// のURLで開き直してください（SSL が有効か管理者にご確認ください）。';
+        $msgType = 'ng';
     } elseif ($action === 'save') {
         $key = trim((string) ($_POST['stripe_key'] ?? ''));
         if ($key === '') {
             // 空で保存＝削除
             set_tenant_stripe_key($tenant['id'], null);
             audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
+            notify_security_event($tenant, 'Stripe APIキーの削除');
             $msg = 'Stripe 鍵を削除しました。';
             $tenant = find_tenant_by_id($tenant['id']);
         } elseif (!preg_match('/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/', $key)) {
             $msg = '鍵の形式が正しくありません（sk_… または rk_… で始まる文字列）。';
+            $msgType = 'ng';
+        } elseif (file_web_downloadable(tenant_key_path($tenant['id'])) === true) {
+            // 鍵の保存先が Web から直接DL可能なら、保存せず中止（公開領域に鍵を置かせない）。
+            $msg = '鍵の保存先が Web から直接ダウンロードできる状態のため、安全のため保存を中止しました。'
+                . '.env の STRIPE_KEY_DIR を公開フォルダの外（例: /home/アカウント/private）に設定してください。';
             $msgType = 'ng';
         } else {
             // 形式OKなら保存。接続テストは結果通知のみ（失敗してもネットワーク要因がありうるため保存は維持）。
             try {
                 set_tenant_stripe_key($tenant['id'], $key);
                 [$okTest, $detail] = stripe_test_key($key);
-                audit_log('stripe.key.save', ['tenant' => $tenant['id'], 'mode' => str_contains($key, '_live_') ? 'live' : 'test', 'verify' => $okTest ? 'ok' : 'ng']);
+                audit_log('stripe.key.save', [
+                    'tenant' => $tenant['id'],
+                    'mode' => str_contains($key, '_live_') ? 'live' : 'test',
+                    'type' => str_starts_with($key, 'rk_') ? 'restricted' : 'full',
+                    'fp' => substr($key, -4), // 末尾4桁（Stripeの鍵一覧と突合するための識別。秘密ではない）
+                    'verify' => $okTest ? 'ok' : 'ng',
+                ]);
+                notify_security_event($tenant, 'Stripe APIキーの登録／変更');
                 $msg = 'Stripe 鍵を保存しました。' . $detail;
                 $msgType = $okTest ? 'ok' : 'ng';
                 $tenant = find_tenant_by_id($tenant['id']);
@@ -84,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'clear') {
         set_tenant_stripe_key($tenant['id'], null);
         audit_log('stripe.key.clear', ['tenant' => $tenant['id']]);
+        notify_security_event($tenant, 'Stripe APIキーの削除');
         $msg = '保存した鍵を削除しました。';
         $tenant = find_tenant_by_id($tenant['id']);
     }
@@ -93,14 +111,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $hasKey = tenant_has_stripe_key($tenant);
 $masked = '';
 $modeLabel = '';
+$typeLabel = '';
+$isLive = false;
+$isFull = false;
+$registeredAt = null;
+$advisories = []; // 万一の漏えいに備えた注意（被害を小さく・追跡しやすくするため）
 if ($hasKey) {
     $plain = (string) get_tenant_stripe_key($tenant);
     if ($plain !== '') {
         $masked = (strlen($plain) > 12 ? substr($plain, 0, 8) . '••••••••' . substr($plain, -4) : '（登録済み）');
-        $modeLabel = str_contains($plain, '_live_') ? '本番キー（live）' : (str_contains($plain, '_test_') ? 'テストキー（test）' : '');
+        $isLive = str_contains($plain, '_live_');
+        $isFull = str_starts_with($plain, 'sk_');
+        $modeLabel = $isLive ? '本番キー（live）' : (str_contains($plain, '_test_') ? 'テストキー（test）' : '不明');
+        $typeLabel = str_starts_with($plain, 'rk_') ? '制限付きキー（rk・推奨）' : 'フルアクセスキー（sk）';
+        $mtime = @filemtime(tenant_key_path($tenant['id']));
+        $registeredAt = $mtime !== false ? $mtime : null;
+        if ($isFull && $isLive) {
+            $advisories[] = '本番の「フルアクセスキー（sk_live）」が登録されています。より安全に運用するため、権限を絞った「制限付きキー（rk_live）」への差し替えをおすすめします。';
+        } elseif ($isFull) {
+            $advisories[] = 'フルアクセスキー（sk）です。本番運用では権限を絞った「制限付きキー（rk）」をおすすめします。';
+        }
     } else {
         $masked = '（登録済み・復号不可：APP_KEY を確認）';
     }
+}
+if ($hasKey && app_key_on_disk()) {
+    $advisories[] = '暗号化キー（APP_KEY）が .env に保存されています。より安全にするには、APP_KEY を .env ではなくサーバーの「実環境変数」に設定してください（鍵ファイルと .env を同時に盗まれても復号されなくなります）。';
 }
 
 $token = csrf_token();
@@ -108,96 +144,199 @@ $pageTitle = 'Stripe 設定';
 $pageSub = 'クレジットカード決済（事前決済）に使う鍵を設定します';
 require __DIR__ . '/_app_header.php';
 ?>
+<style nonce="<?= e(csp_nonce()) ?>">
+    .info-i { display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px;
+              border-radius:50%; border:1px solid var(--border); background:#fff; color:var(--muted);
+              font-size:.72rem; font-weight:800; font-style:italic; cursor:pointer; vertical-align:middle;
+              margin-left:6px; line-height:1; padding:0; }
+    .info-i:hover { border-color:var(--accent); color:var(--accent); }
+    .keyinfo h4 { margin:18px 0 6px; font-size:1rem; }
+    .keyinfo h4:first-of-type { margin-top:4px; }
+    .btnrow { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+
 <?php if ($msg !== ''): ?>
     <div class="flash <?= $msgType === 'ok' ? 'flash--ok' : 'flash--ng' ?>"><?= e($msg) ?></div>
 <?php endif; ?>
 
 <div class="card">
-    <div class="card__title">APIキーの取得・登録</div>
-    <p><button type="button" class="btn btn--ghost" data-modal-open="prepayInfo">事前決済について</button></p>
-    <p>Stripe にログイン →「開発者」→「APIキー」を開く（下のボタン）。</p>
-    <ul class="muted" style="line-height:1.9;">
-        <li>まずは標準のシークレットキー（<code>sk_test_…</code>）を使うのが簡単です。本番は <code>sk_live_…</code> に差し替え。</li>
-        <li><strong>制限付きキー（Restricted key）</strong>を使う場合は、次の権限だけを設定してください：
-            <ul>
-                <li><strong>Core</strong>: Charges and Refunds … 書き込み ／ Customers … 書き込み ／ Payment Intents … 読み取り</li>
-                <li><strong>Accounts</strong>: Accounts（Basic Business Contact Information）… 読み取り</li>
-                <li><strong>Checkout Sessions</strong>: Checkout Sessions … 書き込み</li>
-            </ul>
-            上記以外はすべて「なし」でOK。
-        </li>
-    </ul>
-    <p>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">テスト用APIキーを開く</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">本番用APIキーを開く</a>
-        <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキー（rk_）の作り方</button>
-    </p>
+    <div class="card__title">Stripe APIキー<button type="button" class="info-i" data-modal-open="keyInfo" aria-label="制限付きキーについて" title="制限付きキーについて詳しく">i</button></div>
 
-    <form method="post" style="margin-top:18px;">
-        <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-        <input type="hidden" name="action" value="save">
-        <label>Stripe 秘密鍵（<code>sk_…</code> または 制限付き <code>rk_…</code>）</label>
-        <input type="password" name="stripe_key" autocomplete="off" placeholder="sk_test_xxxxx">
-        <p class="hint">※ 入力した鍵は安全に保管され、画面には再表示されません。空のまま保存すると登録を解除します。</p>
-        <p style="margin-top:14px;">
-            <button type="submit" class="btn">保存する</button>
+    <?php if ($hasKey): ?>
+        <p style="margin:0 0 8px;">
+            ✅ 設定済み：<code><?= e($masked) ?></code>
+            <span class="badge <?= $isFull ? 'badge--warn' : 'badge--ok' ?>" style="margin-left:6px;"><?= e($typeLabel) ?></span>
+            <span class="badge"><?= e($modeLabel) ?><?= $isLive ? '・実課金' : '' ?></span>
         </p>
-    </form>
-    <?php if ($hasKey): ?>
-        <form method="post" style="display:inline-block; margin-right:8px;">
+        <?php if ($registeredAt !== null): ?>
+            <p class="muted" style="margin:0 0 10px; font-size:.85rem;">登録日時：<?= e(date('Y-m-d H:i', $registeredAt)) ?></p>
+        <?php endif; ?>
+        <?php foreach ($advisories as $a): ?>
+            <div class="flash flash--ng" style="margin:8px 0;">⚠️ <?= e($a) ?> <button type="button" class="info-i" data-modal-open="keyInfo" title="詳しく">i</button></div>
+        <?php endforeach; ?>
+        <label style="margin-top:4px;">キーを変更／再登録（<code>rk_…</code> 推奨）</label>
+        <form id="stripeSave" method="post" style="margin:0 0 10px;">
             <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-            <input type="hidden" name="action" value="test">
-            <button type="submit" class="btn btn--ghost">接続確認</button>
+            <input type="hidden" name="action" value="save">
+            <input type="password" name="stripe_key" autocomplete="off" placeholder="rk_test_xxxxx（変更するときだけ入力）">
         </form>
-    <?php endif; ?>
-</div>
-
-<div class="card">
-    <div class="card__title">対応するお支払い方法（PayPay・コンビニ 等）</div>
-    <p class="muted">決済画面（Stripe Checkout）には、Stripe 側で有効にしたお支払い方法が自動で表示されます（このアプリ側の追加設定・コード変更は不要です）。</p>
-    <ul class="muted" style="line-height:1.9;">
-        <li>クレジットカード／Apple Pay／Google Pay：対応端末・ブラウザなら自動表示（基本的に追加設定は不要）。</li>
-        <li>PayPay／コンビニ払い／銀行振込など：使うには Stripe ダッシュボードでの<strong>有効化</strong>が必要です（未有効だと決済画面に出ません）。</li>
-    </ul>
-    <p>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">支払い方法（テスト）を開く</a>
-        <a class="btn btn--ghost" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">支払い方法（本番）を開く</a>
-        <button type="button" class="btn btn--ghost" data-modal-open="paypayGuide">PayPay 等を有効にする手順（詳細）</button>
-    </p>
-    <p class="hint">※ PayPay はテストモードでも有効化でき、テスト決済を試せます。利用可否は Stripe 側の対応条件（国・通貨・審査状況）により異なります。</p>
-</div>
-
-<div class="card">
-    <div class="card__title">テスト用カード番号（テストモード時）</div>
-    <p class="muted">テストキー（<code>sk_test_…</code>／<code>rk_test_…</code>）のときは、次の番号で動作確認できます。実際の請求は発生しません。</p>
-    <ul class="muted" style="line-height:1.9;">
-        <li>成功（Visa）：<code>4242 4242 4242 4242</code></li>
-        <li>成功（Mastercard）：<code>5555 5555 5555 4444</code> ／（JCB）<code>3530 1113 3330 0000</code> ／（Amex）<code>3782 822463 10005</code></li>
-        <li>有効期限：未来の日付なら何でも（例 12/34）／ CVC：任意の3桁（Amexは4桁）／ 郵便番号：任意</li>
-        <li>失敗をテスト：<code>4000 0000 0000 0002</code>（拒否）／ <code>4000 0000 0000 9995</code>（残高不足）</li>
-    </ul>
-    <p class="hint">※ 本番（live）モードではテストカードは使えません。詳細：
-        <a href="https://stripe.com/docs/testing" target="_blank" rel="noopener">Stripe のテスト情報</a></p>
-</div>
-
-<div class="card">
-    <div class="card__title">現在の状態</div>
-    <?php if ($hasKey): ?>
-        <p>✅ 設定済み：<code><?= e($masked) ?></code><?= $modeLabel !== '' ? '　' . e($modeLabel) : '' ?></p>
-        <form method="post" style="display:inline-block; margin-right:8px;">
-            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-            <input type="hidden" name="action" value="test">
-            <button type="submit" class="btn btn--ghost">接続テスト</button>
-        </form>
-        <form method="post" style="display:inline-block;" data-confirm="保存した鍵を削除します。よろしいですか？（削除後は事前決済を受け付けられません）">
-            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
-            <input type="hidden" name="action" value="clear">
-            <button type="submit" class="btn btn--danger">鍵の削除</button>
-        </form>
+        <div class="btnrow">
+            <button type="submit" form="stripeSave" class="btn">保存する</button>
+            <form method="post" style="margin:0;">
+                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                <input type="hidden" name="action" value="test">
+                <button type="submit" class="btn btn--ghost">接続確認</button>
+            </form>
+            <form method="post" style="margin:0;" data-confirm="保存した鍵を削除します。よろしいですか？（削除後は事前決済を受け付けられません）">
+                <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+                <input type="hidden" name="action" value="clear">
+                <button type="submit" class="btn btn--danger">鍵を削除</button>
+            </form>
+        </div>
+        <p class="hint">キー欄を空のまま保存すると登録を解除します。</p>
     <?php else: ?>
-        <p class="muted">まだ登録されていません。</p>
+        <p style="margin-top:0;">推奨は<strong>制限付きキー（<code>rk_</code>）</strong>です。必要な権限だけに絞れて安心です。<button type="button" class="info-i" data-modal-open="keyInfo" title="制限付きキーについて詳しく">i</button></p>
+        <form method="post" style="margin-top:6px;">
+            <input type="hidden" name="csrf_token" value="<?= e($token) ?>">
+            <input type="hidden" name="action" value="save">
+            <label>Stripe キー（<code>rk_…</code> 推奨 ／ <code>sk_…</code> も可）</label>
+            <input type="password" name="stripe_key" autocomplete="off" placeholder="rk_test_xxxxx（推奨）">
+            <p class="hint">入力した鍵は安全に保管され、画面には再表示されません。</p>
+            <p style="margin-top:12px;"><button type="submit" class="btn">保存する</button></p>
+        </form>
     <?php endif; ?>
+
+    <p class="btnrow" style="margin-top:14px;">
+        <button type="button" class="btn btn--ghost" data-modal-open="keyInfo">制限付きキーについて</button>
+        <button type="button" class="btn btn--ghost" data-modal-open="keyKinds">キーの見分け方</button>
+        <button type="button" class="btn btn--ghost" data-modal-open="rkGuide">制限付きキーの作り方</button>
+    </p>
 </div>
+
+<div class="card">
+    <div class="card__title">その他の設定・確認</div>
+    <p class="muted" style="margin-top:0;">決済画面には、Stripe 側で有効化した支払い方法（カード・Apple/Google Pay・PayPay 等）が自動表示されます。アプリ側の追加設定は不要です。</p>
+    <p class="btnrow">
+        <button type="button" class="btn btn--ghost" data-modal-open="paypayGuide">支払い方法を追加する（PayPay等の手順）</button>
+        <button type="button" class="btn btn--ghost" data-modal-open="testCards">テスト用カード番号</button>
+    </p>
+</div>
+
+<!-- ⓘ 制限付きキーについて（メリット・できること・漏えい時の対応） -->
+<div class="modal" id="keyInfo" role="dialog" aria-modal="true">
+    <div class="modal__box keyinfo">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">制限付きキー（rk_）について</div>
+        <p class="modal__lead">決済を安全に使うための鍵の選び方と、万一のときの備え・対処をまとめました。</p>
+
+        <h4>制限付きキーにするメリット</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li>権限を「必要な操作だけ」に絞れます。<strong>送金（Payouts）や入金先口座の変更は権限に含めない</strong>ため、資金を動かす操作はできません。</li>
+            <li>万一キーが第三者に渡っても、<strong>できることが付与した範囲に限定</strong>されます（被害を小さく保てます）。</li>
+            <li>作成・差し替えはいつでも簡単。テスト環境でもそのまま作れます。</li>
+        </ul>
+
+        <h4>このアプリで制限付きキーができること（付与する権限）</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li>Charges and Refunds … 書込（決済・返金）</li>
+            <li>Customers … 書込（参加者の記録）</li>
+            <li>Payment Intents … 読取（入金状況の確認）</li>
+            <li>Accounts … 読取（接続確認）</li>
+            <li>Checkout Sessions … 書込（決済画面の作成）</li>
+        </ul>
+        <p class="muted">＝「参加者名簿の取得・決済の受付・返金」に必要な最小限だけ。これ以外は「なし」で大丈夫です。</p>
+
+        <h4>緊急時の対応（キーが漏れたかも、と思ったら）</h4>
+        <p>APIキーは<strong>パスワードと同じ秘密情報</strong>です。メール・チャット・スクリーンショット・プログラムのコード・共有フォルダなどに貼らないでください。</p>
+        <p>もし<strong>どこかに漏れた／自分で誤って載せた・共有したかも</strong>と思ったら、少しでも不安があれば、まず <strong>Stripe 側で古いキーを失効（Roll）・削除</strong>してください。<strong>新しいキーをこのアプリに登録するだけでは、古いキーは無効になりません</strong>（アプリが使うキーが変わるだけで、漏れた古いキーは Stripe 上で有効なまま＝API 経由で悪用され得ます）。<strong>Stripe で失効・削除して初めて、その漏れたキーは使えなくなります。</strong></p>
+        <ol class="muted" style="line-height:1.9;">
+            <li><strong>【最優先】</strong>Stripe ダッシュボード →「開発者」→「APIキー」で、該当キー（末尾4桁で照合）を<strong>失効（Roll）または削除</strong>。これで漏れたキーが無効化されます。</li>
+            <li>新しいキーを作成し、<strong>この画面で再登録</strong>（アプリが新しいキーで動くようにする）。</li>
+            <li>身に覚えのない<strong>返金・顧客作成などがないか</strong>、Stripe の取引履歴と監査ログ（<code>logs/audit.log</code>）を確認。心当たりがあれば Stripe サポートへ相談。</li>
+        </ol>
+        <p class="muted">※ 制限付きキー（rk_）なら、送金・入金先変更の権限を含まないため、万一漏れても売上金を別口座へ移されることはありません。カード番号そのものは Stripe が保持し、鍵の所有者も閲覧できません。</p>
+
+        <div class="modal__actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- キーの見分け方（rk/sk・test/live） -->
+<div class="modal" id="keyKinds" role="dialog" aria-modal="true">
+    <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">キーの見分け方（rk / sk・test / live）</div>
+        <p class="modal__lead">Stripe のキーは先頭の文字で種類がわかります。形は <code>種別_モード_……</code> です。</p>
+
+        <h4 style="margin:4px 0 6px;">① 最初の2文字＝権限の種別</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li><code>rk_</code> … <strong>制限付きキー</strong>（Restricted・権限を絞れる／<strong style="color:#16a34a">推奨</strong>）</li>
+            <li><code>sk_</code> … <strong>フルアクセスキー</strong>（Secret・全権限）</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px;">② 次の語＝モード</h4>
+        <ul class="muted" style="line-height:1.9;">
+            <li><code>_test_</code> … <strong>テスト</strong>（本物の課金は発生しない・練習用）</li>
+            <li><code>_live_</code> … <strong>本番</strong>（実際に課金される）</li>
+        </ul>
+
+        <h4 style="margin:14px 0 6px;">組み合わせ（4種類）</h4>
+        <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:.88rem;">
+                <tr>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">先頭</th>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">意味</th>
+                    <th style="text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);">用途</th>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>rk_test_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">制限付き × テスト</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">練習・動作確認に最適</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>rk_live_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">制限付き × 本番</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><strong style="color:#16a34a">本番運用のおすすめ ✅</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);"><code>sk_test_…</code></td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">フルアクセス × テスト</td>
+                    <td style="padding:8px 10px; border-bottom:1px solid var(--border);">動くが権限が広め</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px 10px;"><code>sk_live_…</code></td>
+                    <td style="padding:8px 10px;">フルアクセス × 本番</td>
+                    <td style="padding:8px 10px;">最も取り扱い注意</td>
+                </tr>
+            </table>
+        </div>
+        <p class="muted" style="margin-top:12px;">※ 迷ったら、本番は <code>rk_live_…</code> が安全です。<br>※ <code>pk_</code>（公開可能キー）はこのアプリでは使いません。</p>
+
+        <div class="modal__actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
+</div>
+
+<!-- テスト用カード番号 -->
+<div class="modal" id="testCards" role="dialog" aria-modal="true">
+    <div class="modal__box">
+        <button type="button" class="modal__close" data-modal-close aria-label="閉じる">×</button>
+        <div class="modal__title">テスト用カード番号</div>
+        <p class="modal__lead">テストキー（<code>_test_</code>）のときは、次の番号で動作確認できます。実際の請求は発生しません。</p>
+        <ul class="muted" style="line-height:1.9;">
+            <li>成功（Visa）：<code>4242 4242 4242 4242</code> ／（Mastercard）<code>5555 5555 5555 4444</code> ／（JCB）<code>3530 1113 3330 0000</code> ／（Amex）<code>3782 822463 10005</code></li>
+            <li>有効期限：未来の日付（例 12/34）／ CVC：任意の3桁（Amexは4桁）／ 郵便番号：任意</li>
+            <li>失敗をテスト：<code>4000 0000 0000 0002</code>（拒否）／ <code>4000 0000 0000 9995</code>（残高不足）</li>
+        </ul>
+        <p class="hint">※ 本番（live）モードではテストカードは使えません。<a href="https://stripe.com/docs/testing" target="_blank" rel="noopener">Stripe のテスト情報</a></p>
+        <div class="modal__actions">
+            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        </div>
+    </div>
+</div>
+
 <!-- 制限付きキー（rk_）の作り方モーダル -->
 <div class="modal" id="rkGuide" role="dialog" aria-modal="true">
     <div class="modal__box">
@@ -265,8 +404,10 @@ require __DIR__ . '/_app_header.php';
             </div>
         </div>
 
+        <p class="muted" style="margin-top:6px;">下のボタンから Stripe の APIキー画面を別タブで開けます（作成は<strong>テスト</strong>環境から試すのがおすすめ。本番は <code>rk_live_…</code>）。</p>
         <div class="modal__actions">
-            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">APIキー画面を開く（テスト）</a>
+            <a class="btn" href="https://dashboard.stripe.com/test/apikeys" target="_blank" rel="noopener">Stripeでテスト用APIキーを開く ↗</a>
+            <a class="btn" href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripeで本番用APIキーを開く ↗</a>
             <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
         </div>
     </div>
@@ -285,7 +426,7 @@ require __DIR__ . '/_app_header.php';
                 <div class="gt">「決済手段」設定を開く</div>
                 <p>右上 ⚙設定 →「サービス・プロダクト設定」の <strong>Payments</strong>（決済・チェックアウト・決済手段） →「決済手段」。</p>
                 <p class="muted">⚙ 設定 › Payments › 決済手段</p>
-                <p class="muted">※ 下の「支払い方法（テスト）を開く」ボタンからも直接開けます。</p>
+                <p class="muted">※ 下の「Stripeで支払い方法を開く（テスト／本番）」ボタンからも直接開けます。</p>
             </div>
         </div>
         <div class="guide__row">
@@ -323,9 +464,12 @@ require __DIR__ . '/_app_header.php';
             </div>
         </div>
 
-        <div class="modal__actions">
-            <a class="btn" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">決済手段（テスト）を開く</a>
-            <button type="button" class="btn btn--ghost" data-modal-close>閉じる</button>
+        <div class="modal__actions" style="flex-direction:column; align-items:stretch; gap:10px;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <a class="btn" style="flex:1 1 180px; text-align:center; white-space:nowrap;" href="https://dashboard.stripe.com/test/settings/payment_methods" target="_blank" rel="noopener">Stripeで開く（テスト）↗</a>
+                <a class="btn" style="flex:1 1 180px; text-align:center; white-space:nowrap;" href="https://dashboard.stripe.com/settings/payment_methods" target="_blank" rel="noopener">Stripeで開く（本番）↗</a>
+            </div>
+            <button type="button" class="btn btn--ghost" data-modal-close style="align-self:flex-start;">閉じる</button>
         </div>
     </div>
 </div>

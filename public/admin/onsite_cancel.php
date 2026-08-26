@@ -1,15 +1,16 @@
 <?php
 
 /**
- * 当日支払い申込の取消。管理画面からの POST のみを受ける。
- * 当日申込は課金なしの Stripe 顧客として記録しているため、その顧客を削除する。
+ * 当日支払い申込のキャンセル状態を切り替える。管理画面からの POST のみを受ける。
+ * 名簿からは削除せず、Stripe 顧客の metadata.cancelled を 1/0 で切り替える
+ * （cancel=1: キャンセル確定 / cancel=0: キャンセルを戻す）。履歴を残すための方針。
  */
 
 declare(strict_types=1);
 
 require dirname(__DIR__, 2) . '/src/bootstrap.php';
 
-$tenant = require_tenant();
+$tenant = require_owner_tenant();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -20,6 +21,7 @@ csrf_verify($_POST['csrf_token'] ?? null);
 
 $eventId = (string) ($_POST['event_id'] ?? '');
 $customerId = (string) ($_POST['customer_id'] ?? '');
+$makeCancel = (string) ($_POST['cancel'] ?? '1') !== '0'; // 既定はキャンセル確定。cancel=0 で復帰。
 
 function back_to_admin(string $eventId, string $msg, string $type): never
 {
@@ -48,9 +50,14 @@ init_stripe();
 $opts = stripe_opts($account);
 
 try {
-    \Stripe\Customer::retrieve($customerId, $opts)->delete([], $opts);
-    back_to_admin($eventId, '当日支払いの申込を取り消しました。', 'ok');
+    \Stripe\Customer::update(
+        $customerId,
+        ['metadata' => ['cancelled' => $makeCancel ? '1' : '', 'cancelled_at' => $makeCancel ? (string) time() : '']],
+        $opts
+    );
+    audit_log('onsite_cancel', ['tenant' => $tenant['id'], 'event' => $eventId, 'cancel' => $makeCancel ? '1' : '0']);
+    back_to_admin($eventId, $makeCancel ? '当日支払いの申込をキャンセル済みにしました（名簿には残ります）。' : 'キャンセルを取り消しました。', 'ok');
 } catch (\Throwable $ex) {
-    error_log('当日申込の取消失敗: ' . $ex->getMessage());
-    back_to_admin($eventId, '取消に失敗しました: ' . $ex->getMessage(), 'ng');
+    error_log('当日申込のキャンセル状態更新失敗: ' . $ex->getMessage());
+    back_to_admin($eventId, '更新に失敗しました: ' . $ex->getMessage(), 'ng');
 }

@@ -30,6 +30,24 @@ function crypto_available(): bool
 }
 
 /**
+ * APP_KEY が .env ファイルに平置きされているか（＝復号鍵がディスク上に存在）。
+ * true のときは「実環境変数へ移す」ことを勧める（鍵ファイルと .env の同時流出で復号されるため）。
+ */
+function app_key_on_disk(): bool
+{
+    $path = APP_ROOT . '/.env';
+    if (!is_readable($path)) {
+        return false;
+    }
+    foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+        if (preg_match('/^\s*APP_KEY\s*=\s*\S/', $line)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * APP_KEY が無ければ自動生成して .env に保存し、当該プロセスでも有効化する。
  * これにより、主催者の鍵を常に「暗号化」で保存できる（平文ディスク保存を避ける）。
  * .env が書き込めない等で用意できなければ false（呼び出し側は平文フォールバック）。
